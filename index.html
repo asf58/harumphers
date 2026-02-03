@@ -42,71 +42,51 @@
     }
 
     .logo {
-      width: 150px;
-      height: 150px;
-      margin-bottom: 20px;
+      width: 120px;
+      height: 120px;
+      margin-bottom: 15px;
       border-radius: 20px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
 
     h1 {
       font-size: 28px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     }
 
     .subtitle {
-      font-size: 16px;
+      font-size: 14px;
       opacity: 0.9;
-      margin-bottom: 30px;
+      margin-bottom: 25px;
     }
 
-    .instructions {
+    .install-section {
       background: rgba(255,255,255,0.15);
       border-radius: 15px;
       padding: 20px;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       backdrop-filter: blur(10px);
     }
 
-    .instructions h2 {
-      font-size: 18px;
-      margin-bottom: 15px;
-    }
-
-    .step {
-      display: flex;
-      align-items: center;
-      text-align: left;
+    .install-section h2 {
+      font-size: 16px;
       margin-bottom: 12px;
-      font-size: 14px;
-    }
-
-    .step-num {
-      background: #FFD700;
-      color: #8B0000;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      margin-right: 12px;
-      flex-shrink: 0;
     }
 
     .btn {
       display: inline-block;
       background: #FFD700;
       color: #8B0000;
-      padding: 15px 40px;
+      padding: 14px 35px;
       border-radius: 30px;
       text-decoration: none;
       font-weight: bold;
-      font-size: 18px;
+      font-size: 16px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.3);
       transition: transform 0.2s, box-shadow 0.2s;
+      border: none;
+      cursor: pointer;
     }
 
     .btn:hover {
@@ -114,9 +94,38 @@
       box-shadow: 0 6px 20px rgba(0,0,0,0.4);
     }
 
-    .skip {
-      margin-top: 20px;
+    .btn-secondary {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      margin-top: 10px;
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      text-align: left;
+      margin-bottom: 10px;
       font-size: 14px;
+    }
+
+    .step-num {
+      background: #FFD700;
+      color: #8B0000;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 12px;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+
+    .skip {
+      margin-top: 15px;
+      font-size: 13px;
       opacity: 0.8;
     }
 
@@ -124,14 +133,19 @@
       color: #FFD700;
     }
 
-    .ios-instructions, .android-instructions {
-      display: none;
-    }
+    /* iOS specific */
+    .ios-section { display: none; }
+    .android-section { display: none; }
 
-    .ios .ios-instructions { display: block; }
-    .android .android-instructions { display: block; }
-    .ios .android-instructions { display: none; }
-    .android .ios-instructions { display: none; }
+    .ios .ios-section { display: block; }
+    .android .android-section { display: block; }
+
+    .note {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
@@ -140,52 +154,47 @@
     <h1>HARUMPHERS</h1>
     <p class="subtitle">Member Directory & Events</p>
 
-    <div class="instructions">
+    <!-- iOS: One-tap install -->
+    <div class="install-section ios-section">
       <h2>Add to Home Screen</h2>
+      <a href="harumphers.mobileconfig" class="btn">
+        Install App Icon
+      </a>
+      <p class="note">
+        Tap "Allow" when prompted, then go to<br>
+        <strong>Settings → Profile Downloaded → Install</strong>
+      </p>
+    </div>
 
-      <div class="ios-instructions">
-        <div class="step">
-          <span class="step-num">1</span>
-          <span>Tap the <strong>Share</strong> button (box with arrow)</span>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <span>Scroll down and tap <strong>"Add to Home Screen"</strong></span>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <span>Tap <strong>"Add"</strong> in the top right</span>
-        </div>
+    <!-- Android: PWA instructions -->
+    <div class="install-section android-section">
+      <h2>Add to Home Screen</h2>
+      <div class="step">
+        <span class="step-num">1</span>
+        <span>Tap the <strong>menu</strong> (⋮ three dots) in Chrome</span>
       </div>
-
-      <div class="android-instructions">
-        <div class="step">
-          <span class="step-num">1</span>
-          <span>Tap the <strong>menu</strong> (three dots)</span>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <span>Tap <strong>"Add to Home screen"</strong></span>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <span>Tap <strong>"Add"</strong> to confirm</span>
-        </div>
+      <div class="step">
+        <span class="step-num">2</span>
+        <span>Tap <strong>"Add to Home screen"</strong></span>
+      </div>
+      <div class="step">
+        <span class="step-num">3</span>
+        <span>Tap <strong>"Add"</strong> to confirm</span>
       </div>
     </div>
 
-    <a href="https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG" class="btn">
-      Open Directory
+    <a href="https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG" class="btn btn-secondary">
+      Open Directory Now
     </a>
 
     <p class="skip">
-      Or <a href="https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG">skip to Airtable</a>
+      <a href="https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG">Skip to Airtable →</a>
     </p>
   </div>
 
   <script>
-    // Detect platform and show appropriate instructions
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // Detect platform
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const isAndroid = /Android/.test(navigator.userAgent);
 
     if (isIOS) {
@@ -193,12 +202,12 @@
     } else if (isAndroid) {
       document.body.classList.add('android');
     } else {
-      // Desktop - show iOS instructions as default
+      // Desktop - show iOS as example
       document.body.classList.add('ios');
     }
 
-    // Register service worker for PWA (if supported)
-    if ('serviceWorker' in navigator) {
+    // Register service worker for Android PWA
+    if ('serviceWorker' in navigator && isAndroid) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
   </script>
