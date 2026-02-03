@@ -1,0 +1,23 @@
+{
+  "name": "HARUMPHERS Directory",
+  "short_name": "HARUMPHERS",
+  "description": "HARUMPHERS Member Directory and Events",
+  "start_url": "https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG",
+  "display": "standalone",
+  "background_color": "#8B0000",
+  "theme_color": "#8B0000",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
