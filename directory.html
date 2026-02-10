@@ -303,6 +303,10 @@
   </div>
 
   <script>
+    if (localStorage.getItem('harumphers_auth') !== '1') {
+      window.location.href = 'index.html';
+    }
+
     const API_TOKEN = 'patAgD7FQMKDOntHs.c85c0298f3ed1479cec458d9fbb27a5b562b63da5274f287f5e3f156b847f148';
     const BASE_ID = 'appW7Df1qJlznxxtf';
     const TABLE_ID = 'tbltzPyERz9wGE0zd';
