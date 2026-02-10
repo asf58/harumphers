@@ -361,8 +361,11 @@
       countEl.textContent = `${members.length} member${members.length !== 1 ? 's' : ''}`;
 
       content.innerHTML = members.map(m => {
-        const name = `${m.first} ${m.last}`.trim();
-        const initials = `${(m.first[0] || '').toUpperCase()}${(m.last[0] || '').toUpperCase()}`;
+        const name = m.first || m.last;
+        const words = name.split(/\s+/);
+        const initials = words.length > 1
+          ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
+          : (words[0] || '').substring(0,2).toUpperCase();
 
         const avatarHtml = m.photoUrl
           ? `<img class="avatar" src="${m.photoUrl}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`
@@ -393,6 +396,7 @@
       if (!q) { render(allMembers); return; }
       const filtered = allMembers.filter(m =>
         `${m.first} ${m.last} ${m.phone} ${m.email}`.toLowerCase().includes(q)
+
       );
       render(filtered);
     });
