@@ -1,9 +1,10 @@
 // Service Worker for HARUMPHERS PWA
-const CACHE_NAME = 'harumphers-v2';
+const CACHE_NAME = 'harumphers-v3';
 const urlsToCache = [
   '/',
   '/index.html',
   '/directory.html',
+  '/events.html',
   '/manifest.json',
   '/apple-touch-icon.png',
   '/icons/icon-192.png',

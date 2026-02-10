@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HARUMPHERS Events</title>
+  <meta name="theme-color" content="#8B0000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    header img { width: 40px; height: 40px; border-radius: 8px; }
+    header h1 { font-size: 20px; flex: 1; }
+
+    .back-link {
+      color: #FFD700;
+      text-decoration: none;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .content {
+      padding: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .event-card {
+      background: #2a2a2a;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .event-header {
+      padding: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: background 0.15s;
+    }
+
+    .event-header:active { background: #333; }
+
+    .event-name {
+      font-weight: 700;
+      font-size: 16px;
+      flex: 1;
+    }
+
+    .event-date {
+      font-size: 13px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    .event-status {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .status-upcoming { background: #FFD700; color: #8B0000; }
+    .status-past { background: #555; color: #ccc; }
+    .status-active { background: #4CAF50; color: #fff; }
+
+    .event-counts {
+      display: flex;
+      gap: 12px;
+      font-size: 13px;
+      color: #aaa;
+      margin-top: 6px;
+    }
+
+    .count-yes { color: #4CAF50; }
+    .count-no { color: #ff6b6b; }
+    .count-maybe { color: #FFD700; }
+
+    .chevron {
+      color: #666;
+      font-size: 20px;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .event-card.open .chevron { transform: rotate(90deg); }
+
+    .event-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .event-card.open .event-body { max-height: 2000px; }
+
+    .rsvp-section {
+      padding: 0 16px 12px;
+    }
+
+    .rsvp-label {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 0 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .rsvp-label.yes { color: #4CAF50; }
+    .rsvp-label.no { color: #ff6b6b; }
+    .rsvp-label.maybe { color: #FFD700; }
+    .rsvp-label.pending { color: #888; }
+
+    .rsvp-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-bottom: 4px;
+    }
+
+    .rsvp-chip {
+      background: #333;
+      padding: 5px 10px;
+      border-radius: 14px;
+      font-size: 13px;
+    }
+
+    .rsvp-chip.yes { background: rgba(76,175,80,0.15); color: #81C784; }
+    .rsvp-chip.no { background: rgba(255,107,107,0.15); color: #ff8a8a; }
+    .rsvp-chip.maybe { background: rgba(255,215,0,0.15); color: #FFD700; }
+
+    .no-rsvp {
+      font-size: 13px;
+      color: #666;
+      font-style: italic;
+      padding: 4px 0;
+    }
+
+    .loading, .error {
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #333;
+      border-top-color: #FFD700;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error { color: #ff6b6b; }
+    .error a { color: #FFD700; display: inline-block; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="apple-touch-icon.png" alt="">
+    <h1>Events</h1>
+    <a href="index.html" class="back-link">Home</a>
+  </header>
+
+  <div class="content" id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Loading events...</p>
+    </div>
+  </div>
+
+  <script>
+    if (localStorage.getItem('harumphers_auth') !== '1') {
+      window.location.href = 'index.html';
+    }
+
+    const API_TOKEN = 'patAgD7FQMKDOntHs.c85c0298f3ed1479cec458d9fbb27a5b562b63da5274f287f5e3f156b847f148';
+    const BASE_ID = 'appW7Df1qJlznxxtf';
+    const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
+    const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
+
+    async function apiFetch(url) {
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      return res.json();
+    }
+
+    async function loadEvents() {
+      // 1. Discover RSVP fields from table metadata
+      const meta = await apiFetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`);
+      const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
+      const rsvpFields = membersTable.fields.filter(f =>
+        f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
+      );
+
+      if (rsvpFields.length === 0) {
+        document.getElementById('content').innerHTML = '<div class="loading"><p>No events found</p></div>';
+        return;
+      }
+
+      // 2. Fetch events table for dates/details
+      const eventsData = await apiFetch(
+        `https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`
+      );
+      const eventDetails = eventsData.records.map(r => r.fields);
+
+      // 3. Fetch members with name + all RSVP fields
+      const params = new URLSearchParams({
+        'sort[0][field]': 'LAST NAME',
+        'sort[0][direction]': 'asc',
+      });
+      params.append('fields[]', 'FIRST NAME');
+      params.append('fields[]', 'LAST NAME');
+      rsvpFields.forEach(f => params.append('fields[]', f.name));
+
+      const membersData = await apiFetch(
+        `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
+      );
+
+      // 4. Build event objects by matching RSVP fields to event details
+      const events = rsvpFields.map(field => {
+        // Try to match to EVENTS table entry by keyword overlap
+        const fieldWords = field.name.toUpperCase()
+          .replace('RSVP', '').replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
+
+        let matched = eventDetails.find(e => {
+          const eName = (e['EVENT NAME'] || '').toUpperCase();
+          return fieldWords.some(w => w.length > 2 && eName.includes(w));
+        });
+
+        const yes = [], no = [], maybe = [];
+        membersData.records.forEach(r => {
+          const f = r.fields;
+          const rsvp = f[field.name];
+          if (!rsvp) return;
+          const name = `${f['FIRST NAME'] || ''} ${f['LAST NAME'] || ''}`.trim();
+          const val = rsvp.toUpperCase();
+          if (val.includes('YES') || val.includes('GOING')) {
+            yes.push(name);
+          } else if (val.includes('NO')) {
+            no.push(name);
+          } else {
+            maybe.push(name);
+          }
+        });
+
+        // Clean up event name from the field name
+        let displayName = field.name
+          .replace(/RSVP$/i, '')
+          .replace(/^[A-Z]{3}\d{1,2}[-\s]*/i, '') // strip date prefix like "FEB24-"
+          .replace(/[-_]/g, ' ')
+          .trim();
+
+        if (matched && matched['EVENT NAME']) {
+          displayName = matched['EVENT NAME'];
+        }
+
+        return {
+          name: displayName,
+          date: matched ? (matched['DATE'] || '') : '',
+          status: matched ? (matched['Status'] || '') : '',
+          yes, no, maybe,
+        };
+      });
+
+      // Sort: active/upcoming first, then past
+      events.sort((a, b) => {
+        const aActive = a.status.toLowerCase() !== 'done';
+        const bActive = b.status.toLowerCase() !== 'done';
+        if (aActive !== bActive) return aActive ? -1 : 1;
+        return 0;
+      });
+
+      render(events);
+    }
+
+    function render(events) {
+      const content = document.getElementById('content');
+
+      content.innerHTML = events.map((ev, i) => {
+        const statusClass = ev.status.toLowerCase() === 'done' ? 'past'
+          : ev.status.toLowerCase() === 'in progress' ? 'active' : 'upcoming';
+        const statusLabel = ev.status || 'Upcoming';
+
+        function section(label, cls, list) {
+          if (list.length === 0) return '';
+          return `<div class="rsvp-label ${cls}">${label} (${list.length})</div>
+            <div class="rsvp-list">${list.map(n =>
+              `<span class="rsvp-chip ${cls}">${n}</span>`
+            ).join('')}</div>`;
+        }
+
+        const body = [
+          section('Going', 'yes', ev.yes),
+          section('Maybe', 'maybe', ev.maybe),
+          section('Not Going', 'no', ev.no),
+        ].filter(Boolean).join('');
+
+        const total = ev.yes.length + ev.no.length + ev.maybe.length;
+
+        return `<div class="event-card" onclick="this.classList.toggle('open')">
+          <div class="event-header">
+            <div style="flex:1">
+              <div class="event-name">${ev.name}</div>
+              ${ev.date ? `<div class="event-date">${ev.date}</div>` : ''}
+              <div class="event-counts">
+                <span class="count-yes">${ev.yes.length} going</span>
+                <span class="count-maybe">${ev.maybe.length} maybe</span>
+                <span class="count-no">${ev.no.length} no</span>
+                <span>${total} responded</span>
+              </div>
+            </div>
+            <span class="event-status status-${statusClass}">${statusLabel}</span>
+            <span class="chevron">&#8250;</span>
+          </div>
+          <div class="event-body">
+            <div class="rsvp-section">
+              ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    loadEvents().catch(err => {
+      document.getElementById('content').innerHTML = `
+        <div class="error">
+          <p>Could not load events</p>
+          <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
+          <a href="index.html">&larr; Back to Home</a>
+        </div>`;
+    });
+  </script>
+</body>
+</html>
