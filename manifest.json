@@ -2,7 +2,7 @@
   "name": "HARUMPHERS Directory",
   "short_name": "HARUMPHERS",
   "description": "HARUMPHERS Member Directory and Events",
-  "start_url": "https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#8B0000",
   "theme_color": "#8B0000",

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HARUMPHERS Directory</title>
+  <meta name="theme-color" content="#8B0000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    header img {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+    }
+
+    header h1 {
+      font-size: 20px;
+      flex: 1;
+    }
+
+    .back-link {
+      color: #FFD700;
+      text-decoration: none;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .search-bar {
+      padding: 12px 20px;
+      background: #222;
+      position: sticky;
+      top: 72px;
+      z-index: 9;
+    }
+
+    .search-bar input {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 20px;
+      border: 1px solid #444;
+      background: #333;
+      color: #fff;
+      font-size: 16px;
+      outline: none;
+    }
+
+    .search-bar input::placeholder { color: #888; }
+    .search-bar input:focus { border-color: #FFD700; }
+
+    .member-count {
+      text-align: center;
+      padding: 8px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .members {
+      padding: 8px 16px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: #2a2a2a;
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: #444;
+    }
+
+    .initials {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #8B0000;
+      color: #FFD700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .info { flex: 1; min-width: 0; }
+
+    .name {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .contact {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .contact a {
+      color: #FFD700;
+      text-decoration: none;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .contact a:active { opacity: 0.7; }
+
+    .loading, .error {
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #333;
+      border-top-color: #FFD700;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error { color: #ff6b6b; }
+
+    .error a {
+      color: #FFD700;
+      display: inline-block;
+      margin-top: 12px;
+    }
+
+    .no-results {
+      text-align: center;
+      padding: 40px 20px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="apple-touch-icon.png" alt="">
+    <h1>HARUMPHERS</h1>
+    <a href="index.html" class="back-link">Home</a>
+  </header>
+
+  <div class="search-bar">
+    <input type="search" id="search" placeholder="Search members..." autocomplete="off">
+  </div>
+
+  <div id="count" class="member-count"></div>
+  <div id="content" class="members">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Loading directory...</p>
+    </div>
+  </div>
+
+  <script>
+    const API_TOKEN = 'patAgD7FQMKDOntHs.c85c0298f3ed1479cec458d9fbb27a5b562b63da5274f287f5e3f156b847f148';
+    const BASE_ID = 'appW7Df1qJlznxxtf';
+    const TABLE_ID = 'tbltzPyERz9wGE0zd';
+
+    let allMembers = [];
+
+    async function loadDirectory() {
+      const params = new URLSearchParams({
+        'filterByFormula': '{IN DIRECTORY}=TRUE()',
+        'sort[0][field]': 'LAST NAME',
+        'sort[0][direction]': 'asc',
+      });
+      ['FIRST NAME', 'LAST NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS'].forEach(f => {
+        params.append('fields[]', f);
+      });
+
+      const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`;
+
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+      });
+
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+
+      const data = await res.json();
+      allMembers = data.records.map(r => {
+        const f = r.fields;
+        const photo = f['PHOTO'] && f['PHOTO'][0];
+        return {
+          first: f['FIRST NAME'] || '',
+          last: f['LAST NAME'] || '',
+          phone: f['CELL #'] || '',
+          email: f['E-MAIL ADDRESS'] || '',
+          photoUrl: photo && photo.thumbnails && photo.thumbnails.large
+            ? photo.thumbnails.large.url : null,
+        };
+      });
+
+      render(allMembers);
+    }
+
+    function render(members) {
+      const content = document.getElementById('content');
+      const countEl = document.getElementById('count');
+
+      if (members.length === 0) {
+        content.innerHTML = '<div class="no-results">No members found</div>';
+        countEl.textContent = '';
+        return;
+      }
+
+      countEl.textContent = `${members.length} member${members.length !== 1 ? 's' : ''}`;
+
+      content.innerHTML = members.map(m => {
+        const name = `${m.first} ${m.last}`.trim();
+        const initials = `${(m.first[0] || '').toUpperCase()}${(m.last[0] || '').toUpperCase()}`;
+
+        const avatarHtml = m.photoUrl
+          ? `<img class="avatar" src="${m.photoUrl}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`
+          : `<div class="initials">${initials}</div>`;
+
+        let contactHtml = '';
+        if (m.phone) {
+          const digits = m.phone.replace(/\D/g, '');
+          contactHtml += `<a href="tel:+1${digits}">${m.phone}</a>`;
+        }
+        if (m.email) {
+          contactHtml += `<a href="mailto:${m.email}">${m.email}</a>`;
+        }
+
+        return `<div class="card">
+          ${avatarHtml}
+          <div class="info">
+            <div class="name">${name}</div>
+            <div class="contact">${contactHtml}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    document.getElementById('search').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase().trim();
+      if (!q) { render(allMembers); return; }
+      const filtered = allMembers.filter(m =>
+        `${m.first} ${m.last} ${m.phone} ${m.email}`.toLowerCase().includes(q)
+      );
+      render(filtered);
+    });
+
+    loadDirectory().catch(err => {
+      document.getElementById('content').innerHTML = `
+        <div class="error">
+          <p>Could not load directory</p>
+          <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
+          <a href="https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG">Open in Airtable instead &rarr;</a>
+        </div>`;
+      document.getElementById('count').textContent = '';
+    });
+  </script>
+</body>
+</html>
