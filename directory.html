@@ -372,7 +372,7 @@
       countEl.textContent = `${members.length} member${members.length !== 1 ? 's' : ''}`;
 
       content.innerHTML = members.map(m => {
-        const name = m.first || m.last;
+        const name = `${m.first} ${m.last}`.trim();
         const words = name.split(/\s+/);
         const initials = words.length > 1
           ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
