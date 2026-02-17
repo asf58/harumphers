@@ -313,6 +313,23 @@
 
     let allMembers = [];
 
+    async function apiFetchAll(url) {
+      let allRecords = [];
+      let fetchUrl = url;
+      while (true) {
+        const res = await fetch(fetchUrl, {
+          headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+        });
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        const data = await res.json();
+        allRecords = allRecords.concat(data.records);
+        if (!data.offset) break;
+        const sep = fetchUrl.includes('?') ? '&' : '?';
+        fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
+      }
+      return { records: allRecords };
+    }
+
     async function loadDirectory() {
       const params = new URLSearchParams({
         'filterByFormula': '{IN DIRECTORY}=TRUE()',
@@ -325,13 +342,7 @@
 
       const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`;
 
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${API_TOKEN}` }
-      });
-
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-
-      const data = await res.json();
+      const data = await apiFetchAll(url);
       allMembers = data.records.map(r => {
         const f = r.fields;
         const photo = f['PHOTO'] && f['PHOTO'][0];
