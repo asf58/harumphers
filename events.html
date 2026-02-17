@@ -160,6 +160,79 @@
       padding: 4px 0;
     }
 
+    .rsvp-form {
+      padding: 12px 16px 16px;
+      border-top: 1px solid #333;
+    }
+
+    .rsvp-form-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #FFD700;
+    }
+
+    .rsvp-select {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #444;
+      background: #333;
+      color: #fff;
+      font-size: 15px;
+      margin-bottom: 10px;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+    }
+
+    .rsvp-select:focus { border-color: #FFD700; }
+
+    .rsvp-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .rsvp-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      font-family: inherit;
+    }
+
+    .rsvp-btn:active { opacity: 0.7; }
+    .rsvp-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .rsvp-btn.yes-btn { background: #4CAF50; color: #fff; }
+    .rsvp-btn.maybe-btn { background: #FFD700; color: #8B0000; }
+    .rsvp-btn.no-btn { background: #ff6b6b; color: #fff; }
+
+    .rsvp-msg {
+      text-align: center;
+      padding: 8px 0 0;
+      font-size: 13px;
+      min-height: 24px;
+    }
+
+    .rsvp-msg.success { color: #4CAF50; }
+    .rsvp-msg.error { color: #ff6b6b; padding: 8px 0 0; text-align: center; }
+
+    .your-rsvp {
+      font-size: 13px;
+      color: #aaa;
+      margin-top: 4px;
+    }
+
+    .your-rsvp strong { color: #FFD700; }
+
     .loading, .error {
       text-align: center;
       padding: 60px 20px;
@@ -205,6 +278,9 @@
     const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
     const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
 
+    let allMembers = [];
+    let allEvents = [];
+
     async function apiFetch(url) {
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${API_TOKEN}` }
@@ -226,8 +302,20 @@
       return { records: allRecords };
     }
 
+    async function apiPatch(recordId, fields) {
+      const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ fields })
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      return res.json();
+    }
+
     async function loadEvents() {
-      // 1. Discover RSVP fields from table metadata
       const meta = await apiFetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`);
       const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
       const rsvpFields = membersTable.fields.filter(f =>
@@ -239,13 +327,11 @@
         return;
       }
 
-      // 2. Fetch events table for dates/details
       const eventsData = await apiFetchAll(
         `https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`
       );
       const eventDetails = eventsData.records.map(r => r.fields);
 
-      // 3. Fetch members with name + all RSVP fields
       const params = new URLSearchParams({
         'sort[0][field]': 'LAST NAME',
         'sort[0][direction]': 'asc',
@@ -257,9 +343,9 @@
         `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
       );
 
-      // 4. Build event objects by matching RSVP fields to event details
-      const events = rsvpFields.map(field => {
-        // Try to match to EVENTS table entry by keyword overlap
+      allMembers = membersData.records;
+
+      allEvents = rsvpFields.map(field => {
         const fieldWords = field.name.toUpperCase()
           .replace('RSVP', '').replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
 
@@ -269,7 +355,7 @@
         });
 
         const yes = [], no = [], maybe = [];
-        membersData.records.forEach(r => {
+        allMembers.forEach(r => {
           const f = r.fields;
           const rsvp = f[field.name];
           if (!rsvp) return;
@@ -284,10 +370,9 @@
           }
         });
 
-        // Clean up event name from the field name
         let displayName = field.name
           .replace(/RSVP$/i, '')
-          .replace(/^[A-Z]{3}\d{1,2}[-\s]*/i, '') // strip date prefix like "FEB24-"
+          .replace(/^[A-Z]{3}\d{1,2}[-\s]*/i, '')
           .replace(/[-_]/g, ' ')
           .trim();
 
@@ -295,29 +380,33 @@
           displayName = matched['EVENT NAME'];
         }
 
+        const isDone = matched && (matched['Status'] || '').toLowerCase() === 'done';
+
         return {
           name: displayName,
+          fieldName: field.name,
           date: matched ? (matched['DATE'] || '') : '',
           status: matched ? (matched['Status'] || '') : '',
           yes, no, maybe,
+          isDone,
         };
       });
 
-      // Sort: active/upcoming first, then past
-      events.sort((a, b) => {
+      allEvents.sort((a, b) => {
         const aActive = a.status.toLowerCase() !== 'done';
         const bActive = b.status.toLowerCase() !== 'done';
         if (aActive !== bActive) return aActive ? -1 : 1;
         return 0;
       });
 
-      render(events);
+      render();
     }
 
-    function render(events) {
+    function render() {
       const content = document.getElementById('content');
+      const savedName = localStorage.getItem('harumphers_myname') || '';
 
-      content.innerHTML = events.map((ev, i) => {
+      content.innerHTML = allEvents.map((ev, i) => {
         const statusClass = ev.status.toLowerCase() === 'done' ? 'past'
           : ev.status.toLowerCase() === 'in progress' ? 'active' : 'upcoming';
         const statusLabel = ev.status || 'Upcoming';
@@ -338,6 +427,35 @@
 
         const total = ev.yes.length + ev.no.length + ev.maybe.length;
 
+        // Find current RSVP for saved member
+        let yourRsvp = '';
+        if (savedName) {
+          const member = allMembers.find(m => m.fields['FULL NAME'] === savedName);
+          if (member && member.fields[ev.fieldName]) {
+            yourRsvp = member.fields[ev.fieldName];
+          }
+        }
+
+        const rsvpForm = ev.isDone ? '' : `
+          <div class="rsvp-form" onclick="event.stopPropagation()">
+            <div class="rsvp-form-title">Your RSVP</div>
+            <select class="rsvp-select" id="rsvp-name-${i}" onchange="saveMyName(this.value)">
+              <option value="">Select your name...</option>
+              ${allMembers.map(m => {
+                const n = m.fields['FULL NAME'] || '';
+                const sel = n === savedName ? 'selected' : '';
+                return `<option value="${n}" ${sel}>${n}</option>`;
+              }).join('')}
+            </select>
+            ${yourRsvp ? `<div class="your-rsvp">Current: <strong>${yourRsvp}</strong></div>` : ''}
+            <div class="rsvp-buttons">
+              <button class="rsvp-btn yes-btn" onclick="submitRsvp(${i}, 'YES')">YES</button>
+              <button class="rsvp-btn maybe-btn" onclick="submitRsvp(${i}, 'MAYBE')">MAYBE</button>
+              <button class="rsvp-btn no-btn" onclick="submitRsvp(${i}, 'NO')">NO</button>
+            </div>
+            <div class="rsvp-msg" id="rsvp-msg-${i}"></div>
+          </div>`;
+
         return `<div class="event-card" onclick="this.classList.toggle('open')">
           <div class="event-header">
             <div style="flex:1">
@@ -357,9 +475,80 @@
             <div class="rsvp-section">
               ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
             </div>
+            ${rsvpForm}
           </div>
         </div>`;
       }).join('');
+    }
+
+    function saveMyName(name) {
+      if (name) localStorage.setItem('harumphers_myname', name);
+      // Sync all dropdowns
+      document.querySelectorAll('.rsvp-select').forEach(sel => sel.value = name);
+    }
+
+    async function submitRsvp(eventIdx, value) {
+      const ev = allEvents[eventIdx];
+      const nameSelect = document.getElementById(`rsvp-name-${eventIdx}`);
+      const msgEl = document.getElementById(`rsvp-msg-${eventIdx}`);
+      const selectedName = nameSelect.value;
+
+      if (!selectedName) {
+        msgEl.className = 'rsvp-msg error';
+        msgEl.textContent = 'Please select your name first';
+        return;
+      }
+
+      const member = allMembers.find(m => m.fields['FULL NAME'] === selectedName);
+      if (!member) {
+        msgEl.className = 'rsvp-msg error';
+        msgEl.textContent = 'Member not found';
+        return;
+      }
+
+      // Disable buttons while submitting
+      const buttons = msgEl.parentElement.querySelectorAll('.rsvp-btn');
+      buttons.forEach(b => b.disabled = true);
+      msgEl.className = 'rsvp-msg';
+      msgEl.textContent = 'Submitting...';
+
+      try {
+        await apiPatch(member.id, { [ev.fieldName]: value });
+
+        // Update local data
+        member.fields[ev.fieldName] = value;
+
+        // Recalculate counts
+        ev.yes = []; ev.no = []; ev.maybe = [];
+        allMembers.forEach(r => {
+          const f = r.fields;
+          const rsvp = f[ev.fieldName];
+          if (!rsvp) return;
+          const name = f['FULL NAME'] || '';
+          const val = rsvp.toUpperCase();
+          if (val.includes('YES') || val.includes('GOING')) {
+            ev.yes.push(name);
+          } else if (val.includes('NO')) {
+            ev.no.push(name);
+          } else {
+            ev.maybe.push(name);
+          }
+        });
+
+        render();
+
+        // Show success briefly after re-render
+        const newMsg = document.getElementById(`rsvp-msg-${eventIdx}`);
+        if (newMsg) {
+          newMsg.className = 'rsvp-msg success';
+          newMsg.textContent = `${selectedName} marked as ${value}`;
+          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 3000);
+        }
+      } catch (err) {
+        msgEl.className = 'rsvp-msg error';
+        msgEl.textContent = 'Failed to submit. Try again.';
+        buttons.forEach(b => b.disabled = false);
+      }
     }
 
     loadEvents().catch(err => {

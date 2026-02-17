@@ -189,6 +189,8 @@
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.2s;
+      overflow-y: auto;
+      padding: 20px;
     }
 
     .overlay.open {
@@ -270,12 +272,111 @@
       border: 1px solid #FFD700;
     }
 
+    .detail-btn.edit {
+      background: rgba(255,255,255,0.1);
+      color: #aaa;
+      border: 1px solid #555;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+
     .detail-btn:active { opacity: 0.7; }
 
     .detail-btn svg {
       width: 20px;
       height: 20px;
       flex-shrink: 0;
+    }
+
+    /* Edit request form */
+    .edit-form {
+      text-align: left;
+      margin-top: 16px;
+      border-top: 1px solid #444;
+      padding-top: 16px;
+    }
+
+    .edit-form-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #FFD700;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .edit-field {
+      margin-bottom: 10px;
+    }
+
+    .edit-field label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .edit-field input, .edit-field textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #333;
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .edit-field input:focus, .edit-field textarea:focus {
+      border-color: #FFD700;
+    }
+
+    .edit-field textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .edit-field input[type="file"] {
+      padding: 8px;
+      font-size: 13px;
+    }
+
+    .edit-submit {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #FFD700;
+      color: #8B0000;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 4px;
+    }
+
+    .edit-submit:active { opacity: 0.7; }
+    .edit-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .edit-msg {
+      text-align: center;
+      padding: 8px 0 0;
+      font-size: 13px;
+      min-height: 24px;
+    }
+
+    .edit-msg.success { color: #4CAF50; }
+    .edit-msg.error { color: #ff6b6b; }
+
+    .edit-note {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      margin-top: 8px;
+      font-style: italic;
     }
   </style>
 </head>
@@ -310,8 +411,10 @@
     const API_TOKEN = 'patAgD7FQMKDOntHs.c85c0298f3ed1479cec458d9fbb27a5b562b63da5274f287f5e3f156b847f148';
     const BASE_ID = 'appW7Df1qJlznxxtf';
     const TABLE_ID = 'tbltzPyERz9wGE0zd';
+    const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
 
     let allMembers = [];
+    let allRecords = [];
 
     async function apiFetchAll(url) {
       let allRecords = [];
@@ -343,10 +446,12 @@
       const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`;
 
       const data = await apiFetchAll(url);
+      allRecords = data.records;
       allMembers = data.records.map(r => {
         const f = r.fields;
         const photo = f['PHOTO'] && f['PHOTO'][0];
         return {
+          recordId: r.id,
           name: f['FULL NAME'] || '',
           phone: f['CELL #'] || '',
           email: f['E-MAIL ADDRESS'] || '',
@@ -410,9 +515,18 @@
       render(filtered);
     });
 
+    let editFormVisible = false;
+
     function showDetail(idx) {
+      editFormVisible = false;
       const m = allMembers[idx];
       if (!m) return;
+      renderDetail(idx);
+      document.getElementById('overlay').classList.add('open');
+    }
+
+    function renderDetail(idx) {
+      const m = allMembers[idx];
       const name = m.name;
       const words = name.split(/\s+/);
       const initials = words.length > 1
@@ -436,15 +550,142 @@
           ${m.email}</a>`;
       }
 
+      actionsHtml += `<button class="detail-btn edit" onclick="toggleEditForm(${idx})">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        Request Info Change</button>`;
+
+      const editForm = editFormVisible ? `
+        <div class="edit-form">
+          <div class="edit-form-title">Request Changes</div>
+          <div class="edit-field">
+            <label>Name</label>
+            <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
+          </div>
+          <div class="edit-field">
+            <label>Phone</label>
+            <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
+          </div>
+          <div class="edit-field">
+            <label>Email</label>
+            <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
+          </div>
+          <div class="edit-field">
+            <label>New Photo</label>
+            <input type="file" id="edit-photo" accept="image/*">
+          </div>
+          <div class="edit-field">
+            <label>Notes</label>
+            <textarea id="edit-notes" placeholder="Any other changes or notes..."></textarea>
+          </div>
+          <button class="edit-submit" id="edit-submit-btn" onclick="submitChangeRequest(${idx})">Submit Request</button>
+          <div class="edit-msg" id="edit-msg"></div>
+          <div class="edit-note">Changes require admin approval before going live.</div>
+        </div>` : '';
+
       document.getElementById('detail').innerHTML = `
         <button class="detail-close" onclick="closeDetail()">&times;</button>
         ${avatarHtml}
         <div class="detail-name">${name}</div>
-        <div class="detail-actions">${actionsHtml}</div>`;
-      document.getElementById('overlay').classList.add('open');
+        <div class="detail-actions">${actionsHtml}</div>
+        ${editForm}`;
+    }
+
+    function toggleEditForm(idx) {
+      editFormVisible = !editFormVisible;
+      renderDetail(idx);
+    }
+
+    async function submitChangeRequest(idx) {
+      const m = allMembers[idx];
+      const msgEl = document.getElementById('edit-msg');
+      const submitBtn = document.getElementById('edit-submit-btn');
+
+      const newName = document.getElementById('edit-name').value.trim();
+      const newPhone = document.getElementById('edit-phone').value.trim();
+      const newEmail = document.getElementById('edit-email').value.trim();
+      const notes = document.getElementById('edit-notes').value.trim();
+      const photoInput = document.getElementById('edit-photo');
+
+      // Build change description
+      const changes = [];
+      if (newName && newName !== m.name) changes.push(`Name: ${m.name} -> ${newName}`);
+      if (newPhone && newPhone !== m.phone) changes.push(`Phone: ${m.phone || '(none)'} -> ${newPhone}`);
+      if (newEmail && newEmail !== m.email) changes.push(`Email: ${m.email || '(none)'} -> ${newEmail}`);
+      if (photoInput.files.length > 0) changes.push('New photo attached');
+      if (notes) changes.push(`Notes: ${notes}`);
+
+      if (changes.length === 0) {
+        msgEl.className = 'edit-msg error';
+        msgEl.textContent = 'No changes detected';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      msgEl.className = 'edit-msg';
+      msgEl.textContent = 'Submitting...';
+
+      try {
+        const fields = {
+          'MEMBER NAME': m.name,
+          'MEMBER RECORD ID': m.recordId,
+          'REQUESTED CHANGES': changes.join('\n'),
+          'STATUS': 'Pending',
+          'SUBMITTED': new Date().toISOString(),
+        };
+
+        // Create the change request record
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${API_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ fields })
+        });
+
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        const record = await res.json();
+
+        // If there's a photo, upload it as an attachment
+        if (photoInput.files.length > 0) {
+          const file = photoInput.files[0];
+          const reader = new FileReader();
+          reader.onload = async function() {
+            try {
+              const patchRes = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${record.id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${API_TOKEN}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  fields: {
+                    'NEW PHOTO': [{ url: reader.result }]
+                  }
+                })
+              });
+              if (!patchRes.ok) {
+                console.log('Photo upload note: Airtable requires publicly accessible URLs for attachments. Photo noted in change request text.');
+              }
+            } catch (e) {
+              console.log('Photo upload skipped:', e.message);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+
+        msgEl.className = 'edit-msg success';
+        msgEl.textContent = 'Request submitted! Changes will appear after admin approval.';
+        submitBtn.disabled = true;
+      } catch (err) {
+        msgEl.className = 'edit-msg error';
+        msgEl.textContent = 'Failed to submit. Please try again.';
+        submitBtn.disabled = false;
+      }
     }
 
     function closeDetail() {
+      editFormVisible = false;
       document.getElementById('overlay').classList.remove('open');
     }
 
