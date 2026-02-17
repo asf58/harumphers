@@ -336,7 +336,7 @@
         'sort[0][field]': 'LAST NAME',
         'sort[0][direction]': 'asc',
       });
-      ['FIRST NAME', 'LAST NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS'].forEach(f => {
+      ['FULL NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS'].forEach(f => {
         params.append('fields[]', f);
       });
 
@@ -347,8 +347,7 @@
         const f = r.fields;
         const photo = f['PHOTO'] && f['PHOTO'][0];
         return {
-          first: f['FIRST NAME'] || '',
-          last: f['LAST NAME'] || '',
+          name: f['FULL NAME'] || '',
           phone: f['CELL #'] || '',
           email: f['E-MAIL ADDRESS'] || '',
           photoUrl: photo && photo.thumbnails && photo.thumbnails.large
@@ -372,7 +371,7 @@
       countEl.textContent = `${members.length} member${members.length !== 1 ? 's' : ''}`;
 
       content.innerHTML = members.map(m => {
-        const name = `${m.first} ${m.last}`.trim();
+        const name = m.name;
         const words = name.split(/\s+/);
         const initials = words.length > 1
           ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
@@ -406,8 +405,7 @@
       const q = e.target.value.toLowerCase().trim();
       if (!q) { render(allMembers); return; }
       const filtered = allMembers.filter(m =>
-        `${m.first} ${m.last} ${m.phone} ${m.email}`.toLowerCase().includes(q)
-
+        `${m.name} ${m.phone} ${m.email}`.toLowerCase().includes(q)
       );
       render(filtered);
     });
@@ -415,8 +413,11 @@
     function showDetail(idx) {
       const m = allMembers[idx];
       if (!m) return;
-      const name = `${m.first} ${m.last}`.trim();
-      const initials = `${(m.first[0] || '').toUpperCase()}${(m.last[0] || '').toUpperCase()}`;
+      const name = m.name;
+      const words = name.split(/\s+/);
+      const initials = words.length > 1
+        ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
+        : (words[0] || '').substring(0,2).toUpperCase();
 
       const avatarHtml = m.photoUrl
         ? `<img class="avatar" src="${m.photoUrl}" alt="" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`

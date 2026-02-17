@@ -250,8 +250,7 @@
         'sort[0][field]': 'LAST NAME',
         'sort[0][direction]': 'asc',
       });
-      params.append('fields[]', 'FIRST NAME');
-      params.append('fields[]', 'LAST NAME');
+      params.append('fields[]', 'FULL NAME');
       rsvpFields.forEach(f => params.append('fields[]', f.name));
 
       const membersData = await apiFetchAll(
@@ -274,7 +273,7 @@
           const f = r.fields;
           const rsvp = f[field.name];
           if (!rsvp) return;
-          const name = `${f['FIRST NAME'] || ''} ${f['LAST NAME'] || ''}`.trim();
+          const name = f['FULL NAME'] || '';
           const val = rsvp.toUpperCase();
           if (val.includes('YES') || val.includes('GOING')) {
             yes.push(name);
