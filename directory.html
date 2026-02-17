@@ -416,6 +416,50 @@
     let allMembers = [];
     let allRecords = [];
 
+    async function applyApprovedChanges() {
+      try {
+        const res = await fetch(
+          `https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`,
+          { headers: { 'Authorization': `Bearer ${API_TOKEN}` } }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        for (const rec of data.records) {
+          const f = rec.fields;
+          const memberId = f['MEMBER RECORD ID'];
+          const changes = f['REQUESTED CHANGES'] || '';
+          if (!memberId) continue;
+
+          const updates = {};
+          for (const line of changes.split('\n')) {
+            const match = line.match(/^(.+?):\s*.+?\s*->\s*(.+)$/);
+            if (!match) continue;
+            const field = match[1].trim();
+            const newVal = match[2].trim();
+            if (field === 'Name') updates['FULL NAME'] = newVal;
+            else if (field === 'Phone') updates['CELL #'] = newVal;
+            else if (field === 'Email') updates['E-MAIL ADDRESS'] = newVal;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${memberId}`, {
+              method: 'PATCH',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: updates })
+            });
+          }
+
+          await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { 'APPLIED AT': new Date().toISOString() } })
+          });
+        }
+      } catch (e) {
+        console.log('Auto-apply check:', e.message);
+      }
+    }
+
     async function apiFetchAll(url) {
       let allRecords = [];
       let fetchUrl = url;
@@ -697,7 +741,7 @@
       if (e.key === 'Escape') closeDetail();
     });
 
-    loadDirectory().catch(err => {
+    applyApprovedChanges().then(() => loadDirectory()).catch(err => {
       document.getElementById('content').innerHTML = `
         <div class="error">
           <p>Could not load directory</p>

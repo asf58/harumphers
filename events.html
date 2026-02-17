@@ -277,6 +277,7 @@
     const BASE_ID = 'appW7Df1qJlznxxtf';
     const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
     const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
+    const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
 
     let allMembers = [];
     let allEvents = [];
@@ -313,6 +314,47 @@
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
       return res.json();
+    }
+
+    async function applyApprovedChanges() {
+      try {
+        const data = await apiFetch(
+          `https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`
+        );
+        for (const rec of data.records) {
+          const f = rec.fields;
+          const memberId = f['MEMBER RECORD ID'];
+          const changes = f['REQUESTED CHANGES'] || '';
+          if (!memberId) continue;
+
+          const updates = {};
+          for (const line of changes.split('\n')) {
+            const match = line.match(/^(.+?):\s*.+?\s*->\s*(.+)$/);
+            if (!match) continue;
+            const field = match[1].trim();
+            const newVal = match[2].trim();
+            if (field === 'Name') updates['FULL NAME'] = newVal;
+            else if (field === 'Phone') updates['CELL #'] = newVal;
+            else if (field === 'Email') updates['E-MAIL ADDRESS'] = newVal;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await fetch(`https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${memberId}`, {
+              method: 'PATCH',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: updates })
+            });
+          }
+
+          await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { 'APPLIED AT': new Date().toISOString() } })
+          });
+        }
+      } catch (e) {
+        console.log('Auto-apply check:', e.message);
+      }
     }
 
     async function loadEvents() {
@@ -552,7 +594,7 @@
       }
     }
 
-    loadEvents().catch(err => {
+    applyApprovedChanges().then(() => loadEvents()).catch(err => {
       document.getElementById('content').innerHTML = `
         <div class="error">
           <p>Could not load events</p>
