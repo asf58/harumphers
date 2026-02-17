@@ -337,13 +337,14 @@
         'sort[0][direction]': 'asc',
       });
       params.append('fields[]', 'FULL NAME');
+      params.append('fields[]', 'IN DIRECTORY');
       rsvpFields.forEach(f => params.append('fields[]', f.name));
 
       const membersData = await apiFetchAll(
         `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
       );
 
-      allMembers = membersData.records;
+      allMembers = membersData.records.filter(r => r.fields['IN DIRECTORY']);
 
       allEvents = rsvpFields.map(field => {
         const fieldWords = field.name.toUpperCase()
