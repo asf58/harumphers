@@ -413,6 +413,7 @@
 
     // Inline edit state: { eventIdx, memberId } or null
     let inlineEdit = null;
+    let openEvents = new Set();
 
     async function apiFetch(url) {
       const res = await fetch(url, {
@@ -633,6 +634,12 @@
       return member.fields[ev.guestFieldName] || 0;
     }
 
+    function toggleEvent(idx) {
+      if (openEvents.has(idx)) openEvents.delete(idx);
+      else openEvents.add(idx);
+      render();
+    }
+
     // Toggle inline edit for a member in an event
     function toggleInlineEdit(eventIdx, memberId) {
       if (inlineEdit && inlineEdit.eventIdx === eventIdx && inlineEdit.memberId === memberId) {
@@ -798,8 +805,9 @@
           }
         }
 
-        return `<div class="event-card" onclick="this.classList.toggle('open')">
-          <div class="event-header">
+        const isOpen = openEvents.has(i) ? ' open' : '';
+        return `<div class="event-card${isOpen}">
+          <div class="event-header" onclick="toggleEvent(${i})">
             <div style="flex:1">
               <div class="event-name">${ev.name}</div>
               ${ev.date ? `<div class="event-date">${ev.date}</div>` : ''}
