@@ -543,7 +543,7 @@
         'sort[0][field]': 'LAST NAME',
         'sort[0][direction]': 'asc',
       });
-      ['FULL NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS'].forEach(f => {
+      ['FULL NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS', 'MEMBER #'].forEach(f => {
         params.append('fields[]', f);
       });
 
@@ -559,6 +559,7 @@
           name: f['FULL NAME'] || '',
           phone: f['CELL #'] || '',
           email: f['E-MAIL ADDRESS'] || '',
+          memberNum: f['MEMBER #'] || '',
           photoUrl: photo && photo.thumbnails && photo.thumbnails.large
             ? photo.thumbnails.large.url : null,
         };
@@ -693,6 +694,15 @@
                 <label>Email</label>
                 <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
               </div>
+              <div class="edit-field">
+                <label>Member # (Duquesne ID)</label>
+                <input type="number" id="edit-membernum" value="${m.memberNum}" placeholder="e.g. 9566">
+              </div>
+              <div class="edit-field">
+                <label>Photo URL</label>
+                <input type="url" id="edit-photo-url" placeholder="https://... (public image URL)">
+                <div style="font-size:11px;color:#666;margin-top:4px;">Paste a publicly accessible image URL</div>
+              </div>
               <button class="edit-submit" id="edit-submit-btn" onclick="adminSaveEdit(${idx})">Save Changes</button>
               <div class="edit-msg" id="edit-msg"></div>
             </div>`;
@@ -750,11 +760,15 @@
       const newName = document.getElementById('edit-name').value.trim();
       const newPhone = document.getElementById('edit-phone').value.trim();
       const newEmail = document.getElementById('edit-email').value.trim();
+      const newMemberNum = document.getElementById('edit-membernum').value.trim();
+      const newPhotoUrl = document.getElementById('edit-photo-url').value.trim();
 
       const updates = {};
       if (newName && newName !== m.name) updates['FULL NAME'] = newName;
       if (newPhone !== m.phone) updates['CELL #'] = newPhone;
       if (newEmail !== m.email) updates['E-MAIL ADDRESS'] = newEmail;
+      if (newMemberNum && newMemberNum !== String(m.memberNum)) updates['MEMBER #'] = parseInt(newMemberNum);
+      if (newPhotoUrl) updates['PHOTO'] = [{ url: newPhotoUrl }];
 
       if (Object.keys(updates).length === 0) {
         msgEl.className = 'edit-msg error';
@@ -781,6 +795,7 @@
         if (updates['FULL NAME']) m.name = updates['FULL NAME'];
         if ('CELL #' in updates) m.phone = updates['CELL #'];
         if ('E-MAIL ADDRESS' in updates) m.email = updates['E-MAIL ADDRESS'];
+        if (updates['MEMBER #']) m.memberNum = updates['MEMBER #'];
 
         msgEl.className = 'edit-msg success';
         msgEl.textContent = 'Saved!';

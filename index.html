@@ -353,19 +353,30 @@
       text-align: center;
     }
 
-    .quick-event {
+    .qe-card {
+      background: rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .qe-card:last-child { margin-bottom: 0; }
+
+    .qe-card.needs-rsvp {
+      border: 1px solid rgba(255,165,0,0.4);
+      background: rgba(255,165,0,0.08);
+    }
+
+    .qe-top {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 8px;
     }
 
-    .quick-event:last-child { border-bottom: none; }
+    .qe-info { flex: 1; min-width: 0; }
 
-    .quick-event-info { flex: 1; min-width: 0; }
-
-    .quick-event-name {
+    .qe-name {
       font-size: 14px;
       font-weight: 600;
       white-space: nowrap;
@@ -373,7 +384,7 @@
       text-overflow: ellipsis;
     }
 
-    .quick-event-date {
+    .qe-date {
       font-size: 12px;
       color: rgba(255,255,255,0.5);
     }
@@ -390,13 +401,73 @@
     .rsvp-pill.yes { background: rgba(76,175,80,0.2); color: #81C784; }
     .rsvp-pill.no { background: rgba(255,107,107,0.2); color: #ff8a8a; }
     .rsvp-pill.maybe { background: rgba(255,215,0,0.2); color: #FFD700; }
-    .rsvp-pill.none { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); }
+    .rsvp-pill.none { background: rgba(255,165,0,0.25); color: #FFA500; }
 
-    .guest-count-badge {
-      font-size: 11px;
-      color: rgba(255,255,255,0.5);
-      margin-left: 4px;
+    .qe-buttons {
+      display: flex;
+      gap: 6px;
     }
+
+    .qe-btn {
+      flex: 1;
+      padding: 8px 4px;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+
+    .qe-btn:active { opacity: 0.7; }
+    .qe-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .qe-btn.yes-btn { background: #4CAF50; color: #fff; }
+    .qe-btn.maybe-btn { background: #FFD700; color: #8B0000; }
+    .qe-btn.no-btn { background: #ff6b6b; color: #fff; }
+
+    .qe-btn.active {
+      border-color: #fff;
+      transform: scale(1.05);
+      box-shadow: 0 0 8px rgba(255,255,255,0.3);
+    }
+
+    .qe-guest-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .qe-guest-label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .qe-guest-input {
+      width: 50px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 14px;
+      text-align: center;
+      outline: none;
+    }
+
+    .qe-guest-input:focus { border-color: #FFD700; }
+
+    .qe-msg {
+      text-align: center;
+      font-size: 12px;
+      min-height: 18px;
+      margin-top: 4px;
+    }
+
+    .qe-msg.success { color: #4CAF50; }
+    .qe-msg.error { color: #ff6b6b; }
 
     .quick-events-empty {
       text-align: center;
@@ -454,38 +525,8 @@
     <h1>HARUMPHERS</h1>
     <p class="subtitle">Member Directory & Events</p>
 
-    <div class="instructions">
-      <h2>Add to Home Screen</h2>
-
-      <div class="ios-instructions">
-        <div class="step">
-          <span class="step-num">1</span>
-          <span>Tap the <strong>Share</strong> button <span style="font-size:18px">&#11014;&#65039;</span> at the bottom</span>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <span>Scroll and tap <strong>"Add to Home Screen"</strong></span>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <span>Tap <strong>"Add"</strong> in the top right</span>
-        </div>
-      </div>
-
-      <div class="android-instructions">
-        <div class="step">
-          <span class="step-num">1</span>
-          <span>Tap the <strong>menu</strong> (&#8942;) in Chrome</span>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <span>Tap <strong>"Add to Home screen"</strong></span>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <span>Tap <strong>"Add"</strong> to confirm</span>
-        </div>
-      </div>
+    <div style="background:rgba(255,255,255,0.12);border-radius:15px;padding:18px;margin-bottom:20px;backdrop-filter:blur(10px);font-size:14px;line-height:1.5;">
+      You're logged in as a <strong>guest</strong>. Give Johnny your Member # to log in to your personal member site with RSVP and profile editing.
     </div>
 
     <a href="directory.html" class="btn">
@@ -530,6 +571,40 @@
       <a href="events.html" class="btn-outline">
         Events & RSVPs
       </a>
+    </div>
+
+    <div class="instructions" style="margin-top:20px;">
+      <h2>Add to Home Screen</h2>
+
+      <div class="ios-instructions">
+        <div class="step">
+          <span class="step-num">1</span>
+          <span>Tap the <strong>Share</strong> button <span style="font-size:18px">&#11014;&#65039;</span> at the bottom</span>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <span>Scroll and tap <strong>"Add to Home Screen"</strong></span>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <span>Tap <strong>"Add"</strong> in the top right</span>
+        </div>
+      </div>
+
+      <div class="android-instructions">
+        <div class="step">
+          <span class="step-num">1</span>
+          <span>Tap the <strong>menu</strong> (&#8942;) in Chrome</span>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <span>Tap <strong>"Add to Home screen"</strong></span>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <span>Tap <strong>"Add"</strong> to confirm</span>
+        </div>
+      </div>
     </div>
 
     <p class="skip" style="margin-top:20px;">
@@ -586,7 +661,7 @@
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${API_TOKEN}` }
       });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
       return res.json();
     }
 
@@ -601,6 +676,19 @@
         fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
       }
       return { records: allRecords };
+    }
+
+    async function apiPatch(recordId, fields) {
+      const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${API_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ fields })
+      });
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      return res.json();
     }
 
     // --- Login Logic ---
@@ -634,7 +722,6 @@
       // Check for admin password (case-sensitive)
       if (raw === 'Harumphers325') {
         localStorage.setItem('harumphers_auth', 'admin');
-        // Admin doesn't need a member record, but we could look one up later
         showMemberHome();
         return;
       }
@@ -652,7 +739,8 @@
         errorEl.style.color = '#FFD700';
 
         try {
-          const formula = encodeURIComponent(`{MEMBER #}="${raw}"`);
+          // MEMBER # is a number field - compare without quotes
+          const formula = encodeURIComponent(`{MEMBER #}=${raw}`);
           const url = `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?filterByFormula=${formula}`;
           const data = await apiFetch(url);
 
@@ -699,7 +787,7 @@
       const info = getMemberInfo();
 
       if (!info) {
-        // Admin without member record - show admin-only profile
+        // Admin without member record
         card.innerHTML = `
           <div class="profile-initials">A</div>
           <div class="profile-name">Admin</div>
@@ -709,15 +797,18 @@
       }
 
       try {
-        const params = new URLSearchParams();
-        ['FULL NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS'].forEach(f => params.append('fields[]', f));
+        // Fetch full record (no fields[] filter - avoids URL encoding issues)
         const data = await apiFetch(
-          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}?${params}`
+          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`
         );
         memberRecord = data;
         renderProfile();
       } catch (err) {
-        card.innerHTML = `<div style="color:#ff6b6b;font-size:14px;">Could not load profile</div>`;
+        card.innerHTML = `
+          <div style="color:#ff6b6b;font-size:14px;">Could not load profile</div>
+          <div style="color:#888;font-size:12px;margin-top:4px;">${err.message}</div>
+          <button class="edit-my-info-btn" style="margin-top:12px" onclick="loadMemberProfile()">Retry</button>
+        `;
       }
     }
 
@@ -812,19 +903,9 @@
       msgEl.textContent = 'Saving...';
 
       try {
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${API_TOKEN}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ fields: updates })
-        });
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-        const updated = await res.json();
+        const updated = await apiPatch(info.recordId, updates);
         memberRecord = updated;
 
-        // Update stored name if changed
         if (updates['FULL NAME']) {
           localStorage.setItem('harumphers_member_name', updates['FULL NAME']);
           localStorage.setItem('harumphers_myname', updates['FULL NAME']);
@@ -839,13 +920,15 @@
       }
     }
 
-    // --- Quick Events ---
+    // --- Quick Events with inline RSVP ---
+    let quickEventData = []; // stores { name, date, fieldName, guestFieldName, rsvp, guestCount }
+    let myMemberRecord = null; // full member record for RSVP updates
+
     async function loadQuickEvents() {
       const container = document.getElementById('quick-events');
       const info = getMemberInfo();
-      const memberName = info ? info.name : null;
 
-      if (!memberName) {
+      if (!info) {
         container.innerHTML = `
           <div class="quick-events-title">Upcoming Events</div>
           <div class="quick-events-empty">Log in with your Member # to see your RSVPs</div>
@@ -876,22 +959,15 @@
         const eventsData = await apiFetchAll(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`);
         const eventDetails = eventsData.records.map(r => r.fields);
 
-        // Get member's RSVP data
-        const params = new URLSearchParams();
-        params.append('fields[]', 'FULL NAME');
-        rsvpFields.forEach(f => params.append('fields[]', f.name));
-        guestFields.forEach(f => params.append('fields[]', f.name));
-        params.set('filterByFormula', `RECORD_ID()="${info.recordId}"`);
-
+        // Get member's full record (no fields filter)
         const memberData = await apiFetch(
-          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
+          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`
         );
-
-        const myFields = memberData.records && memberData.records[0]
-          ? memberData.records[0].fields : {};
+        myMemberRecord = memberData;
+        const myFields = memberData.fields || {};
 
         // Build quick event cards (active events only)
-        const events = rsvpFields.map(field => {
+        quickEventData = rsvpFields.map(field => {
           const fieldWords = field.name.toUpperCase()
             .replace('RSVP', '').replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
 
@@ -904,12 +980,10 @@
 
           // Find paired guest field
           let guestFieldName = null;
-          let guestCount = 0;
           for (const gf of guestFields) {
             const guestKey = gf.name.toUpperCase().replace('GUESTS-', '');
             if (fieldWords.some(w => w.length > 2 && guestKey.includes(w))) {
               guestFieldName = gf.name;
-              guestCount = myFields[gf.name] || 0;
               break;
             }
           }
@@ -921,56 +995,146 @@
             .trim();
           if (matched && matched['EVENT NAME']) displayName = matched['EVENT NAME'];
 
-          const rsvp = myFields[field.name] || null;
-
           return {
             name: displayName,
             date: matched ? (matched['DATE'] || '') : '',
             isDone,
-            rsvp,
-            guestCount,
+            fieldName: field.name,
+            guestFieldName,
+            rsvp: myFields[field.name] || null,
+            guestCount: guestFieldName ? (myFields[guestFieldName] || 0) : 0,
           };
         }).filter(ev => !ev.isDone);
 
-        if (events.length === 0) {
-          container.innerHTML = `
-            <div class="quick-events-title">Upcoming Events</div>
-            <div class="quick-events-empty">No upcoming events</div>
-          `;
-          return;
-        }
-
-        const eventsHtml = events.map(ev => {
-          let pillClass = 'none';
-          let pillText = 'No RSVP';
-          if (ev.rsvp) {
-            const upper = ev.rsvp.toUpperCase();
-            if (upper.includes('YES') || upper.includes('GOING')) { pillClass = 'yes'; pillText = 'GOING'; }
-            else if (upper.includes('NO')) { pillClass = 'no'; pillText = 'NOT GOING'; }
-            else { pillClass = 'maybe'; pillText = 'MAYBE'; }
-          }
-          const guestBadge = ev.guestCount > 0
-            ? `<span class="guest-count-badge">(+${ev.guestCount})</span>` : '';
-
-          return `<div class="quick-event">
-            <div class="quick-event-info">
-              <div class="quick-event-name">${ev.name}</div>
-              ${ev.date ? `<div class="quick-event-date">${ev.date}</div>` : ''}
-            </div>
-            <span class="rsvp-pill ${pillClass}">${pillText}</span>
-            ${guestBadge}
-          </div>`;
-        }).join('');
-
-        container.innerHTML = `
-          <div class="quick-events-title">Upcoming Events</div>
-          ${eventsHtml}
-        `;
+        renderQuickEvents();
       } catch (err) {
         container.innerHTML = `
           <div class="quick-events-title">Upcoming Events</div>
           <div class="quick-events-empty">Could not load events</div>
         `;
+      }
+    }
+
+    function renderQuickEvents() {
+      const container = document.getElementById('quick-events');
+
+      if (quickEventData.length === 0) {
+        container.innerHTML = `
+          <div class="quick-events-title">Upcoming Events</div>
+          <div class="quick-events-empty">No upcoming events</div>
+        `;
+        return;
+      }
+
+      const eventsHtml = quickEventData.map((ev, i) => {
+        let pillClass = 'none';
+        let pillText = 'NEEDS RSVP';
+        let needsRsvp = true;
+        if (ev.rsvp) {
+          needsRsvp = false;
+          const upper = ev.rsvp.toUpperCase();
+          if (upper.includes('YES') || upper.includes('GOING')) { pillClass = 'yes'; pillText = 'GOING'; }
+          else if (upper.includes('NO')) { pillClass = 'no'; pillText = 'NOT GOING'; }
+          else { pillClass = 'maybe'; pillText = 'MAYBE'; }
+        }
+
+        // Active button highlighting
+        let activeYes = '', activeMaybe = '', activeNo = '';
+        if (ev.rsvp) {
+          const upper = ev.rsvp.toUpperCase();
+          if (upper.includes('YES') || upper.includes('GOING')) activeYes = ' active';
+          else if (upper.includes('NO')) activeNo = ' active';
+          else activeMaybe = ' active';
+        }
+
+        const guestRow = ev.guestFieldName ? `
+          <div class="qe-guest-row">
+            <span class="qe-guest-label">Guests:</span>
+            <input type="number" class="qe-guest-input" id="qe-guests-${i}"
+              value="${ev.guestCount}" min="0" max="20"
+              onchange="submitQeGuestCount(${i})">
+          </div>
+        ` : '';
+
+        return `<div class="qe-card${needsRsvp ? ' needs-rsvp' : ''}">
+          <div class="qe-top">
+            <div class="qe-info">
+              <div class="qe-name">${ev.name}</div>
+              ${ev.date ? `<div class="qe-date">${ev.date}</div>` : ''}
+            </div>
+            <span class="rsvp-pill ${pillClass}">${pillText}</span>
+          </div>
+          <div class="qe-buttons">
+            <button class="qe-btn yes-btn${activeYes}" onclick="submitQeRsvp(${i}, 'YES')">YES</button>
+            <button class="qe-btn maybe-btn${activeMaybe}" onclick="submitQeRsvp(${i}, 'MAYBE')">MAYBE</button>
+            <button class="qe-btn no-btn${activeNo}" onclick="submitQeRsvp(${i}, 'NO')">NO</button>
+          </div>
+          ${guestRow}
+          <div class="qe-msg" id="qe-msg-${i}"></div>
+        </div>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div class="quick-events-title">Upcoming Events</div>
+        ${eventsHtml}
+      `;
+    }
+
+    async function submitQeRsvp(idx, value) {
+      const info = getMemberInfo();
+      if (!info) return;
+      const ev = quickEventData[idx];
+      const msgEl = document.getElementById(`qe-msg-${idx}`);
+
+      const buttons = msgEl.parentElement.querySelectorAll('.qe-btn');
+      buttons.forEach(b => b.disabled = true);
+      msgEl.className = 'qe-msg';
+      msgEl.textContent = 'Saving...';
+
+      try {
+        await apiPatch(info.recordId, { [ev.fieldName]: value });
+        ev.rsvp = value;
+        if (myMemberRecord) myMemberRecord.fields[ev.fieldName] = value;
+        renderQuickEvents();
+
+        const newMsg = document.getElementById(`qe-msg-${idx}`);
+        if (newMsg) {
+          newMsg.className = 'qe-msg success';
+          newMsg.textContent = `Marked as ${value}`;
+          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 2500);
+        }
+      } catch (err) {
+        msgEl.className = 'qe-msg error';
+        msgEl.textContent = 'Failed. Try again.';
+        buttons.forEach(b => b.disabled = false);
+      }
+    }
+
+    async function submitQeGuestCount(idx) {
+      const info = getMemberInfo();
+      if (!info) return;
+      const ev = quickEventData[idx];
+      if (!ev.guestFieldName) return;
+
+      const input = document.getElementById(`qe-guests-${idx}`);
+      const count = parseInt(input.value) || 0;
+      const msgEl = document.getElementById(`qe-msg-${idx}`);
+
+      try {
+        await apiPatch(info.recordId, { [ev.guestFieldName]: count });
+        ev.guestCount = count;
+        if (myMemberRecord) myMemberRecord.fields[ev.guestFieldName] = count;
+
+        if (msgEl) {
+          msgEl.className = 'qe-msg success';
+          msgEl.textContent = count > 0 ? `Bringing ${count} guest${count > 1 ? 's' : ''}` : 'Guest count cleared';
+          setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 2500);
+        }
+      } catch (err) {
+        if (msgEl) {
+          msgEl.className = 'qe-msg error';
+          msgEl.textContent = 'Failed. Try again.';
+        }
       }
     }
 
@@ -981,7 +1145,6 @@
     } else if (authMode === 'guest') {
       showGuestHome();
     }
-    // else: show login gate (default)
   </script>
 </body>
 </html>

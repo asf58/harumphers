@@ -161,6 +161,7 @@
     .rsvp-chip.yes { background: rgba(76,175,80,0.15); color: #81C784; }
     .rsvp-chip.no { background: rgba(255,107,107,0.15); color: #ff8a8a; }
     .rsvp-chip.maybe { background: rgba(255,215,0,0.15); color: #FFD700; }
+    .rsvp-chip.pending { background: rgba(255,165,0,0.15); color: #FFA500; }
 
     .rsvp-chip.you {
       border: 2px solid #FFD700;
@@ -228,6 +229,7 @@
     .rsvp-btn.yes-btn { background: #4CAF50; color: #fff; }
     .rsvp-btn.maybe-btn { background: #FFD700; color: #8B0000; }
     .rsvp-btn.no-btn { background: #ff6b6b; color: #fff; }
+    .rsvp-btn.clear-btn { background: #555; color: #ccc; font-size: 12px; flex: 0.6; }
 
     .rsvp-btn.active {
       border-color: #fff;
@@ -510,15 +512,18 @@
           }
         }
 
-        const yes = [], no = [], maybe = [];
+        const yes = [], no = [], maybe = [], pending = [];
         allMembers.forEach(r => {
           const f = r.fields;
           const rsvp = f[field.name];
-          if (!rsvp) return;
           const name = f['FULL NAME'] || '';
           const guestCount = pairedGuestField ? (f[pairedGuestField] || 0) : 0;
-          const val = rsvp.toUpperCase();
           const entry = { name, guestCount, recordId: r.id };
+          if (!rsvp) {
+            pending.push(entry);
+            return;
+          }
+          const val = rsvp.toUpperCase();
           if (val.includes('YES') || val.includes('GOING')) {
             yes.push(entry);
           } else if (val.includes('NO')) {
@@ -546,7 +551,7 @@
           guestFieldName: pairedGuestField,
           date: matched ? (matched['DATE'] || '') : '',
           status: matched ? (matched['Status'] || '') : '',
-          yes, no, maybe,
+          yes, no, maybe, pending,
           isDone,
         };
       });
@@ -599,6 +604,7 @@
           section('Going', 'yes', ev.yes),
           section('Maybe', 'maybe', ev.maybe),
           section('Not Going', 'no', ev.no),
+          !ev.isDone ? section('Not Responded', 'pending', ev.pending) : '',
         ].filter(Boolean).join('');
 
         const totalYesGuests = ev.yes.reduce((sum, e) => sum + (e.guestCount || 0), 0);
@@ -630,11 +636,12 @@
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
                 <div class="rsvp-form-title">Your RSVP</div>
-                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : ''}
+                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${activeClass.yes}" onclick="submitMemberRsvp(${i}, 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${activeClass.maybe}" onclick="submitMemberRsvp(${i}, 'MAYBE')">MAYBE</button>
                   <button class="rsvp-btn no-btn${activeClass.no}" onclick="submitMemberRsvp(${i}, 'NO')">NO</button>
+                  ${myRsvp ? `<button class="rsvp-btn clear-btn" onclick="submitMemberRsvp(${i}, null)">CLEAR</button>` : ''}
                 </div>
                 ${ev.guestFieldName ? `
                   <div class="guest-count-row">
@@ -663,11 +670,12 @@
 
             const ownRsvpSection = hasOwnRecord ? `
                 <div class="rsvp-form-title">Your RSVP</div>
-                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : ''}
+                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${activeClass.yes}" onclick="submitMemberRsvp(${i}, 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${activeClass.maybe}" onclick="submitMemberRsvp(${i}, 'MAYBE')">MAYBE</button>
                   <button class="rsvp-btn no-btn${activeClass.no}" onclick="submitMemberRsvp(${i}, 'NO')">NO</button>
+                  ${myRsvp ? `<button class="rsvp-btn clear-btn" onclick="submitMemberRsvp(${i}, null)">CLEAR</button>` : ''}
                 </div>
                 ${ev.guestFieldName ? `
                   <div class="guest-count-row">
@@ -696,6 +704,7 @@
                     <button class="rsvp-btn yes-btn" onclick="submitAdminRsvp(${i}, 'YES')">YES</button>
                     <button class="rsvp-btn maybe-btn" onclick="submitAdminRsvp(${i}, 'MAYBE')">MAYBE</button>
                     <button class="rsvp-btn no-btn" onclick="submitAdminRsvp(${i}, 'NO')">NO</button>
+                    <button class="rsvp-btn clear-btn" onclick="submitAdminRsvp(${i}, null)">CLEAR</button>
                   </div>
                   ${ev.guestFieldName ? `
                     <div class="guest-count-row">
@@ -759,15 +768,17 @@
       }
 
       try {
-        await apiPatch(member.id, { [ev.fieldName]: value });
-        member.fields[ev.fieldName] = value;
+        // null = clear RSVP (send empty string to clear singleSelect)
+        const patchValue = value === null ? '' : value;
+        await apiPatch(member.id, { [ev.fieldName]: patchValue });
+        member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
         render();
 
         const newMsg = document.getElementById(`rsvp-msg-${eventIdx}`);
         if (newMsg) {
           newMsg.className = 'rsvp-msg success';
-          newMsg.textContent = `Marked as ${value}`;
+          newMsg.textContent = value === null ? 'RSVP cleared' : `Marked as ${value}`;
           setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 3000);
         }
       } catch (err) {
@@ -838,15 +849,18 @@
       msgEl.textContent = 'Submitting...';
 
       try {
-        await apiPatch(member.id, { [ev.fieldName]: value });
-        member.fields[ev.fieldName] = value;
+        const patchValue = value === null ? '' : value;
+        await apiPatch(member.id, { [ev.fieldName]: patchValue });
+        member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
         render();
 
         const newMsg = document.getElementById(`admin-rsvp-msg-${eventIdx}`);
         if (newMsg) {
           newMsg.className = 'rsvp-msg success';
-          newMsg.textContent = `${member.fields['FULL NAME']} marked as ${value}`;
+          newMsg.textContent = value === null
+            ? `${member.fields['FULL NAME']} RSVP cleared`
+            : `${member.fields['FULL NAME']} marked as ${value}`;
           setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 3000);
         }
       } catch (err) {
@@ -898,15 +912,18 @@
     }
 
     function recalcEvent(ev) {
-      ev.yes = []; ev.no = []; ev.maybe = [];
+      ev.yes = []; ev.no = []; ev.maybe = []; ev.pending = [];
       allMembers.forEach(r => {
         const f = r.fields;
         const rsvp = f[ev.fieldName];
-        if (!rsvp) return;
         const name = f['FULL NAME'] || '';
         const guestCount = ev.guestFieldName ? (f[ev.guestFieldName] || 0) : 0;
-        const val = rsvp.toUpperCase();
         const entry = { name, guestCount, recordId: r.id };
+        if (!rsvp) {
+          ev.pending.push(entry);
+          return;
+        }
+        const val = rsvp.toUpperCase();
         if (val.includes('YES') || val.includes('GOING')) {
           ev.yes.push(entry);
         } else if (val.includes('NO')) {
