@@ -42,12 +42,21 @@
       flex: 1;
     }
 
-    .back-link {
+    .header-links {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .back-link, .logout-link {
       color: #FFD700;
       text-decoration: none;
       font-size: 14px;
       white-space: nowrap;
     }
+
+    .logout-link { opacity: 0.7; }
+    .logout-link:hover { opacity: 1; }
 
     .search-bar {
       padding: 12px 20px;
@@ -94,7 +103,11 @@
       display: flex;
       align-items: center;
       gap: 14px;
+      cursor: pointer;
+      transition: background 0.15s;
     }
+
+    .card:active { background: #333; }
 
     .avatar {
       width: 112px;
@@ -174,9 +187,6 @@
       padding: 40px 20px;
       color: #888;
     }
-
-    .card { cursor: pointer; transition: background 0.15s; }
-    .card:active { background: #333; }
 
     .overlay {
       position: fixed;
@@ -289,7 +299,7 @@
       flex-shrink: 0;
     }
 
-    /* Edit request form */
+    /* Edit / Admin edit form */
     .edit-form {
       text-align: left;
       margin-top: 16px;
@@ -378,13 +388,28 @@
       margin-top: 8px;
       font-style: italic;
     }
+
+    .you-badge {
+      display: inline-block;
+      font-size: 10px;
+      background: rgba(255,215,0,0.2);
+      color: #FFD700;
+      padding: 1px 6px;
+      border-radius: 6px;
+      margin-left: 6px;
+      font-weight: 600;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
   <header>
     <img src="apple-touch-icon.png" alt="">
     <h1>HARUMPHERS</h1>
-    <a href="index.html" class="back-link">Home</a>
+    <div class="header-links">
+      <a href="index.html" class="back-link">Home</a>
+      <a href="#" class="logout-link" onclick="logout()">Logout</a>
+    </div>
   </header>
 
   <div class="search-bar">
@@ -404,9 +429,44 @@
   </div>
 
   <script>
-    if (localStorage.getItem('harumphers_auth') !== '1') {
+    // --- Auth Helpers ---
+    function getAuthMode() {
+      const auth = localStorage.getItem('harumphers_auth');
+      if (auth === 'admin') return 'admin';
+      if (auth === 'member') return 'member';
+      if (auth === 'guest' || auth === '1') return 'guest';
+      return null;
+    }
+
+    function getMemberInfo() {
+      const recordId = localStorage.getItem('harumphers_member_id');
+      const name = localStorage.getItem('harumphers_member_name');
+      const duqId = localStorage.getItem('harumphers_duq_id');
+      if (!recordId) return null;
+      return { recordId, name, duqId };
+    }
+
+    function logout() {
+      localStorage.removeItem('harumphers_auth');
+      localStorage.removeItem('harumphers_member_id');
+      localStorage.removeItem('harumphers_member_name');
+      localStorage.removeItem('harumphers_duq_id');
+      localStorage.removeItem('harumphers_myname');
       window.location.href = 'index.html';
     }
+
+    function requireAuth() {
+      if (!getAuthMode()) {
+        window.location.href = 'index.html';
+        return false;
+      }
+      return true;
+    }
+
+    if (!requireAuth()) throw new Error('Not authenticated');
+
+    const authMode = getAuthMode();
+    const myInfo = getMemberInfo();
 
     const API_TOKEN = 'patAgD7FQMKDOntHs.c85c0298f3ed1479cec458d9fbb27a5b562b63da5274f287f5e3f156b847f148';
     const BASE_ID = 'appW7Df1qJlznxxtf';
@@ -539,11 +599,14 @@
           contactHtml += `<a href="mailto:${m.email}">${m.email}</a>`;
         }
 
+        const isMe = myInfo && m.recordId === myInfo.recordId;
+        const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
+
         const idx = allMembers.indexOf(m);
         return `<div class="card" onclick="showDetail(${idx})">
           ${avatarHtml}
           <div class="info">
-            <div class="name">${name}</div>
+            <div class="name">${name}${youBadge}</div>
             <div class="contact">${contactHtml}</div>
           </div>
         </div>`;
@@ -581,6 +644,8 @@
         ? `<img class="avatar" src="${m.photoUrl}" alt="" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`
         : `<div class="initials">${initials}</div>`;
 
+      const isMe = myInfo && m.recordId === myInfo.recordId;
+
       let actionsHtml = '';
       if (m.phone) {
         const digits = m.phone.replace(/\D/g, '');
@@ -594,37 +659,74 @@
           ${m.email}</a>`;
       }
 
-      actionsHtml += `<button class="detail-btn edit" onclick="toggleEditForm(${idx})">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-        Request Info Change</button>`;
+      // --- Auth-conditional edit button ---
+      if (authMode === 'admin') {
+        // Admin: direct edit on all cards
+        actionsHtml += `<button class="detail-btn edit" onclick="toggleEditForm(${idx})">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          Edit Member</button>`;
+      } else if (authMode === 'member' && !isMe) {
+        // Member: request change on other people's cards only
+        actionsHtml += `<button class="detail-btn edit" onclick="toggleEditForm(${idx})">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          Request Info Change</button>`;
+      }
+      // Guest: no edit button at all
+      // Member on own card: no edit button (they edit via profile on home screen)
 
-      const editForm = editFormVisible ? `
-        <div class="edit-form">
-          <div class="edit-form-title">Request Changes</div>
-          <div class="edit-field">
-            <label>Name</label>
-            <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
-          </div>
-          <div class="edit-field">
-            <label>Phone</label>
-            <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
-          </div>
-          <div class="edit-field">
-            <label>Email</label>
-            <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
-          </div>
-          <div class="edit-field">
-            <label>New Photo</label>
-            <input type="file" id="edit-photo" accept="image/*">
-          </div>
-          <div class="edit-field">
-            <label>Notes</label>
-            <textarea id="edit-notes" placeholder="Any other changes or notes..."></textarea>
-          </div>
-          <button class="edit-submit" id="edit-submit-btn" onclick="submitChangeRequest(${idx})">Submit Request</button>
-          <div class="edit-msg" id="edit-msg"></div>
-          <div class="edit-note">Changes require admin approval before going live.</div>
-        </div>` : '';
+      let editForm = '';
+      if (editFormVisible) {
+        if (authMode === 'admin') {
+          // Admin: direct edit form
+          editForm = `
+            <div class="edit-form">
+              <div class="edit-form-title">Edit Member</div>
+              <div class="edit-field">
+                <label>Name</label>
+                <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
+              </div>
+              <div class="edit-field">
+                <label>Phone</label>
+                <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
+              </div>
+              <div class="edit-field">
+                <label>Email</label>
+                <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
+              </div>
+              <button class="edit-submit" id="edit-submit-btn" onclick="adminSaveEdit(${idx})">Save Changes</button>
+              <div class="edit-msg" id="edit-msg"></div>
+            </div>`;
+        } else {
+          // Member: change request form
+          editForm = `
+            <div class="edit-form">
+              <div class="edit-form-title">Request Changes</div>
+              <div class="edit-field">
+                <label>Name</label>
+                <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
+              </div>
+              <div class="edit-field">
+                <label>Phone</label>
+                <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
+              </div>
+              <div class="edit-field">
+                <label>Email</label>
+                <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
+              </div>
+              <div class="edit-field">
+                <label>New Photo</label>
+                <input type="file" id="edit-photo" accept="image/*">
+              </div>
+              <div class="edit-field">
+                <label>Notes</label>
+                <textarea id="edit-notes" placeholder="Any other changes or notes..."></textarea>
+              </div>
+              <button class="edit-submit" id="edit-submit-btn" onclick="submitChangeRequest(${idx})">Submit Request</button>
+              <div class="edit-msg" id="edit-msg"></div>
+              <div class="edit-note">Changes require admin approval before going live.</div>
+            </div>`;
+        }
+      }
 
       document.getElementById('detail').innerHTML = `
         <button class="detail-close" onclick="closeDetail()">&times;</button>
@@ -639,6 +741,60 @@
       renderDetail(idx);
     }
 
+    // Admin: direct save to Airtable
+    async function adminSaveEdit(idx) {
+      const m = allMembers[idx];
+      const msgEl = document.getElementById('edit-msg');
+      const submitBtn = document.getElementById('edit-submit-btn');
+
+      const newName = document.getElementById('edit-name').value.trim();
+      const newPhone = document.getElementById('edit-phone').value.trim();
+      const newEmail = document.getElementById('edit-email').value.trim();
+
+      const updates = {};
+      if (newName && newName !== m.name) updates['FULL NAME'] = newName;
+      if (newPhone !== m.phone) updates['CELL #'] = newPhone;
+      if (newEmail !== m.email) updates['E-MAIL ADDRESS'] = newEmail;
+
+      if (Object.keys(updates).length === 0) {
+        msgEl.className = 'edit-msg error';
+        msgEl.textContent = 'No changes detected';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      msgEl.className = 'edit-msg';
+      msgEl.textContent = 'Saving...';
+
+      try {
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${m.recordId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${API_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ fields: updates })
+        });
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+
+        // Update local data
+        if (updates['FULL NAME']) m.name = updates['FULL NAME'];
+        if ('CELL #' in updates) m.phone = updates['CELL #'];
+        if ('E-MAIL ADDRESS' in updates) m.email = updates['E-MAIL ADDRESS'];
+
+        msgEl.className = 'edit-msg success';
+        msgEl.textContent = 'Saved!';
+        editFormVisible = false;
+        setTimeout(() => renderDetail(idx), 1000);
+        render(allMembers); // refresh cards behind overlay
+      } catch (err) {
+        msgEl.className = 'edit-msg error';
+        msgEl.textContent = 'Failed to save. Try again.';
+        submitBtn.disabled = false;
+      }
+    }
+
+    // Member: submit change request
     async function submitChangeRequest(idx) {
       const m = allMembers[idx];
       const msgEl = document.getElementById('edit-msg');
@@ -650,7 +806,6 @@
       const notes = document.getElementById('edit-notes').value.trim();
       const photoInput = document.getElementById('edit-photo');
 
-      // Build change description
       const changes = [];
       if (newName && newName !== m.name) changes.push(`Name: ${m.name} -> ${newName}`);
       if (newPhone && newPhone !== m.phone) changes.push(`Phone: ${m.phone || '(none)'} -> ${newPhone}`);
@@ -677,7 +832,6 @@
           'SUBMITTED': new Date().toISOString(),
         };
 
-        // Create the change request record
         const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}`, {
           method: 'POST',
           headers: {
@@ -690,27 +844,21 @@
         if (!res.ok) throw new Error(`API error ${res.status}`);
         const record = await res.json();
 
-        // If there's a photo, upload it as an attachment
         if (photoInput.files.length > 0) {
           const file = photoInput.files[0];
           const reader = new FileReader();
           reader.onload = async function() {
             try {
-              const patchRes = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${record.id}`, {
+              await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${record.id}`, {
                 method: 'PATCH',
                 headers: {
                   'Authorization': `Bearer ${API_TOKEN}`,
                   'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                  fields: {
-                    'NEW PHOTO': [{ url: reader.result }]
-                  }
+                  fields: { 'NEW PHOTO': [{ url: reader.result }] }
                 })
               });
-              if (!patchRes.ok) {
-                console.log('Photo upload note: Airtable requires publicly accessible URLs for attachments. Photo noted in change request text.');
-              }
             } catch (e) {
               console.log('Photo upload skipped:', e.message);
             }

@@ -105,6 +105,22 @@
 
     .btn:hover { transform: translateY(-2px); }
 
+    .btn-outline {
+      display: inline-block;
+      background: rgba(255,215,0,0.15);
+      color: #FFD700;
+      border: 2px solid #FFD700;
+      padding: 13px 40px;
+      border-radius: 30px;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 18px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      transition: transform 0.2s;
+    }
+
+    .btn-outline:hover { transform: translateY(-2px); }
+
     .skip {
       margin-top: 20px;
       font-size: 14px;
@@ -156,18 +172,283 @@
     }
 
     .hidden { display: none !important; }
+
+    .logout-link {
+      color: #FFD700;
+      text-decoration: none;
+      font-size: 14px;
+      opacity: 0.8;
+      cursor: pointer;
+    }
+
+    .logout-link:hover { opacity: 1; }
+
+    /* Member Home Styles */
+    .member-home {
+      text-align: center;
+      max-width: 440px;
+      width: 100%;
+    }
+
+    .member-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .admin-badge {
+      background: #FFD700;
+      color: #8B0000;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 1px;
+    }
+
+    .profile-card {
+      background: rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 28px 24px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .profile-photo {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin: 0 auto 16px;
+      display: block;
+      border: 3px solid rgba(255,215,0,0.3);
+    }
+
+    .profile-initials {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      color: #FFD700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 48px;
+      margin: 0 auto 16px;
+      border: 3px solid rgba(255,215,0,0.3);
+    }
+
+    .profile-name {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .profile-detail {
+      font-size: 15px;
+      opacity: 0.85;
+      margin-bottom: 4px;
+    }
+
+    .profile-detail a {
+      color: #FFD700;
+      text-decoration: none;
+    }
+
+    .edit-my-info-btn {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 10px 24px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+
+    .edit-my-info-btn:active { background: rgba(255,255,255,0.25); }
+
+    .profile-edit-form {
+      margin-top: 16px;
+      text-align: left;
+    }
+
+    .profile-edit-form .field {
+      margin-bottom: 12px;
+    }
+
+    .profile-edit-form label {
+      display: block;
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .profile-edit-form input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .profile-edit-form input:focus { border-color: #FFD700; }
+
+    .profile-save-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 12px;
+      background: #FFD700;
+      color: #8B0000;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 4px;
+    }
+
+    .profile-save-btn:active { opacity: 0.7; }
+    .profile-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .profile-edit-msg {
+      text-align: center;
+      padding: 8px 0 0;
+      font-size: 13px;
+      min-height: 24px;
+    }
+
+    .profile-edit-msg.success { color: #4CAF50; }
+    .profile-edit-msg.error { color: #ff6b6b; }
+
+    /* Quick Events */
+    .quick-events {
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .quick-events-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .quick-event {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .quick-event:last-child { border-bottom: none; }
+
+    .quick-event-info { flex: 1; min-width: 0; }
+
+    .quick-event-name {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .quick-event-date {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .rsvp-pill {
+      padding: 4px 10px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+
+    .rsvp-pill.yes { background: rgba(76,175,80,0.2); color: #81C784; }
+    .rsvp-pill.no { background: rgba(255,107,107,0.2); color: #ff8a8a; }
+    .rsvp-pill.maybe { background: rgba(255,215,0,0.2); color: #FFD700; }
+    .rsvp-pill.none { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); }
+
+    .guest-count-badge {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      margin-left: 4px;
+    }
+
+    .quick-events-empty {
+      text-align: center;
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      padding: 8px 0;
+      font-style: italic;
+    }
+
+    .admin-note {
+      background: rgba(255,215,0,0.1);
+      border: 1px solid rgba(255,215,0,0.3);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: rgba(255,215,0,0.8);
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .nav-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .spinner-small {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #FFD700;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 20px auto;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
+  <!-- Login Gate -->
   <div class="gate" id="gate">
     <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
     <h1>HARUMPHERS</h1>
     <p class="subtitle" style="margin-bottom:30px">Member Directory & Events</p>
-    <input type="password" id="pw" placeholder="Enter password" autocomplete="off">
+    <input type="text" id="pw" placeholder="Password or Member #" autocomplete="off">
     <div class="gate-error" id="gate-error"></div>
     <button class="btn" onclick="checkPassword()">Enter</button>
   </div>
 
+  <!-- Guest Home -->
   <div class="container hidden" id="main">
     <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
     <h1>HARUMPHERS</h1>
@@ -179,7 +460,7 @@
       <div class="ios-instructions">
         <div class="step">
           <span class="step-num">1</span>
-          <span>Tap the <strong>Share</strong> button <span style="font-size:18px">⬆</span> at the bottom</span>
+          <span>Tap the <strong>Share</strong> button <span style="font-size:18px">&#11014;&#65039;</span> at the bottom</span>
         </div>
         <div class="step">
           <span class="step-num">2</span>
@@ -194,7 +475,7 @@
       <div class="android-instructions">
         <div class="step">
           <span class="step-num">1</span>
-          <span>Tap the <strong>menu</strong> (⋮) in Chrome</span>
+          <span>Tap the <strong>menu</strong> (&#8942;) in Chrome</span>
         </div>
         <div class="step">
           <span class="step-num">2</span>
@@ -211,55 +492,496 @@
       Member Directory
     </a>
 
-    <a href="events.html" class="btn" style="margin-top:12px;background:rgba(255,215,0,0.15);color:#FFD700;border:2px solid #FFD700;">
+    <a href="events.html" class="btn-outline" style="margin-top:12px;">
       Events & RSVPs
     </a>
 
-    <p class="skip">
-      <a href="https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG">Open in Airtable →</a>
+    <p class="skip" style="margin-top:20px;">
+      <a href="#" class="logout-link" onclick="logout()">Log out</a>
+    </p>
+  </div>
+
+  <!-- Member/Admin Home -->
+  <div class="member-home hidden" id="member-home">
+    <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
+    <div class="member-header">
+      <h1>HARUMPHERS</h1>
+      <span class="admin-badge hidden" id="admin-badge">ADMIN</span>
+    </div>
+    <p class="subtitle" style="margin-bottom:20px">Member Directory & Events</p>
+
+    <div id="admin-note" class="admin-note hidden">
+      You have admin access. You can edit any member's info in the directory and manage RSVPs in events.
+    </div>
+
+    <div class="profile-card" id="profile-card">
+      <div class="spinner-small"></div>
+    </div>
+
+    <div class="quick-events" id="quick-events">
+      <div class="quick-events-title">Upcoming Events</div>
+      <div class="spinner-small"></div>
+    </div>
+
+    <div class="nav-buttons">
+      <a href="directory.html" class="btn">
+        Member Directory
+      </a>
+      <a href="events.html" class="btn-outline">
+        Events & RSVPs
+      </a>
+    </div>
+
+    <p class="skip" style="margin-top:20px;">
+      <a href="#" class="logout-link" onclick="logout()">Log out</a>
     </p>
   </div>
 
   <script>
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    const isAndroid = /Android/.test(navigator.userAgent);
+    const API_TOKEN = 'patAgD7FQMKDOntHs.c85c0298f3ed1479cec458d9fbb27a5b562b63da5274f287f5e3f156b847f148';
+    const BASE_ID = 'appW7Df1qJlznxxtf';
+    const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
+    const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
 
-    if (isIOS) {
-      document.body.classList.add('ios');
-    } else if (isAndroid) {
-      document.body.classList.add('android');
-    } else {
-      document.body.classList.add('ios');
+    // --- Auth Helpers (duplicated in each page) ---
+    function getAuthMode() {
+      const auth = localStorage.getItem('harumphers_auth');
+      if (auth === 'admin') return 'admin';
+      if (auth === 'member') return 'member';
+      if (auth === 'guest' || auth === '1') return 'guest';
+      return null;
     }
 
+    function getMemberInfo() {
+      const recordId = localStorage.getItem('harumphers_member_id');
+      const name = localStorage.getItem('harumphers_member_name');
+      const duqId = localStorage.getItem('harumphers_duq_id');
+      if (!recordId) return null;
+      return { recordId, name, duqId };
+    }
+
+    function logout() {
+      localStorage.removeItem('harumphers_auth');
+      localStorage.removeItem('harumphers_member_id');
+      localStorage.removeItem('harumphers_member_name');
+      localStorage.removeItem('harumphers_duq_id');
+      localStorage.removeItem('harumphers_myname');
+      window.location.href = 'index.html';
+    }
+
+    // --- Platform detection ---
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isAndroid = /Android/.test(navigator.userAgent);
+    if (isIOS) document.body.classList.add('ios');
+    else if (isAndroid) document.body.classList.add('android');
+    else document.body.classList.add('ios');
+
+    // --- Service Worker ---
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
 
-    function unlock() {
-      document.getElementById('gate').classList.add('hidden');
-      document.getElementById('main').classList.remove('hidden');
-      localStorage.setItem('harumphers_auth', '1');
+    // --- API helpers ---
+    async function apiFetch(url) {
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      return res.json();
     }
 
-    function checkPassword() {
-      const pw = document.getElementById('pw').value.trim().toLowerCase();
-      if (pw === 'cigar') {
-        unlock();
-      } else {
-        document.getElementById('gate-error').textContent = 'Incorrect password';
-        document.getElementById('pw').value = '';
-        document.getElementById('pw').focus();
+    async function apiFetchAll(url) {
+      let allRecords = [];
+      let fetchUrl = url;
+      while (true) {
+        const data = await apiFetch(fetchUrl);
+        allRecords = allRecords.concat(data.records);
+        if (!data.offset) break;
+        const sep = fetchUrl.includes('?') ? '&' : '?';
+        fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
       }
+      return { records: allRecords };
+    }
+
+    // --- Login Logic ---
+    function showGuestHome() {
+      document.getElementById('gate').classList.add('hidden');
+      document.getElementById('main').classList.remove('hidden');
+      document.getElementById('member-home').classList.add('hidden');
+    }
+
+    function showMemberHome() {
+      document.getElementById('gate').classList.add('hidden');
+      document.getElementById('main').classList.add('hidden');
+      document.getElementById('member-home').classList.remove('hidden');
+
+      if (getAuthMode() === 'admin') {
+        document.getElementById('admin-badge').classList.remove('hidden');
+        document.getElementById('admin-note').classList.remove('hidden');
+      }
+
+      loadMemberProfile();
+      loadQuickEvents();
+    }
+
+    async function checkPassword() {
+      const raw = document.getElementById('pw').value.trim();
+      const errorEl = document.getElementById('gate-error');
+      errorEl.textContent = '';
+
+      if (!raw) return;
+
+      // Check for admin password (case-sensitive)
+      if (raw === 'Harumphers325') {
+        localStorage.setItem('harumphers_auth', 'admin');
+        // Admin doesn't need a member record, but we could look one up later
+        showMemberHome();
+        return;
+      }
+
+      // Check for guest password (case-insensitive)
+      if (raw.toLowerCase() === 'cigar') {
+        localStorage.setItem('harumphers_auth', 'guest');
+        showGuestHome();
+        return;
+      }
+
+      // Check for Duquesne member # (all digits)
+      if (/^\d+$/.test(raw)) {
+        errorEl.textContent = 'Looking up member...';
+        errorEl.style.color = '#FFD700';
+
+        try {
+          const formula = encodeURIComponent(`{MEMBER #}="${raw}"`);
+          const url = `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?filterByFormula=${formula}`;
+          const data = await apiFetch(url);
+
+          if (data.records && data.records.length > 0) {
+            const rec = data.records[0];
+            localStorage.setItem('harumphers_auth', 'member');
+            localStorage.setItem('harumphers_member_id', rec.id);
+            localStorage.setItem('harumphers_member_name', rec.fields['FULL NAME'] || '');
+            localStorage.setItem('harumphers_duq_id', raw);
+            localStorage.setItem('harumphers_myname', rec.fields['FULL NAME'] || '');
+            showMemberHome();
+            return;
+          } else {
+            errorEl.style.color = '#ff6b6b';
+            errorEl.textContent = 'Member # not found';
+            document.getElementById('pw').value = '';
+            document.getElementById('pw').focus();
+            return;
+          }
+        } catch (err) {
+          errorEl.style.color = '#ff6b6b';
+          errorEl.textContent = 'Network error. Try again.';
+          return;
+        }
+      }
+
+      // Nothing matched
+      errorEl.style.color = '#ff6b6b';
+      errorEl.textContent = 'Incorrect password or member #';
+      document.getElementById('pw').value = '';
+      document.getElementById('pw').focus();
     }
 
     document.getElementById('pw').addEventListener('keydown', e => {
       if (e.key === 'Enter') checkPassword();
     });
 
-    if (localStorage.getItem('harumphers_auth') === '1') {
-      unlock();
+    // --- Member Profile ---
+    let memberRecord = null;
+    let editFormVisible = false;
+
+    async function loadMemberProfile() {
+      const card = document.getElementById('profile-card');
+      const info = getMemberInfo();
+
+      if (!info) {
+        // Admin without member record - show admin-only profile
+        card.innerHTML = `
+          <div class="profile-initials">A</div>
+          <div class="profile-name">Admin</div>
+          <div class="profile-detail" style="opacity:0.5">Logged in as administrator</div>
+        `;
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams();
+        ['FULL NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS'].forEach(f => params.append('fields[]', f));
+        const data = await apiFetch(
+          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}?${params}`
+        );
+        memberRecord = data;
+        renderProfile();
+      } catch (err) {
+        card.innerHTML = `<div style="color:#ff6b6b;font-size:14px;">Could not load profile</div>`;
+      }
     }
+
+    function renderProfile() {
+      const card = document.getElementById('profile-card');
+      if (!memberRecord) return;
+
+      const f = memberRecord.fields;
+      const name = f['FULL NAME'] || '';
+      const phone = f['CELL #'] || '';
+      const email = f['E-MAIL ADDRESS'] || '';
+      const photo = f['PHOTO'] && f['PHOTO'][0];
+      const photoUrl = photo && photo.thumbnails && photo.thumbnails.large
+        ? photo.thumbnails.large.url : null;
+
+      const words = name.split(/\s+/);
+      const initials = words.length > 1
+        ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
+        : (words[0] || '').substring(0,2).toUpperCase();
+
+      const avatarHtml = photoUrl
+        ? `<img class="profile-photo" src="${photoUrl}" alt="" onerror="this.outerHTML='<div class=\\'profile-initials\\'>${initials}</div>'">`
+        : `<div class="profile-initials">${initials}</div>`;
+
+      const phoneHtml = phone
+        ? `<div class="profile-detail"><a href="tel:+1${phone.replace(/\D/g, '')}">${phone}</a></div>`
+        : '';
+      const emailHtml = email
+        ? `<div class="profile-detail"><a href="mailto:${email}">${email}</a></div>`
+        : '';
+
+      const editBtn = `<button class="edit-my-info-btn" onclick="toggleProfileEdit()">${editFormVisible ? 'Cancel' : 'Edit My Info'}</button>`;
+
+      const editForm = editFormVisible ? `
+        <div class="profile-edit-form">
+          <div class="field">
+            <label>Name</label>
+            <input type="text" id="prof-name" value="${name}">
+          </div>
+          <div class="field">
+            <label>Phone</label>
+            <input type="tel" id="prof-phone" value="${phone}" placeholder="(412) 555-1234">
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="prof-email" value="${email}" placeholder="email@example.com">
+          </div>
+          <button class="profile-save-btn" id="prof-save-btn" onclick="saveProfile()">Save Changes</button>
+          <div class="profile-edit-msg" id="prof-msg"></div>
+        </div>
+      ` : '';
+
+      card.innerHTML = `
+        ${avatarHtml}
+        <div class="profile-name">${name}</div>
+        ${phoneHtml}
+        ${emailHtml}
+        ${editBtn}
+        ${editForm}
+      `;
+    }
+
+    function toggleProfileEdit() {
+      editFormVisible = !editFormVisible;
+      renderProfile();
+    }
+
+    async function saveProfile() {
+      const info = getMemberInfo();
+      if (!info) return;
+
+      const newName = document.getElementById('prof-name').value.trim();
+      const newPhone = document.getElementById('prof-phone').value.trim();
+      const newEmail = document.getElementById('prof-email').value.trim();
+      const msgEl = document.getElementById('prof-msg');
+      const saveBtn = document.getElementById('prof-save-btn');
+
+      const updates = {};
+      const f = memberRecord.fields;
+      if (newName && newName !== f['FULL NAME']) updates['FULL NAME'] = newName;
+      if (newPhone !== (f['CELL #'] || '')) updates['CELL #'] = newPhone;
+      if (newEmail !== (f['E-MAIL ADDRESS'] || '')) updates['E-MAIL ADDRESS'] = newEmail;
+
+      if (Object.keys(updates).length === 0) {
+        msgEl.className = 'profile-edit-msg error';
+        msgEl.textContent = 'No changes detected';
+        return;
+      }
+
+      saveBtn.disabled = true;
+      msgEl.className = 'profile-edit-msg';
+      msgEl.textContent = 'Saving...';
+
+      try {
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${API_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ fields: updates })
+        });
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        const updated = await res.json();
+        memberRecord = updated;
+
+        // Update stored name if changed
+        if (updates['FULL NAME']) {
+          localStorage.setItem('harumphers_member_name', updates['FULL NAME']);
+          localStorage.setItem('harumphers_myname', updates['FULL NAME']);
+        }
+
+        editFormVisible = false;
+        renderProfile();
+      } catch (err) {
+        msgEl.className = 'profile-edit-msg error';
+        msgEl.textContent = 'Failed to save. Try again.';
+        saveBtn.disabled = false;
+      }
+    }
+
+    // --- Quick Events ---
+    async function loadQuickEvents() {
+      const container = document.getElementById('quick-events');
+      const info = getMemberInfo();
+      const memberName = info ? info.name : null;
+
+      if (!memberName) {
+        container.innerHTML = `
+          <div class="quick-events-title">Upcoming Events</div>
+          <div class="quick-events-empty">Log in with your Member # to see your RSVPs</div>
+        `;
+        return;
+      }
+
+      try {
+        // Get table metadata for RSVP + GUESTS fields
+        const meta = await apiFetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`);
+        const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
+        const rsvpFields = membersTable.fields.filter(f =>
+          f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
+        );
+        const guestFields = membersTable.fields.filter(f =>
+          f.name.toUpperCase().startsWith('GUESTS-')
+        );
+
+        if (rsvpFields.length === 0) {
+          container.innerHTML = `
+            <div class="quick-events-title">Upcoming Events</div>
+            <div class="quick-events-empty">No events found</div>
+          `;
+          return;
+        }
+
+        // Get event details
+        const eventsData = await apiFetchAll(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`);
+        const eventDetails = eventsData.records.map(r => r.fields);
+
+        // Get member's RSVP data
+        const params = new URLSearchParams();
+        params.append('fields[]', 'FULL NAME');
+        rsvpFields.forEach(f => params.append('fields[]', f.name));
+        guestFields.forEach(f => params.append('fields[]', f.name));
+        params.set('filterByFormula', `RECORD_ID()="${info.recordId}"`);
+
+        const memberData = await apiFetch(
+          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
+        );
+
+        const myFields = memberData.records && memberData.records[0]
+          ? memberData.records[0].fields : {};
+
+        // Build quick event cards (active events only)
+        const events = rsvpFields.map(field => {
+          const fieldWords = field.name.toUpperCase()
+            .replace('RSVP', '').replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
+
+          let matched = eventDetails.find(e => {
+            const eName = (e['EVENT NAME'] || '').toUpperCase();
+            return fieldWords.some(w => w.length > 2 && eName.includes(w));
+          });
+
+          const isDone = matched && (matched['Status'] || '').toLowerCase() === 'done';
+
+          // Find paired guest field
+          let guestFieldName = null;
+          let guestCount = 0;
+          for (const gf of guestFields) {
+            const guestKey = gf.name.toUpperCase().replace('GUESTS-', '');
+            if (fieldWords.some(w => w.length > 2 && guestKey.includes(w))) {
+              guestFieldName = gf.name;
+              guestCount = myFields[gf.name] || 0;
+              break;
+            }
+          }
+
+          let displayName = field.name
+            .replace(/RSVP$/i, '')
+            .replace(/^[A-Z]{3}\d{1,2}[-\s]*/i, '')
+            .replace(/[-_]/g, ' ')
+            .trim();
+          if (matched && matched['EVENT NAME']) displayName = matched['EVENT NAME'];
+
+          const rsvp = myFields[field.name] || null;
+
+          return {
+            name: displayName,
+            date: matched ? (matched['DATE'] || '') : '',
+            isDone,
+            rsvp,
+            guestCount,
+          };
+        }).filter(ev => !ev.isDone);
+
+        if (events.length === 0) {
+          container.innerHTML = `
+            <div class="quick-events-title">Upcoming Events</div>
+            <div class="quick-events-empty">No upcoming events</div>
+          `;
+          return;
+        }
+
+        const eventsHtml = events.map(ev => {
+          let pillClass = 'none';
+          let pillText = 'No RSVP';
+          if (ev.rsvp) {
+            const upper = ev.rsvp.toUpperCase();
+            if (upper.includes('YES') || upper.includes('GOING')) { pillClass = 'yes'; pillText = 'GOING'; }
+            else if (upper.includes('NO')) { pillClass = 'no'; pillText = 'NOT GOING'; }
+            else { pillClass = 'maybe'; pillText = 'MAYBE'; }
+          }
+          const guestBadge = ev.guestCount > 0
+            ? `<span class="guest-count-badge">(+${ev.guestCount})</span>` : '';
+
+          return `<div class="quick-event">
+            <div class="quick-event-info">
+              <div class="quick-event-name">${ev.name}</div>
+              ${ev.date ? `<div class="quick-event-date">${ev.date}</div>` : ''}
+            </div>
+            <span class="rsvp-pill ${pillClass}">${pillText}</span>
+            ${guestBadge}
+          </div>`;
+        }).join('');
+
+        container.innerHTML = `
+          <div class="quick-events-title">Upcoming Events</div>
+          ${eventsHtml}
+        `;
+      } catch (err) {
+        container.innerHTML = `
+          <div class="quick-events-title">Upcoming Events</div>
+          <div class="quick-events-empty">Could not load events</div>
+        `;
+      }
+    }
+
+    // --- Init ---
+    const authMode = getAuthMode();
+    if (authMode === 'member' || authMode === 'admin') {
+      showMemberHome();
+    } else if (authMode === 'guest') {
+      showGuestHome();
+    }
+    // else: show login gate (default)
   </script>
 </body>
 </html>
