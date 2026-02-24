@@ -634,8 +634,7 @@
     }
 
     // Toggle inline edit for a member in an event
-    function toggleInlineEdit(eventIdx, memberId, evt) {
-      evt.stopPropagation();
+    function toggleInlineEdit(eventIdx, memberId) {
       if (inlineEdit && inlineEdit.eventIdx === eventIdx && inlineEdit.memberId === memberId) {
         inlineEdit = null;
       } else {
@@ -660,7 +659,7 @@
           const isEditing = inlineEdit && inlineEdit.eventIdx === i && inlineEdit.memberId === entry.recordId;
           const editingClass = isEditing ? ' editing' : '';
           const clickable = authMode === 'admin' && !ev.isDone ? ' clickable' : '';
-          const onclick = clickable ? ` onclick="toggleInlineEdit(${i}, '${entry.recordId}', event)"` : '';
+          const onclick = clickable ? ` onclick="event.stopPropagation(); toggleInlineEdit(${i}, '${entry.recordId}', event)"` : '';
 
           let html = `<span class="rsvp-chip ${cls}${youClass}${editingClass}${clickable}"${onclick}>${entry.name}${youLabel}${guestLabel}</span>`;
 
