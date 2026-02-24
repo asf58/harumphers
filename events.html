@@ -125,7 +125,7 @@
       transition: max-height 0.3s ease;
     }
 
-    .event-card.open .event-body { max-height: 3000px; }
+    .event-card.open .event-body { max-height: 5000px; }
 
     .rsvp-section {
       padding: 0 16px 12px;
@@ -146,9 +146,15 @@
 
     .rsvp-list {
       display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-bottom: 4px;
+    }
+
+    .rsvp-chip-row {
+      display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      padding-bottom: 4px;
     }
 
     .rsvp-chip {
@@ -156,6 +162,7 @@
       padding: 5px 10px;
       border-radius: 14px;
       font-size: 13px;
+      display: inline-block;
     }
 
     .rsvp-chip.yes { background: rgba(76,175,80,0.15); color: #81C784; }
@@ -166,6 +173,54 @@
     .rsvp-chip.you {
       border: 2px solid #FFD700;
       font-weight: 600;
+    }
+
+    .rsvp-chip.clickable {
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .rsvp-chip.clickable:active { opacity: 0.7; }
+
+    .rsvp-chip.editing {
+      border: 2px solid #FFD700;
+      background: rgba(255,215,0,0.1) !important;
+    }
+
+    /* Inline edit panel (expands under a member's name) */
+    .inline-edit {
+      background: #1f1f1f;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 4px 0 8px;
+    }
+
+    .inline-edit-name {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .inline-edit .rsvp-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    .inline-edit .rsvp-btn {
+      flex: 1;
+      padding: 8px 4px;
+      font-size: 12px;
+    }
+
+    .inline-edit .guest-count-row {
+      margin-top: 8px;
+    }
+
+    .inline-edit .rsvp-msg {
+      font-size: 12px;
+      min-height: 18px;
     }
 
     .no-rsvp {
@@ -186,25 +241,6 @@
       margin-bottom: 10px;
       color: #FFD700;
     }
-
-    .rsvp-select {
-      width: 100%;
-      padding: 10px 14px;
-      border-radius: 10px;
-      border: 1px solid #444;
-      background: #333;
-      color: #fff;
-      font-size: 15px;
-      margin-bottom: 10px;
-      outline: none;
-      appearance: none;
-      -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='2' fill='none'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 14px center;
-    }
-
-    .rsvp-select:focus { border-color: #FFD700; }
 
     .rsvp-buttons {
       display: flex;
@@ -264,11 +300,10 @@
 
     .guest-count-input:focus { border-color: #FFD700; }
 
-    .guest-count-na {
-      font-size: 12px;
-      color: #555;
-      font-style: italic;
-      margin-top: 10px;
+    .guest-count-display {
+      font-size: 13px;
+      color: #aaa;
+      margin-top: 8px;
     }
 
     .rsvp-msg {
@@ -279,7 +314,7 @@
     }
 
     .rsvp-msg.success { color: #4CAF50; }
-    .rsvp-msg.error { color: #ff6b6b; padding: 8px 0 0; text-align: center; }
+    .rsvp-msg.error { color: #ff6b6b; }
 
     .your-rsvp {
       font-size: 13px;
@@ -288,19 +323,6 @@
     }
 
     .your-rsvp strong { color: #FFD700; }
-
-    .admin-rsvp-section {
-      border-top: 1px solid #444;
-      margin-top: 12px;
-      padding-top: 12px;
-    }
-
-    .admin-rsvp-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #aaa;
-      margin-bottom: 8px;
-    }
 
     .loading, .error {
       text-align: center;
@@ -389,6 +411,9 @@
     let allMembers = [];
     let allEvents = [];
 
+    // Inline edit state: { eventIdx, memberId } or null
+    let inlineEdit = null;
+
     async function apiFetch(url) {
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${API_TOKEN}` }
@@ -468,11 +493,9 @@
     function findGuestField(guestFields, fieldWords, matched) {
       for (const gf of guestFields) {
         const guestKey = gf.name.toUpperCase().replace('GUESTS-', '').trim();
-        // Strategy 1: bidirectional word matching with RSVP field words
         if (fieldWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
           return gf.name;
         }
-        // Strategy 2: match against event name from EVENTS table
         if (matched && matched['EVENT NAME']) {
           const eventWords = matched['EVENT NAME'].toUpperCase().replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
           if (eventWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
@@ -527,7 +550,6 @@
           return fieldWords.some(w => w.length > 2 && eName.includes(w));
         });
 
-        // Find paired guest field using improved matching
         const pairedGuestField = findGuestField(guestFields, fieldWords, matched);
 
         const yes = [], no = [], maybe = [], pending = [];
@@ -598,17 +620,28 @@
       return member.fields[ev.guestFieldName] || 0;
     }
 
-    function guestCountHtml(ev, i, prefix, currentCount) {
-      if (ev.guestFieldName) {
-        return `
-          <div class="guest-count-row">
-            <span class="guest-count-label">Bringing guests?</span>
-            <input type="number" class="guest-count-input" id="${prefix}-guest-count-${i}"
-              value="${currentCount}" min="0" max="20"
-              onchange="submit${prefix === 'guest' ? 'G' : 'AdminG'}uestCount(${i})">
-          </div>`;
+    function getMemberRsvpForEvent(ev, memberId) {
+      const member = allMembers.find(m => m.id === memberId);
+      if (!member) return null;
+      return member.fields[ev.fieldName] || null;
+    }
+
+    function getMemberGuestCount(ev, memberId) {
+      if (!ev.guestFieldName) return 0;
+      const member = allMembers.find(m => m.id === memberId);
+      if (!member) return 0;
+      return member.fields[ev.guestFieldName] || 0;
+    }
+
+    // Toggle inline edit for a member in an event
+    function toggleInlineEdit(eventIdx, memberId, evt) {
+      evt.stopPropagation();
+      if (inlineEdit && inlineEdit.eventIdx === eventIdx && inlineEdit.memberId === memberId) {
+        inlineEdit = null;
+      } else {
+        inlineEdit = { eventIdx, memberId };
       }
-      return `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
+      render();
     }
 
     function render() {
@@ -619,16 +652,58 @@
           : ev.status.toLowerCase() === 'in progress' ? 'active' : 'upcoming';
         const statusLabel = ev.status || 'Upcoming';
 
+        function chipHtml(entry, cls) {
+          const isYou = myInfo && entry.recordId === myInfo.recordId;
+          const youLabel = isYou ? ' (You)' : '';
+          const guestLabel = entry.guestCount > 0 ? ` (+${entry.guestCount})` : '';
+          const youClass = isYou ? ' you' : '';
+          const isEditing = inlineEdit && inlineEdit.eventIdx === i && inlineEdit.memberId === entry.recordId;
+          const editingClass = isEditing ? ' editing' : '';
+          const clickable = authMode === 'admin' && !ev.isDone ? ' clickable' : '';
+          const onclick = clickable ? ` onclick="toggleInlineEdit(${i}, '${entry.recordId}', event)"` : '';
+
+          let html = `<span class="rsvp-chip ${cls}${youClass}${editingClass}${clickable}"${onclick}>${entry.name}${youLabel}${guestLabel}</span>`;
+
+          // Inline edit panel
+          if (isEditing && authMode === 'admin') {
+            const memberRsvp = getMemberRsvpForEvent(ev, entry.recordId);
+            const memberGuests = getMemberGuestCount(ev, entry.recordId);
+            let ac = { yes: '', maybe: '', no: '' };
+            if (memberRsvp) {
+              const u = memberRsvp.toUpperCase();
+              if (u.includes('YES') || u.includes('GOING')) ac.yes = ' active';
+              else if (u.includes('NO')) ac.no = ' active';
+              else ac.maybe = ' active';
+            }
+
+            html += `
+              <div class="inline-edit" onclick="event.stopPropagation()">
+                <div class="inline-edit-name">Edit: ${entry.name}</div>
+                <div class="rsvp-buttons">
+                  <button class="rsvp-btn yes-btn${ac.yes}" onclick="submitInlineRsvp(${i}, '${entry.recordId}', 'YES')">YES</button>
+                  <button class="rsvp-btn maybe-btn${ac.maybe}" onclick="submitInlineRsvp(${i}, '${entry.recordId}', 'MAYBE')">MAYBE</button>
+                  <button class="rsvp-btn no-btn${ac.no}" onclick="submitInlineRsvp(${i}, '${entry.recordId}', 'NO')">NO</button>
+                  <button class="rsvp-btn clear-btn" onclick="submitInlineRsvp(${i}, '${entry.recordId}', null)">CLEAR</button>
+                </div>
+                ${ev.guestFieldName ? `
+                  <div class="guest-count-row">
+                    <span class="guest-count-label">Guests:</span>
+                    <input type="number" class="guest-count-input" id="inline-guests-${i}-${entry.recordId}"
+                      value="${memberGuests}" min="0" max="20"
+                      onchange="submitInlineGuestCount(${i}, '${entry.recordId}')">
+                  </div>
+                ` : ''}
+                <div class="rsvp-msg" id="inline-msg-${i}-${entry.recordId}"></div>
+              </div>`;
+          }
+
+          return html;
+        }
+
         function section(label, cls, list) {
           if (list.length === 0) return '';
           return `<div class="rsvp-label ${cls}">${label} (${list.length})</div>
-            <div class="rsvp-list">${list.map(entry => {
-              const isYou = myInfo && entry.recordId === myInfo.recordId;
-              const youLabel = isYou ? ' (You)' : '';
-              const guestLabel = entry.guestCount > 0 ? ` (+${entry.guestCount})` : '';
-              const youClass = isYou ? ' you' : '';
-              return `<span class="rsvp-chip ${cls}${youClass}">${entry.name}${youLabel}${guestLabel}</span>`;
-            }).join('')}</div>`;
+            <div class="rsvp-list">${list.map(entry => chipHtml(entry, cls)).join('')}</div>`;
         }
 
         const body = [
@@ -649,10 +724,9 @@
 
         if (!ev.isDone) {
           if (authMode === 'guest') {
-            // Guest: no RSVP form
             rsvpForm = '';
           } else if (authMode === 'member') {
-            // Member: identity known, no dropdown
+            // Member: RSVP buttons + read-only guest count
             const myRsvp = getMyRsvpForEvent(ev);
             const myGuests = getMyGuestCountForEvent(ev);
 
@@ -664,14 +738,10 @@
               else activeClass.maybe = ' active';
             }
 
-            const memberGuestHtml = ev.guestFieldName ? `
-              <div class="guest-count-row">
-                <span class="guest-count-label">Bringing guests?</span>
-                <input type="number" class="guest-count-input" id="guest-count-${i}"
-                  value="${myGuests}" min="0" max="20"
-                  onchange="submitGuestCount(${i})">
-              </div>
-            ` : `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
+            // Guest count is read-only for members
+            const guestDisplay = ev.guestFieldName
+              ? `<div class="guest-count-display">Guests: <strong>${myGuests}</strong>${myGuests === 0 ? ' (contact admin to update)' : ''}</div>`
+              : '';
 
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
@@ -683,11 +753,11 @@
                   <button class="rsvp-btn no-btn${activeClass.no}" onclick="submitMemberRsvp(${i}, 'NO')">NO</button>
                   ${myRsvp ? `<button class="rsvp-btn clear-btn" onclick="submitMemberRsvp(${i}, null)">CLEAR</button>` : ''}
                 </div>
-                ${memberGuestHtml}
+                ${guestDisplay}
                 <div class="rsvp-msg" id="rsvp-msg-${i}"></div>
               </div>`;
           } else if (authMode === 'admin') {
-            // Admin: own RSVP section + admin dropdown for any member
+            // Admin: own RSVP + own guest count (editable)
             const myRsvp = getMyRsvpForEvent(ev);
             const myGuests = getMyGuestCountForEvent(ev);
 
@@ -701,15 +771,6 @@
 
             const hasOwnRecord = !!myInfo;
 
-            const ownGuestHtml = ev.guestFieldName ? `
-              <div class="guest-count-row">
-                <span class="guest-count-label">Bringing guests?</span>
-                <input type="number" class="guest-count-input" id="guest-count-${i}"
-                  value="${myGuests}" min="0" max="20"
-                  onchange="submitGuestCount(${i})">
-              </div>
-            ` : `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
-
             const ownRsvpSection = hasOwnRecord ? `
                 <div class="rsvp-form-title">Your RSVP</div>
                 ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
@@ -719,40 +780,21 @@
                   <button class="rsvp-btn no-btn${activeClass.no}" onclick="submitMemberRsvp(${i}, 'NO')">NO</button>
                   ${myRsvp ? `<button class="rsvp-btn clear-btn" onclick="submitMemberRsvp(${i}, null)">CLEAR</button>` : ''}
                 </div>
-                ${ownGuestHtml}
+                ${ev.guestFieldName ? `
+                  <div class="guest-count-row">
+                    <span class="guest-count-label">Your guests:</span>
+                    <input type="number" class="guest-count-input" id="guest-count-${i}"
+                      value="${myGuests}" min="0" max="20"
+                      onchange="submitGuestCount(${i})">
+                  </div>
+                ` : ''}
                 <div class="rsvp-msg" id="rsvp-msg-${i}"></div>
-            ` : '';
-
-            const adminGuestHtml = ev.guestFieldName ? `
-              <div class="guest-count-row">
-                <span class="guest-count-label">Guest count:</span>
-                <input type="number" class="guest-count-input" id="admin-guest-count-${i}"
-                  value="0" min="0" max="20"
-                  onchange="submitAdminGuestCount(${i})">
-              </div>
-            ` : `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
+                <div style="border-top:1px solid #444;margin-top:12px;padding-top:8px;font-size:12px;color:#666;text-align:center">Tap any member name above to edit their RSVP</div>
+            ` : `<div style="font-size:12px;color:#666;text-align:center;padding:8px 0">Tap any member name above to edit their RSVP</div>`;
 
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
                 ${ownRsvpSection}
-                <div class="admin-rsvp-section">
-                  <div class="admin-rsvp-title">Admin: Change Any Member's RSVP</div>
-                  <select class="rsvp-select" id="admin-name-${i}">
-                    <option value="">Select a member...</option>
-                    ${allMembers.map(m => {
-                      const n = m.fields['FULL NAME'] || '';
-                      return `<option value="${m.id}">${n}</option>`;
-                    }).join('')}
-                  </select>
-                  <div class="rsvp-buttons">
-                    <button class="rsvp-btn yes-btn" onclick="submitAdminRsvp(${i}, 'YES')">YES</button>
-                    <button class="rsvp-btn maybe-btn" onclick="submitAdminRsvp(${i}, 'MAYBE')">MAYBE</button>
-                    <button class="rsvp-btn no-btn" onclick="submitAdminRsvp(${i}, 'NO')">NO</button>
-                    <button class="rsvp-btn clear-btn" onclick="submitAdminRsvp(${i}, null)">CLEAR</button>
-                  </div>
-                  ${adminGuestHtml}
-                  <div class="rsvp-msg" id="admin-rsvp-msg-${i}"></div>
-                </div>
               </div>`;
           }
         }
@@ -805,7 +847,6 @@
       }
 
       try {
-        // null = clear RSVP (send empty string to clear singleSelect)
         const patchValue = value === null ? '' : value;
         await apiPatch(member.id, { [ev.fieldName]: patchValue });
         member.fields[ev.fieldName] = value === null ? undefined : value;
@@ -827,7 +868,7 @@
       }
     }
 
-    // Member guest count
+    // Admin guest count for own record
     async function submitGuestCount(eventIdx) {
       if (!myInfo) return;
       const ev = allEvents[eventIdx];
@@ -860,70 +901,52 @@
       }
     }
 
-    // Admin RSVP: uses dropdown selection
-    async function submitAdminRsvp(eventIdx, value) {
+    // Inline admin RSVP edit (from clicking a member's name)
+    async function submitInlineRsvp(eventIdx, memberId, value) {
       const ev = allEvents[eventIdx];
-      const select = document.getElementById(`admin-name-${eventIdx}`);
-      const msgEl = document.getElementById(`admin-rsvp-msg-${eventIdx}`);
-      const selectedId = select.value;
+      const msgEl = document.getElementById(`inline-msg-${eventIdx}-${memberId}`);
+      const member = allMembers.find(m => m.id === memberId);
+      if (!member) return;
 
-      if (!selectedId) {
-        msgEl.className = 'rsvp-msg error';
-        msgEl.textContent = 'Please select a member first';
-        return;
-      }
-
-      const member = allMembers.find(m => m.id === selectedId);
-      if (!member) {
-        msgEl.className = 'rsvp-msg error';
-        msgEl.textContent = 'Member not found';
-        return;
-      }
-
-      const buttons = msgEl.parentElement.querySelectorAll('.rsvp-btn');
+      const buttons = msgEl ? msgEl.parentElement.querySelectorAll('.rsvp-btn') : [];
       buttons.forEach(b => b.disabled = true);
-      msgEl.className = 'rsvp-msg';
-      msgEl.textContent = 'Submitting...';
+      if (msgEl) {
+        msgEl.className = 'rsvp-msg';
+        msgEl.textContent = 'Saving...';
+      }
 
       try {
         const patchValue = value === null ? '' : value;
         await apiPatch(member.id, { [ev.fieldName]: patchValue });
         member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
+        // Keep inline edit open on same member
+        inlineEdit = { eventIdx, memberId };
         render();
 
-        const newMsg = document.getElementById(`admin-rsvp-msg-${eventIdx}`);
+        const newMsg = document.getElementById(`inline-msg-${eventIdx}-${memberId}`);
         if (newMsg) {
           newMsg.className = 'rsvp-msg success';
-          newMsg.textContent = value === null
-            ? `${member.fields['FULL NAME']} RSVP cleared`
-            : `${member.fields['FULL NAME']} marked as ${value}`;
-          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 3000);
+          newMsg.textContent = value === null ? 'Cleared' : `Set to ${value}`;
+          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 2500);
         }
       } catch (err) {
-        msgEl.className = 'rsvp-msg error';
-        msgEl.textContent = 'Failed to submit. Try again.';
+        if (msgEl) {
+          msgEl.className = 'rsvp-msg error';
+          msgEl.textContent = 'Failed. Try again.';
+        }
         buttons.forEach(b => b.disabled = false);
       }
     }
 
-    // Admin guest count
-    async function submitAdminGuestCount(eventIdx) {
+    // Inline admin guest count edit
+    async function submitInlineGuestCount(eventIdx, memberId) {
       const ev = allEvents[eventIdx];
       if (!ev.guestFieldName) return;
 
-      const select = document.getElementById(`admin-name-${eventIdx}`);
-      const input = document.getElementById(`admin-guest-count-${eventIdx}`);
-      const msgEl = document.getElementById(`admin-rsvp-msg-${eventIdx}`);
-      const selectedId = select.value;
-
-      if (!selectedId) {
-        msgEl.className = 'rsvp-msg error';
-        msgEl.textContent = 'Please select a member first';
-        return;
-      }
-
-      const member = allMembers.find(m => m.id === selectedId);
+      const input = document.getElementById(`inline-guests-${eventIdx}-${memberId}`);
+      const msgEl = document.getElementById(`inline-msg-${eventIdx}-${memberId}`);
+      const member = allMembers.find(m => m.id === memberId);
       if (!member) return;
 
       const count = parseInt(input.value) || 0;
@@ -932,18 +955,19 @@
         await apiPatch(member.id, { [ev.guestFieldName]: count });
         member.fields[ev.guestFieldName] = count;
         recalcEvent(ev);
+        inlineEdit = { eventIdx, memberId };
         render();
 
-        const newMsg = document.getElementById(`admin-rsvp-msg-${eventIdx}`);
+        const newMsg = document.getElementById(`inline-msg-${eventIdx}-${memberId}`);
         if (newMsg) {
           newMsg.className = 'rsvp-msg success';
-          newMsg.textContent = `Guest count updated for ${member.fields['FULL NAME']}`;
-          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 3000);
+          newMsg.textContent = count > 0 ? `${count} guest${count > 1 ? 's' : ''}` : 'Guests cleared';
+          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 2500);
         }
       } catch (err) {
         if (msgEl) {
           msgEl.className = 'rsvp-msg error';
-          msgEl.textContent = 'Failed to update. Try again.';
+          msgEl.textContent = 'Failed. Try again.';
         }
       }
     }

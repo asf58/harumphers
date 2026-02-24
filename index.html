@@ -1149,19 +1149,24 @@
           else activeMaybe = ' active';
         }
 
-        // Always show guest count row
-        const guestRow = ev.guestFieldName ? `
-          <div class="qe-guest-row">
-            <span class="qe-guest-label">Guests:</span>
-            <input type="number" class="qe-guest-input" id="qe-guests-${i}"
-              value="${ev.guestCount}" min="0" max="20"
-              onchange="submitQeGuestCount(${i})">
-          </div>
-        ` : `
-          <div class="qe-guest-row">
-            <span class="qe-guest-label" style="opacity:0.3;font-style:italic;font-size:11px">Guest column not configured</span>
-          </div>
-        `;
+        // Guest count row: editable for admin, read-only for member
+        let guestRow = '';
+        if (ev.guestFieldName) {
+          if (getAuthMode() === 'admin') {
+            guestRow = `
+              <div class="qe-guest-row">
+                <span class="qe-guest-label">Guests:</span>
+                <input type="number" class="qe-guest-input" id="qe-guests-${i}"
+                  value="${ev.guestCount}" min="0" max="20"
+                  onchange="submitQeGuestCount(${i})">
+              </div>`;
+          } else {
+            guestRow = `
+              <div class="qe-guest-row">
+                <span class="qe-guest-label">Guests: <strong style="color:#fff">${ev.guestCount}</strong>${ev.guestCount === 0 ? ' <span style="opacity:0.4;font-size:11px">(contact admin to update)</span>' : ''}</span>
+              </div>`;
+          }
+        }
 
         return `<div class="qe-card${needsRsvp ? ' needs-rsvp' : ''}">
           <div class="qe-top">
