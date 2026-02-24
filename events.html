@@ -264,6 +264,13 @@
 
     .guest-count-input:focus { border-color: #FFD700; }
 
+    .guest-count-na {
+      font-size: 12px;
+      color: #555;
+      font-style: italic;
+      margin-top: 10px;
+    }
+
     .rsvp-msg {
       text-align: center;
       padding: 8px 0 0;
@@ -381,7 +388,6 @@
 
     let allMembers = [];
     let allEvents = [];
-    let guestFieldMap = {}; // eventIndex -> { fieldName, ... }
 
     async function apiFetch(url) {
       const res = await fetch(url, {
@@ -458,6 +464,25 @@
       }
     }
 
+    // Find matching guest field using multiple strategies
+    function findGuestField(guestFields, fieldWords, matched) {
+      for (const gf of guestFields) {
+        const guestKey = gf.name.toUpperCase().replace('GUESTS-', '').trim();
+        // Strategy 1: bidirectional word matching with RSVP field words
+        if (fieldWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
+          return gf.name;
+        }
+        // Strategy 2: match against event name from EVENTS table
+        if (matched && matched['EVENT NAME']) {
+          const eventWords = matched['EVENT NAME'].toUpperCase().replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
+          if (eventWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
+            return gf.name;
+          }
+        }
+      }
+      return null;
+    }
+
     async function loadEvents() {
       const meta = await apiFetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`);
       const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
@@ -502,15 +527,8 @@
           return fieldWords.some(w => w.length > 2 && eName.includes(w));
         });
 
-        // Find paired guest field
-        let pairedGuestField = null;
-        for (const gf of guestFields) {
-          const guestKey = gf.name.toUpperCase().replace('GUESTS-', '');
-          if (fieldWords.some(w => w.length > 2 && guestKey.includes(w))) {
-            pairedGuestField = gf.name;
-            break;
-          }
-        }
+        // Find paired guest field using improved matching
+        const pairedGuestField = findGuestField(guestFields, fieldWords, matched);
 
         const yes = [], no = [], maybe = [], pending = [];
         allMembers.forEach(r => {
@@ -580,6 +598,19 @@
       return member.fields[ev.guestFieldName] || 0;
     }
 
+    function guestCountHtml(ev, i, prefix, currentCount) {
+      if (ev.guestFieldName) {
+        return `
+          <div class="guest-count-row">
+            <span class="guest-count-label">Bringing guests?</span>
+            <input type="number" class="guest-count-input" id="${prefix}-guest-count-${i}"
+              value="${currentCount}" min="0" max="20"
+              onchange="submit${prefix === 'guest' ? 'G' : 'AdminG'}uestCount(${i})">
+          </div>`;
+      }
+      return `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
+    }
+
     function render() {
       const content = document.getElementById('content');
 
@@ -633,6 +664,15 @@
               else activeClass.maybe = ' active';
             }
 
+            const memberGuestHtml = ev.guestFieldName ? `
+              <div class="guest-count-row">
+                <span class="guest-count-label">Bringing guests?</span>
+                <input type="number" class="guest-count-input" id="guest-count-${i}"
+                  value="${myGuests}" min="0" max="20"
+                  onchange="submitGuestCount(${i})">
+              </div>
+            ` : `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
+
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
                 <div class="rsvp-form-title">Your RSVP</div>
@@ -643,14 +683,7 @@
                   <button class="rsvp-btn no-btn${activeClass.no}" onclick="submitMemberRsvp(${i}, 'NO')">NO</button>
                   ${myRsvp ? `<button class="rsvp-btn clear-btn" onclick="submitMemberRsvp(${i}, null)">CLEAR</button>` : ''}
                 </div>
-                ${ev.guestFieldName ? `
-                  <div class="guest-count-row">
-                    <span class="guest-count-label">Bringing guests?</span>
-                    <input type="number" class="guest-count-input" id="guest-count-${i}"
-                      value="${myGuests}" min="0" max="20"
-                      onchange="submitGuestCount(${i})">
-                  </div>
-                ` : ''}
+                ${memberGuestHtml}
                 <div class="rsvp-msg" id="rsvp-msg-${i}"></div>
               </div>`;
           } else if (authMode === 'admin') {
@@ -668,6 +701,15 @@
 
             const hasOwnRecord = !!myInfo;
 
+            const ownGuestHtml = ev.guestFieldName ? `
+              <div class="guest-count-row">
+                <span class="guest-count-label">Bringing guests?</span>
+                <input type="number" class="guest-count-input" id="guest-count-${i}"
+                  value="${myGuests}" min="0" max="20"
+                  onchange="submitGuestCount(${i})">
+              </div>
+            ` : `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
+
             const ownRsvpSection = hasOwnRecord ? `
                 <div class="rsvp-form-title">Your RSVP</div>
                 ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
@@ -677,16 +719,18 @@
                   <button class="rsvp-btn no-btn${activeClass.no}" onclick="submitMemberRsvp(${i}, 'NO')">NO</button>
                   ${myRsvp ? `<button class="rsvp-btn clear-btn" onclick="submitMemberRsvp(${i}, null)">CLEAR</button>` : ''}
                 </div>
-                ${ev.guestFieldName ? `
-                  <div class="guest-count-row">
-                    <span class="guest-count-label">Bringing guests?</span>
-                    <input type="number" class="guest-count-input" id="guest-count-${i}"
-                      value="${myGuests}" min="0" max="20"
-                      onchange="submitGuestCount(${i})">
-                  </div>
-                ` : ''}
+                ${ownGuestHtml}
                 <div class="rsvp-msg" id="rsvp-msg-${i}"></div>
             ` : '';
+
+            const adminGuestHtml = ev.guestFieldName ? `
+              <div class="guest-count-row">
+                <span class="guest-count-label">Guest count:</span>
+                <input type="number" class="guest-count-input" id="admin-guest-count-${i}"
+                  value="0" min="0" max="20"
+                  onchange="submitAdminGuestCount(${i})">
+              </div>
+            ` : `<div class="guest-count-na">Guest tracking not configured for this event</div>`;
 
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
@@ -706,14 +750,7 @@
                     <button class="rsvp-btn no-btn" onclick="submitAdminRsvp(${i}, 'NO')">NO</button>
                     <button class="rsvp-btn clear-btn" onclick="submitAdminRsvp(${i}, null)">CLEAR</button>
                   </div>
-                  ${ev.guestFieldName ? `
-                    <div class="guest-count-row">
-                      <span class="guest-count-label">Guest count:</span>
-                      <input type="number" class="guest-count-input" id="admin-guest-count-${i}"
-                        value="0" min="0" max="20"
-                        onchange="submitAdminGuestCount(${i})">
-                    </div>
-                  ` : ''}
+                  ${adminGuestHtml}
                   <div class="rsvp-msg" id="admin-rsvp-msg-${i}"></div>
                 </div>
               </div>`;

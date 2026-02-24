@@ -32,6 +32,51 @@
       color: #fff;
     }
 
+    body.logged-in {
+      justify-content: flex-start;
+      padding-top: 70px;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    .top-bar-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .top-bar-brand img {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+    }
+
+    .top-bar-brand span {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .top-bar-link {
+      color: #FFD700;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
     .container { text-align: center; max-width: 400px; }
 
     .logo {
@@ -52,42 +97,6 @@
       font-size: 14px;
       opacity: 0.9;
       margin-bottom: 25px;
-    }
-
-    .instructions {
-      background: rgba(255,255,255,0.15);
-      border-radius: 15px;
-      padding: 20px;
-      margin-bottom: 20px;
-      backdrop-filter: blur(10px);
-    }
-
-    .instructions h2 {
-      font-size: 16px;
-      margin-bottom: 15px;
-    }
-
-    .step {
-      display: flex;
-      align-items: flex-start;
-      text-align: left;
-      margin-bottom: 12px;
-      font-size: 14px;
-    }
-
-    .step-num {
-      background: #FFD700;
-      color: #8B0000;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 12px;
-      margin-right: 12px;
-      flex-shrink: 0;
     }
 
     .btn {
@@ -182,6 +191,75 @@
     }
 
     .logout-link:hover { opacity: 1; }
+
+    /* Collapsible section */
+    .collapsible-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .collapse-chevron {
+      font-size: 22px;
+      transition: transform 0.25s;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .collapsible.expanded .collapse-chevron {
+      transform: rotate(90deg);
+    }
+
+    .collapsible-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .collapsible.expanded .collapsible-body {
+      max-height: 500px;
+    }
+
+    .instructions {
+      background: rgba(255,255,255,0.15);
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .instructions h2 {
+      font-size: 16px;
+      margin-bottom: 0;
+    }
+
+    .collapsible.expanded .instructions h2 {
+      margin-bottom: 15px;
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      text-align: left;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+
+    .step-num {
+      background: #FFD700;
+      color: #8B0000;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 12px;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
 
     /* Member Home Styles */
     .member-home {
@@ -509,6 +587,15 @@
   </style>
 </head>
 <body>
+  <!-- Top Bar (shown when logged in) -->
+  <div class="top-bar hidden" id="top-bar">
+    <div class="top-bar-brand">
+      <img src="apple-touch-icon.png" alt="">
+      <span>HARUMPHERS</span>
+    </div>
+    <a href="#" class="top-bar-link" onclick="logout()">Logout</a>
+  </div>
+
   <!-- Login Gate -->
   <div class="gate" id="gate">
     <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
@@ -536,10 +623,6 @@
     <a href="events.html" class="btn-outline" style="margin-top:12px;">
       Events & RSVPs
     </a>
-
-    <p class="skip" style="margin-top:20px;">
-      <a href="#" class="logout-link" onclick="logout()">Log out</a>
-    </p>
   </div>
 
   <!-- Member/Admin Home -->
@@ -573,43 +656,46 @@
       </a>
     </div>
 
-    <div class="instructions" style="margin-top:20px;">
-      <h2>Add to Home Screen</h2>
+    <div class="collapsible" style="margin-top:20px;" onclick="this.classList.toggle('expanded')">
+      <div class="instructions">
+        <div class="collapsible-header">
+          <h2>Add to Home Screen</h2>
+          <span class="collapse-chevron">&#8250;</span>
+        </div>
+        <div class="collapsible-body">
+          <div style="height:15px"></div>
+          <div class="ios-instructions">
+            <div class="step">
+              <span class="step-num">1</span>
+              <span>Tap the <strong>Share</strong> button <span style="font-size:18px">&#11014;&#65039;</span> at the bottom</span>
+            </div>
+            <div class="step">
+              <span class="step-num">2</span>
+              <span>Scroll and tap <strong>"Add to Home Screen"</strong></span>
+            </div>
+            <div class="step">
+              <span class="step-num">3</span>
+              <span>Tap <strong>"Add"</strong> in the top right</span>
+            </div>
+          </div>
 
-      <div class="ios-instructions">
-        <div class="step">
-          <span class="step-num">1</span>
-          <span>Tap the <strong>Share</strong> button <span style="font-size:18px">&#11014;&#65039;</span> at the bottom</span>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <span>Scroll and tap <strong>"Add to Home Screen"</strong></span>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <span>Tap <strong>"Add"</strong> in the top right</span>
-        </div>
-      </div>
-
-      <div class="android-instructions">
-        <div class="step">
-          <span class="step-num">1</span>
-          <span>Tap the <strong>menu</strong> (&#8942;) in Chrome</span>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <span>Tap <strong>"Add to Home screen"</strong></span>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <span>Tap <strong>"Add"</strong> to confirm</span>
+          <div class="android-instructions">
+            <div class="step">
+              <span class="step-num">1</span>
+              <span>Tap the <strong>menu</strong> (&#8942;) in Chrome</span>
+            </div>
+            <div class="step">
+              <span class="step-num">2</span>
+              <span>Tap <strong>"Add to Home screen"</strong></span>
+            </div>
+            <div class="step">
+              <span class="step-num">3</span>
+              <span>Tap <strong>"Add"</strong> to confirm</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
-    <p class="skip" style="margin-top:20px;">
-      <a href="#" class="logout-link" onclick="logout()">Log out</a>
-    </p>
   </div>
 
   <script>
@@ -696,12 +782,16 @@
       document.getElementById('gate').classList.add('hidden');
       document.getElementById('main').classList.remove('hidden');
       document.getElementById('member-home').classList.add('hidden');
+      document.getElementById('top-bar').classList.remove('hidden');
+      document.body.classList.add('logged-in');
     }
 
     function showMemberHome() {
       document.getElementById('gate').classList.add('hidden');
       document.getElementById('main').classList.add('hidden');
       document.getElementById('member-home').classList.remove('hidden');
+      document.getElementById('top-bar').classList.remove('hidden');
+      document.body.classList.add('logged-in');
 
       if (getAuthMode() === 'admin') {
         document.getElementById('admin-badge').classList.remove('hidden');
@@ -924,6 +1014,25 @@
     let quickEventData = []; // stores { name, date, fieldName, guestFieldName, rsvp, guestCount }
     let myMemberRecord = null; // full member record for RSVP updates
 
+    // Find matching guest field using multiple strategies
+    function findGuestField(guestFields, fieldWords, matched) {
+      for (const gf of guestFields) {
+        const guestKey = gf.name.toUpperCase().replace('GUESTS-', '').trim();
+        // Strategy 1: bidirectional word matching with RSVP field words
+        if (fieldWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
+          return gf.name;
+        }
+        // Strategy 2: match against event name from EVENTS table
+        if (matched && matched['EVENT NAME']) {
+          const eventWords = matched['EVENT NAME'].toUpperCase().replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
+          if (eventWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
+            return gf.name;
+          }
+        }
+      }
+      return null;
+    }
+
     async function loadQuickEvents() {
       const container = document.getElementById('quick-events');
       const info = getMemberInfo();
@@ -978,15 +1087,8 @@
 
           const isDone = matched && (matched['Status'] || '').toLowerCase() === 'done';
 
-          // Find paired guest field
-          let guestFieldName = null;
-          for (const gf of guestFields) {
-            const guestKey = gf.name.toUpperCase().replace('GUESTS-', '');
-            if (fieldWords.some(w => w.length > 2 && guestKey.includes(w))) {
-              guestFieldName = gf.name;
-              break;
-            }
-          }
+          // Find paired guest field using improved matching
+          const guestFieldName = findGuestField(guestFields, fieldWords, matched);
 
           let displayName = field.name
             .replace(/RSVP$/i, '')
@@ -1047,6 +1149,7 @@
           else activeMaybe = ' active';
         }
 
+        // Always show guest count row
         const guestRow = ev.guestFieldName ? `
           <div class="qe-guest-row">
             <span class="qe-guest-label">Guests:</span>
@@ -1054,7 +1157,11 @@
               value="${ev.guestCount}" min="0" max="20"
               onchange="submitQeGuestCount(${i})">
           </div>
-        ` : '';
+        ` : `
+          <div class="qe-guest-row">
+            <span class="qe-guest-label" style="opacity:0.3;font-style:italic;font-size:11px">Guest column not configured</span>
+          </div>
+        `;
 
         return `<div class="qe-card${needsRsvp ? ' needs-rsvp' : ''}">
           <div class="qe-top">

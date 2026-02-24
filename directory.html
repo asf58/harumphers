@@ -291,6 +291,18 @@
       font-family: inherit;
     }
 
+    .detail-btn.sms {
+      background: rgba(76,175,80,0.15);
+      color: #81C784;
+      border: 1px solid rgba(76,175,80,0.4);
+    }
+
+    .detail-btn.contact {
+      background: rgba(100,149,237,0.15);
+      color: #6495ED;
+      border: 1px solid rgba(100,149,237,0.4);
+    }
+
     .detail-btn:active { opacity: 0.7; }
 
     .detail-btn svg {
@@ -652,12 +664,27 @@
         const digits = m.phone.replace(/\D/g, '');
         actionsHtml += `<a class="detail-btn call" href="tel:+1${digits}">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24 11.36 11.36 0 003.58.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.36 11.36 0 00.57 3.58 1 1 0 01-.25 1.02l-2.2 2.19z"/></svg>
-          ${m.phone}</a>`;
+          Call ${m.phone}</a>`;
+        actionsHtml += `<a class="detail-btn sms" href="sms:+1${digits}">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+          Text Message</a>`;
       }
       if (m.email) {
         actionsHtml += `<a class="detail-btn email" href="mailto:${m.email}">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
           ${m.email}</a>`;
+      }
+
+      // Add to Contacts (vCard download)
+      {
+        const vcardParts = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${m.name}`];
+        if (m.phone) vcardParts.push(`TEL;TYPE=CELL:+1${m.phone.replace(/\D/g, '')}`);
+        if (m.email) vcardParts.push(`EMAIL:${m.email}`);
+        vcardParts.push('END:VCARD');
+        const vcardUrl = 'data:text/vcard;charset=utf-8,' + encodeURIComponent(vcardParts.join('\n'));
+        actionsHtml += `<a class="detail-btn contact" href="${vcardUrl}" download="${m.name.replace(/\s+/g, '_')}.vcf">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          Add to Contacts</a>`;
       }
 
       // --- Auth-conditional edit button ---
@@ -666,76 +693,39 @@
         actionsHtml += `<button class="detail-btn edit" onclick="toggleEditForm(${idx})">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
           Edit Member</button>`;
-      } else if (authMode === 'member' && !isMe) {
-        // Member: request change on other people's cards only
-        actionsHtml += `<button class="detail-btn edit" onclick="toggleEditForm(${idx})">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-          Request Info Change</button>`;
       }
-      // Guest: no edit button at all
-      // Member on own card: no edit button (they edit via profile on home screen)
+      // Guest and Member: no edit button (members edit via profile on home screen)
 
       let editForm = '';
-      if (editFormVisible) {
-        if (authMode === 'admin') {
-          // Admin: direct edit form
-          editForm = `
-            <div class="edit-form">
-              <div class="edit-form-title">Edit Member</div>
-              <div class="edit-field">
-                <label>Name</label>
-                <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
-              </div>
-              <div class="edit-field">
-                <label>Phone</label>
-                <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
-              </div>
-              <div class="edit-field">
-                <label>Email</label>
-                <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
-              </div>
-              <div class="edit-field">
-                <label>Member # (Duquesne ID)</label>
-                <input type="number" id="edit-membernum" value="${m.memberNum}" placeholder="e.g. 9566">
-              </div>
-              <div class="edit-field">
-                <label>Photo URL</label>
-                <input type="url" id="edit-photo-url" placeholder="https://... (public image URL)">
-                <div style="font-size:11px;color:#666;margin-top:4px;">Paste a publicly accessible image URL</div>
-              </div>
-              <button class="edit-submit" id="edit-submit-btn" onclick="adminSaveEdit(${idx})">Save Changes</button>
-              <div class="edit-msg" id="edit-msg"></div>
-            </div>`;
-        } else {
-          // Member: change request form
-          editForm = `
-            <div class="edit-form">
-              <div class="edit-form-title">Request Changes</div>
-              <div class="edit-field">
-                <label>Name</label>
-                <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
-              </div>
-              <div class="edit-field">
-                <label>Phone</label>
-                <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
-              </div>
-              <div class="edit-field">
-                <label>Email</label>
-                <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
-              </div>
-              <div class="edit-field">
-                <label>New Photo</label>
-                <input type="file" id="edit-photo" accept="image/*">
-              </div>
-              <div class="edit-field">
-                <label>Notes</label>
-                <textarea id="edit-notes" placeholder="Any other changes or notes..."></textarea>
-              </div>
-              <button class="edit-submit" id="edit-submit-btn" onclick="submitChangeRequest(${idx})">Submit Request</button>
-              <div class="edit-msg" id="edit-msg"></div>
-              <div class="edit-note">Changes require admin approval before going live.</div>
-            </div>`;
-        }
+      if (editFormVisible && authMode === 'admin') {
+        // Admin: direct edit form
+        editForm = `
+          <div class="edit-form">
+            <div class="edit-form-title">Edit Member</div>
+            <div class="edit-field">
+              <label>Name</label>
+              <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
+            </div>
+            <div class="edit-field">
+              <label>Phone</label>
+              <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
+            </div>
+            <div class="edit-field">
+              <label>Email</label>
+              <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
+            </div>
+            <div class="edit-field">
+              <label>Member # (Duquesne ID)</label>
+              <input type="number" id="edit-membernum" value="${m.memberNum}" placeholder="e.g. 9566">
+            </div>
+            <div class="edit-field">
+              <label>Photo URL</label>
+              <input type="url" id="edit-photo-url" placeholder="https://... (public image URL)">
+              <div style="font-size:11px;color:#666;margin-top:4px;">Paste a publicly accessible image URL</div>
+            </div>
+            <button class="edit-submit" id="edit-submit-btn" onclick="adminSaveEdit(${idx})">Save Changes</button>
+            <div class="edit-msg" id="edit-msg"></div>
+          </div>`;
       }
 
       document.getElementById('detail').innerHTML = `
