@@ -1318,7 +1318,10 @@
                     </label>
                     <span id="edit-photo-filename-${i}" style="font-size:11px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
                   </div>
-                  ${ev.speakerPhoto ? `<div style="margin-top:4px"><img src="${ev.speakerPhoto}" style="width:48px;height:48px;border-radius:8px;object-fit:cover"></div>` : ''}
+                  ${ev.speakerPhoto ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px">
+                    <img src="${ev.speakerPhoto}" style="width:48px;height:48px;border-radius:8px;object-fit:cover">
+                    <button onclick="event.stopPropagation();removeSpeakerPhoto(${i})" style="background:#8B0000;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">Remove</button>
+                  </div>` : ''}
                 </div>
               </div>
               <div class="event-edit-row">
@@ -1872,6 +1875,28 @@
         // Clear URL input since file takes precedence
         const urlInput = document.getElementById(`edit-photo-url-${eventIdx}`);
         if (urlInput) urlInput.value = '';
+      }
+    }
+
+    async function removeSpeakerPhoto(eventIdx) {
+      const ev = allEvents[eventIdx];
+      if (!ev.eventRecordId) return;
+      const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
+      if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Removing photo...'; }
+      try {
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'SPEAKER PHOTO': [] } })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+        }
+        ev.speakerPhoto = null;
+        render();
+      } catch (err) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Remove failed: ' + err.message; }
       }
     }
 
