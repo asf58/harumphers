@@ -603,6 +603,91 @@
       color: #888;
       font-size: 15px;
     }
+
+    .gallery-section {
+      border-top: 1px solid #333;
+      padding: 12px 16px;
+    }
+
+    .gallery-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #FFD700;
+      margin-bottom: 10px;
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .gallery-item {
+      position: relative;
+      cursor: pointer;
+      border-radius: 8px;
+      overflow: hidden;
+      aspect-ratio: 1;
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .gallery-caption {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      font-size: 9px;
+      padding: 2px 4px;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .gallery-upload {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .gallery-upload-btn {
+      background: #333;
+      color: #FFD700;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .gallery-caption-input {
+      flex: 1;
+      min-width: 100px;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    .gallery-msg {
+      width: 100%;
+      font-size: 12px;
+      min-height: 16px;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -668,9 +753,11 @@
     const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
     const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
     const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
+    const PHOTOS_TABLE = 'tblTQM3DY7BAqs9BL';
 
     let allMembers = [];
     let allEvents = [];
+    let galleryPhotos = {}; // eventRecordId -> [{url, thumb, memberName, caption}]
 
     // Inline edit state: { eventIdx, memberId } or null
     let inlineEdit = null;
@@ -888,6 +975,30 @@
         return 0;
       });
 
+      // Load gallery photos for past events
+      galleryPhotos = {};
+      try {
+        const photosData = await apiFetchAll(
+          `https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}`
+        );
+        photosData.records.forEach(r => {
+          const f = r.fields;
+          const eventId = f['EVENT RECORD ID'];
+          if (!eventId) return;
+          if (!galleryPhotos[eventId]) galleryPhotos[eventId] = [];
+          const photos = f['PHOTO'] || [];
+          photos.forEach(p => {
+            galleryPhotos[eventId].push({
+              recordId: r.id,
+              url: p.url,
+              thumb: (p.thumbnails && p.thumbnails.large) ? p.thumbnails.large.url : p.url,
+              memberName: f['MEMBER NAME'] || '',
+              caption: f['CAPTION'] || '',
+            });
+          });
+        });
+      } catch (e) { /* gallery load failure is non-fatal */ }
+
       render();
     }
 
@@ -976,10 +1087,10 @@
       }
 
       const eventCards = allEvents.map((ev, i) => {
-        // Non-admins see upcoming and in progress, not todo or done
+        // Non-admins: hide todo events (done shown in past section)
         if (authMode !== 'admin') {
           const s = (ev.status || '').toLowerCase();
-          if (s === 'todo' || s === 'done') return '';
+          if (s === 'todo') return '';
         }
 
         const statusClass = ev.status.toLowerCase() === 'done' ? 'past'
@@ -1273,6 +1384,7 @@
               ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
             </div>
             ${rsvpForm}
+            ${buildGalleryHtml(ev, i)}
           </div>
         </div>`;
       });
@@ -1291,7 +1403,7 @@
       });
 
       let eventsHtml = activeCards.join('');
-      if (pastCards.length > 0 && authMode === 'admin') {
+      if (pastCards.length > 0) {
         eventsHtml += `<div style="margin-top:24px;padding:12px 0;border-top:2px solid #444">
           <h2 style="font-size:16px;color:#888;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px">Past Events</h2>
           ${pastCards.join('')}
@@ -1300,14 +1412,14 @@
 
       content.innerHTML = topHtml + eventsHtml;
 
-      // Non-admin: show message if no visible events
+      // Non-admin: show message if no visible events at all
       if (authMode !== 'admin') {
         const hasVisible = allEvents.some(ev => {
           const s = (ev.status || '').toLowerCase();
-          return s !== 'todo' && s !== 'done';
+          return s !== 'todo';
         });
         if (!hasVisible) {
-          content.innerHTML += '<div class="no-events-msg">No active events right now. Check back soon!</div>';
+          content.innerHTML += '<div class="no-events-msg">No events right now. Check back soon!</div>';
         }
       }
 
@@ -1618,6 +1730,117 @@
       }
       copyToClipboard(phones.join(', '), eventIdx,
         `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
+    }
+
+    // --- Photo Gallery ---
+    function buildGalleryHtml(ev, eventIdx) {
+      if (!ev.eventRecordId) return '';
+      const photos = galleryPhotos[ev.eventRecordId] || [];
+      const canUpload = authMode === 'member' || authMode === 'admin';
+
+      // Show gallery for past events, or if photos exist
+      if (!ev.isDone && photos.length === 0) return '';
+
+      let gridHtml = '';
+      if (photos.length > 0) {
+        gridHtml = `<div class="gallery-grid">
+          ${photos.map((p, pi) => `
+            <div class="gallery-item" onclick="showFullPhoto('${p.url.replace(/'/g, "\\'")}', '${(p.memberName + (p.caption ? ' — ' + p.caption : '')).replace(/'/g, "\\'")}')">
+              <img src="${p.thumb}" alt="" loading="lazy">
+              ${p.memberName ? `<div class="gallery-caption">${p.memberName}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>`;
+      } else {
+        gridHtml = '<div style="font-size:13px;color:#666;text-align:center;padding:8px 0">No photos yet — be the first to add one!</div>';
+      }
+
+      const uploadBtn = canUpload ? `
+        <div class="gallery-upload" onclick="event.stopPropagation()">
+          <label class="gallery-upload-btn">
+            <input type="file" accept="image/*" style="display:none" onchange="submitGalleryPhoto(${eventIdx}, this)">
+            + Add Photo
+          </label>
+          <input class="gallery-caption-input" id="gallery-caption-${eventIdx}" placeholder="Caption (optional)">
+          <div class="gallery-msg" id="gallery-msg-${eventIdx}"></div>
+        </div>` : '';
+
+      return `
+        <div class="gallery-section" onclick="event.stopPropagation()">
+          <div class="gallery-title">Photo Gallery (${photos.length})</div>
+          ${gridHtml}
+          ${uploadBtn}
+        </div>`;
+    }
+
+    function showFullPhoto(url, caption) {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:pointer';
+      overlay.innerHTML = `
+        <img src="${url}" style="max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain">
+        ${caption ? `<div style="color:#fff;margin-top:12px;font-size:14px;text-align:center">${caption}</div>` : ''}
+        <div style="color:#888;margin-top:8px;font-size:12px">Tap to close</div>
+      `;
+      overlay.onclick = () => overlay.remove();
+      document.body.appendChild(overlay);
+    }
+
+    async function submitGalleryPhoto(eventIdx, fileInput) {
+      const ev = allEvents[eventIdx];
+      if (!ev.eventRecordId || !fileInput.files.length) return;
+      const file = fileInput.files[0];
+      const caption = (document.getElementById(`gallery-caption-${eventIdx}`) || {}).value || '';
+      const msgEl = document.getElementById(`gallery-msg-${eventIdx}`);
+      const memberName = myInfo ? myInfo.name : 'Guest';
+
+      if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Uploading photo...'; }
+
+      try {
+        // Upload to temp host
+        const publicUrl = await uploadPhotoFile(file);
+
+        // Create record in EVENT PHOTOS table
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              'EVENT RECORD ID': ev.eventRecordId,
+              'EVENT NAME': ev.name,
+              'MEMBER NAME': memberName,
+              'PHOTO': [{ url: publicUrl }],
+              'CAPTION': caption,
+              'SUBMITTED': new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' }),
+            }
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+        }
+
+        // Add to local gallery data
+        const data = await res.json();
+        if (!galleryPhotos[ev.eventRecordId]) galleryPhotos[ev.eventRecordId] = [];
+        const newPhotos = data.fields['PHOTO'] || [];
+        newPhotos.forEach(p => {
+          galleryPhotos[ev.eventRecordId].push({
+            recordId: data.id,
+            url: p.url,
+            thumb: (p.thumbnails && p.thumbnails.large) ? p.thumbnails.large.url : p.url,
+            memberName,
+            caption,
+          });
+        });
+
+        if (msgEl) { msgEl.style.color = '#4CAF50'; msgEl.textContent = 'Photo added!'; }
+        fileInput.value = '';
+        const captionInput = document.getElementById(`gallery-caption-${eventIdx}`);
+        if (captionInput) captionInput.value = '';
+        render();
+      } catch (err) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Upload failed: ' + err.message; }
+      }
     }
 
     // --- Admin Event Editing ---
