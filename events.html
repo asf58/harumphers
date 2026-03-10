@@ -97,6 +97,7 @@
     .status-upcoming { background: #FFD700; color: #8B0000; }
     .status-past { background: #555; color: #ccc; }
     .status-active { background: #4CAF50; color: #fff; }
+    .status-cancelled { background: #8B0000; color: #fff; }
 
     .event-counts {
       display: flex;
@@ -825,7 +826,11 @@
         },
         body: JSON.stringify({ fields })
       });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
+        throw new Error(errMsg);
+      }
       return res.json();
     }
 
@@ -1113,14 +1118,14 @@
       }
 
       const eventCards = allEvents.map((ev, i) => {
-        // Non-admins: hide todo events (done shown in past section)
+        // Non-admins: hide todo and cancelled events (done shown in past section)
         if (authMode !== 'admin') {
           const s = (ev.status || '').toLowerCase();
-          if (s === 'todo') return '';
+          if (s === 'todo' || s === 'cancelled') return '';
         }
 
         const sLower = (ev.status || '').toLowerCase();
-        const statusClass = sLower === 'done' ? 'past' : sLower === 'in progress' ? 'active' : 'upcoming';
+        const statusClass = sLower === 'done' ? 'past' : sLower === 'cancelled' ? 'cancelled' : sLower === 'in progress' ? 'active' : 'upcoming';
         const statusLabel = ev.status || 'Upcoming';
 
         function chipHtml(entry, cls) {
@@ -1361,6 +1366,7 @@
                   <option value="Todo"${eStat === 'todo' ? ' selected' : ''}>Todo</option>
                   <option value="In progress"${eStat === 'in progress' ? ' selected' : ''}>In Progress</option>
                   <option value="Done"${eStat === 'done' ? ' selected' : ''}>Done</option>
+                  <option value="Cancelled"${eStat === 'cancelled' ? ' selected' : ''}>Cancelled</option>
                 </select>
               </div>
               <div class="event-edit-actions">
@@ -1512,7 +1518,7 @@
       } catch (err) {
         if (msgEl) {
           msgEl.className = 'rsvp-msg error';
-          msgEl.textContent = 'Failed to submit. Try again.';
+          msgEl.textContent = 'Failed: ' + err.message;
         }
         buttons.forEach(b => b.disabled = false);
       }
@@ -1583,7 +1589,7 @@
       } catch (err) {
         if (msgEl) {
           msgEl.className = 'rsvp-msg error';
-          msgEl.textContent = 'Failed. Try again.';
+          msgEl.textContent = 'Failed: ' + err.message;
         }
         buttons.forEach(b => b.disabled = false);
       }
@@ -1617,7 +1623,7 @@
       } catch (err) {
         if (msgEl) {
           msgEl.className = 'rsvp-msg error';
-          msgEl.textContent = 'Failed. Try again.';
+          msgEl.textContent = 'Failed: ' + err.message;
         }
       }
     }

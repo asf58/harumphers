@@ -1122,8 +1122,9 @@
           };
         }).filter(ev => {
           if (ev.isDone) return false;
+          const s = (ev.status || '').toLowerCase();
+          if (s === 'cancelled') return false;
           if (getAuthMode() !== 'admin') {
-            const s = (ev.status || '').toLowerCase();
             if (s === 'todo') return false;
           }
           return true;
