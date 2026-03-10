@@ -610,6 +610,7 @@
     <img src="apple-touch-icon.png" alt="">
     <h1>Events</h1>
     <div class="header-links">
+      <a href="#" class="back-link" onclick="event.preventDefault();refreshEvents()" title="Refresh">&#x21bb;</a>
       <a href="index.html" class="back-link">Home</a>
       <a href="#" class="logout-link" onclick="logout()">Logout</a>
     </div>
@@ -856,11 +857,23 @@
 
         const isDone = matched && (matched['Status'] || '').toLowerCase() === 'done';
 
+        // Extract speaker photo thumbnail URL
+        let speakerPhotoUrl = null;
+        if (matched && matched['SPEAKER PHOTO'] && matched['SPEAKER PHOTO'].length > 0) {
+          const photo = matched['SPEAKER PHOTO'][0];
+          speakerPhotoUrl = (photo.thumbnails && photo.thumbnails.large) ? photo.thumbnails.large.url : photo.url;
+        }
+
         return {
           name: displayName,
           fieldName: field.name,
           guestFieldName: pairedGuestField,
           date: matched ? (matched['DATE'] || '') : '',
+          speaker: matched ? (matched['SPEAKER'] || '') : '',
+          time: matched ? (matched['TIME'] || '') : '',
+          room: matched ? (matched['ROOM'] || '') : '',
+          speakerPhoto: speakerPhotoUrl,
+          notes: matched ? (matched['NOTES'] || '') : '',
           status: matched ? (matched['Status'] || '') : '',
           eventRecordId: matched ? matched._recordId : null,
           yes, no, maybe, pending,
@@ -962,9 +975,12 @@
         }
       }
 
-      content.innerHTML = topHtml + allEvents.map((ev, i) => {
-        // Non-admins only see "in progress" events
-        if (authMode !== 'admin' && ev.status.toLowerCase() !== 'in progress') return '';
+      const eventCards = allEvents.map((ev, i) => {
+        // Non-admins see upcoming and in progress, not todo or done
+        if (authMode !== 'admin') {
+          const s = (ev.status || '').toLowerCase();
+          if (s === 'todo' || s === 'done') return '';
+        }
 
         const statusClass = ev.status.toLowerCase() === 'done' ? 'past'
           : ev.status.toLowerCase() === 'in progress' ? 'active' : 'upcoming';
@@ -1154,6 +1170,9 @@
         if (authMode === 'admin' && editingEvent === i) {
           const eName = ev.name.replace(/"/g, '&quot;');
           const eDate = (ev.date || '').replace(/"/g, '&quot;');
+          const eSpeaker = (ev.speaker || '').replace(/"/g, '&quot;');
+          const eTime = (ev.time || '').replace(/"/g, '&quot;');
+          const eRoom = (ev.room || '').replace(/"/g, '&quot;');
           const eStat = (ev.status || '').toLowerCase();
           editForm = `
             <div class="event-edit-form" onclick="event.stopPropagation()">
@@ -1162,15 +1181,27 @@
                 <input class="event-edit-input" id="edit-name-${i}" value="${eName}">
               </div>
               <div class="event-edit-row">
+                <span class="event-edit-label">Speaker</span>
+                <input class="event-edit-input" id="edit-speaker-${i}" value="${eSpeaker}" placeholder="Speaker name">
+              </div>
+              <div class="event-edit-row">
                 <span class="event-edit-label">Date</span>
                 <input class="event-edit-input" id="edit-date-${i}" value="${eDate}">
+              </div>
+              <div class="event-edit-row">
+                <span class="event-edit-label">Time</span>
+                <input class="event-edit-input" id="edit-time-${i}" value="${eTime}" placeholder="e.g. 5:30 PM">
+              </div>
+              <div class="event-edit-row">
+                <span class="event-edit-label">Room</span>
+                <input class="event-edit-input" id="edit-room-${i}" value="${eRoom}" placeholder="e.g. Walnut Room">
               </div>
               <div class="event-edit-row">
                 <span class="event-edit-label">Status</span>
                 <select class="event-edit-select" id="edit-status-${i}">
                   <option value="Upcoming"${eStat === 'upcoming' || !ev.status ? ' selected' : ''}>Upcoming</option>
                   <option value="Todo"${eStat === 'todo' ? ' selected' : ''}>Todo</option>
-                  <option value="In Progress"${eStat === 'in progress' ? ' selected' : ''}>In Progress</option>
+                  <option value="In progress"${eStat === 'in progress' ? ' selected' : ''}>In Progress</option>
                   <option value="Done"${eStat === 'done' ? ' selected' : ''}>Done</option>
                 </select>
               </div>
@@ -1190,11 +1221,20 @@
           </div>` : '';
 
         const isOpen = openEvents.has(i) ? ' open' : '';
+        const speakerPhotoHtml = ev.speakerPhoto
+          ? `<img src="${ev.speakerPhoto}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+          : '';
+        const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
+        const detailLine = detailParts.length > 0
+          ? `<div style="font-size:12px;color:#aaa;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+          : '';
         return `<div class="event-card${isOpen}">
           <div class="event-header" onclick="toggleEvent(${i})">
-            <div style="flex:1">
+            ${speakerPhotoHtml}
+            <div style="flex:1;min-width:0">
               <div class="event-name">${ev.name}</div>
               ${ev.date ? `<div class="event-date">${ev.date}</div>` : ''}
+              ${detailLine}
               <div class="event-counts">
                 <span class="count-yes">${ev.yes.length} going</span>
                 <span class="count-maybe">${ev.maybe.length} maybe</span>
@@ -1209,17 +1249,45 @@
             ${adminToolbar}
             ${editForm}
             ${exportPanel}
+            ${ev.speakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${ev.speakerPhoto}" alt="${ev.speaker || 'Speaker'}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
+            ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${ev.notes.replace(/\n/g, '<br>')}</div>` : ''}
             <div class="rsvp-section">
               ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
             </div>
             ${rsvpForm}
           </div>
         </div>`;
-      }).join('');
+      });
+
+      // Split into active and past events
+      const activeCards = [];
+      const pastCards = [];
+      allEvents.forEach((ev, i) => {
+        const card = eventCards[i];
+        if (!card) return; // filtered out (non-admin viewing todo/done)
+        if (ev.isDone) {
+          pastCards.push(card);
+        } else {
+          activeCards.push(card);
+        }
+      });
+
+      let eventsHtml = activeCards.join('');
+      if (pastCards.length > 0 && authMode === 'admin') {
+        eventsHtml += `<div style="margin-top:24px;padding:12px 0;border-top:2px solid #444">
+          <h2 style="font-size:16px;color:#888;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px">Past Events</h2>
+          ${pastCards.join('')}
+        </div>`;
+      }
+
+      content.innerHTML = topHtml + eventsHtml;
 
       // Non-admin: show message if no visible events
       if (authMode !== 'admin') {
-        const hasVisible = allEvents.some(ev => ev.status.toLowerCase() === 'in progress');
+        const hasVisible = allEvents.some(ev => {
+          const s = (ev.status || '').toLowerCase();
+          return s !== 'todo' && s !== 'done';
+        });
         if (!hasVisible) {
           content.innerHTML += '<div class="no-events-msg">No active events right now. Check back soon!</div>';
         }
@@ -1553,7 +1621,10 @@
     async function saveEventDetails(eventIdx) {
       const ev = allEvents[eventIdx];
       const name = document.getElementById(`edit-name-${eventIdx}`).value.trim();
+      const speaker = document.getElementById(`edit-speaker-${eventIdx}`).value.trim();
       const date = document.getElementById(`edit-date-${eventIdx}`).value.trim();
+      const time = document.getElementById(`edit-time-${eventIdx}`).value.trim();
+      const room = document.getElementById(`edit-room-${eventIdx}`).value.trim();
       const status = document.getElementById(`edit-status-${eventIdx}`).value;
       const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
       const saveBtn = document.getElementById(`edit-save-${eventIdx}`);
@@ -1569,14 +1640,22 @@
       try {
         const fields = { 'EVENT NAME': name, 'Status': status };
         if (date) fields['DATE'] = date;
+        if (speaker) fields['SPEAKER'] = speaker;
+        if (time) fields['TIME'] = time;
+        if (room) fields['ROOM'] = room;
 
         if (ev.eventRecordId) {
           // Update existing EVENTS record
-          await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
             method: 'PATCH',
             headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields })
           });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
+            throw new Error(errMsg);
+          }
         } else {
           // Create new EVENTS record for this RSVP field
           const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
@@ -1584,19 +1663,27 @@
             headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields })
           });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
+            throw new Error(errMsg);
+          }
           const data = await res.json();
           ev.eventRecordId = data.id;
         }
 
         // Update local state
         ev.name = name;
+        ev.speaker = speaker;
         ev.date = date;
+        ev.time = time;
+        ev.room = room;
         ev.status = status;
         ev.isDone = status.toLowerCase() === 'done';
         editingEvent = null;
         render();
       } catch (err) {
-        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Failed to save. Try again.'; }
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Save failed: ' + err.message; }
         if (saveBtn) saveBtn.disabled = false;
       }
     }
@@ -1692,6 +1779,24 @@
         el.style.color = isError ? '#ff6b6b' : '#4CAF50';
         el.textContent = msg;
         if (!isError) setTimeout(() => { if (el) el.textContent = ''; }, 3000);
+      }
+    }
+
+    async function refreshEvents() {
+      document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div><p>Refreshing...</p></div>';
+      editingEvent = null;
+      exportState = null;
+      showingNewEvent = false;
+      openEvents.clear();
+      try {
+        await loadEvents();
+      } catch (err) {
+        document.getElementById('content').innerHTML = `
+          <div class="error">
+            <p>Could not load events</p>
+            <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
+            <a href="index.html">&larr; Back to Home</a>
+          </div>`;
       }
     }
 

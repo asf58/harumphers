@@ -1097,16 +1097,37 @@
             .trim();
           if (matched && matched['EVENT NAME']) displayName = matched['EVENT NAME'];
 
+          // Extract speaker photo thumbnail
+          let speakerPhotoUrl = null;
+          if (matched && matched['SPEAKER PHOTO'] && matched['SPEAKER PHOTO'].length > 0) {
+            const photo = matched['SPEAKER PHOTO'][0];
+            speakerPhotoUrl = (photo.thumbnails && photo.thumbnails.large) ? photo.thumbnails.large.url : photo.url;
+          }
+
+          const status = matched ? (matched['Status'] || '') : '';
+
           return {
             name: displayName,
             date: matched ? (matched['DATE'] || '') : '',
+            speaker: matched ? (matched['SPEAKER'] || '') : '',
+            time: matched ? (matched['TIME'] || '') : '',
+            room: matched ? (matched['ROOM'] || '') : '',
+            speakerPhoto: speakerPhotoUrl,
+            status,
             isDone,
             fieldName: field.name,
             guestFieldName,
             rsvp: myFields[field.name] || null,
             guestCount: guestFieldName ? (myFields[guestFieldName] || 0) : 0,
           };
-        }).filter(ev => !ev.isDone);
+        }).filter(ev => {
+          if (ev.isDone) return false;
+          if (getAuthMode() !== 'admin') {
+            const s = (ev.status || '').toLowerCase();
+            if (s === 'todo') return false;
+          }
+          return true;
+        });
 
         renderQuickEvents();
       } catch (err) {
@@ -1168,11 +1189,21 @@
           }
         }
 
+        const speakerImg = ev.speakerPhoto
+          ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+          : '';
+        const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
+        const detailLine = detailParts.length > 0
+          ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+          : '';
+
         return `<div class="qe-card${needsRsvp ? ' needs-rsvp' : ''}">
           <div class="qe-top">
-            <div class="qe-info">
+            ${speakerImg}
+            <div class="qe-info" style="flex:1;min-width:0">
               <div class="qe-name">${ev.name}</div>
               ${ev.date ? `<div class="qe-date">${ev.date}</div>` : ''}
+              ${detailLine}
             </div>
             <span class="rsvp-pill ${pillClass}">${pillText}</span>
           </div>
