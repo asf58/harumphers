@@ -1497,7 +1497,7 @@
       }
 
       try {
-        const patchValue = value === null ? '' : value;
+        const patchValue = value === null ? null : value;
         await apiPatch(member.id, { [ev.fieldName]: patchValue });
         member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
@@ -1566,7 +1566,7 @@
       }
 
       try {
-        const patchValue = value === null ? '' : value;
+        const patchValue = value === null ? null : value;
         await apiPatch(member.id, { [ev.fieldName]: patchValue });
         member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
