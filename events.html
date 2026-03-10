@@ -724,6 +724,7 @@
     <div class="header-links">
       <a href="#" class="back-link" onclick="event.preventDefault();refreshEvents()" title="Refresh">&#x21bb;</a>
       <a href="index.html" class="back-link">Home</a>
+      <a href="directory.html" class="back-link">Directory</a>
       <a href="#" class="logout-link" onclick="logout()">Logout</a>
     </div>
   </header>
@@ -1095,6 +1096,26 @@
                 <input class="new-event-input" type="date" id="new-event-date">
               </div>
               <div class="new-event-row">
+                <span class="new-event-label">Speaker</span>
+                <input class="new-event-input" id="new-event-speaker" placeholder="e.g. Bob Smith">
+              </div>
+              <div class="new-event-row">
+                <span class="new-event-label">Time</span>
+                <input class="new-event-input" id="new-event-time" placeholder="e.g. 6:30 PM">
+              </div>
+              <div class="new-event-row">
+                <span class="new-event-label">Room</span>
+                <input class="new-event-input" id="new-event-room" placeholder="e.g. Cigar Lounge">
+              </div>
+              <div class="new-event-row">
+                <span class="new-event-label">Speaker Photo</span>
+                <input class="new-event-input" type="file" id="new-event-photo" accept="image/*">
+              </div>
+              <div class="new-event-row">
+                <span class="new-event-label">Notes</span>
+                <input class="new-event-input" id="new-event-notes" placeholder="Optional notes about the event">
+              </div>
+              <div class="new-event-row">
                 <span class="new-event-label">RSVP Field</span>
                 <input class="new-event-input" id="new-event-prefix" placeholder="Auto-generated from name + date">
               </div>
@@ -1414,7 +1435,7 @@
             ${editForm}
             ${exportPanel}
             ${ev.speakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${ev.speakerPhoto}" alt="${ev.speaker || 'Speaker'}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
-            ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${ev.notes.replace(/\n/g, '<br>')}</div>` : ''}
+            ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${ev.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g, '<br>')}</div>` : ''}
             ${rsvpForm}
             ${buildGalleryHtml(ev, i)}
             <div class="rsvp-section">
@@ -1451,7 +1472,7 @@
       if (authMode !== 'admin') {
         const hasVisible = allEvents.some(ev => {
           const s = (ev.status || '').toLowerCase();
-          return s !== 'todo';
+          return s !== 'todo' && s !== 'cancelled';
         });
         if (!hasVisible) {
           content.innerHTML += '<div class="no-events-msg">No events right now. Check back soon!</div>';
@@ -2100,12 +2121,17 @@
       const name = document.getElementById('new-event-name').value.trim();
       const date = document.getElementById('new-event-date').value;
       const prefix = document.getElementById('new-event-prefix').value.trim();
+      const speaker = document.getElementById('new-event-speaker').value.trim();
+      const time = document.getElementById('new-event-time').value.trim();
+      const room = document.getElementById('new-event-room').value.trim();
+      const notes = document.getElementById('new-event-notes').value.trim();
+      const photoInput = document.getElementById('new-event-photo');
       const enableGuests = document.getElementById('new-event-guests').checked;
       const msgEl = document.getElementById('new-event-msg');
       const createBtn = document.getElementById('new-event-create-btn');
 
       if (!name || !date || !prefix) {
-        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Please fill in all fields'; }
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Please fill in name, date, and RSVP field'; }
         return;
       }
 
@@ -2155,14 +2181,25 @@
           });
         }
 
-        // Step 3: Create EVENTS table record
+        // Step 3: Handle speaker photo upload if provided
+        let photoUrl = null;
+        if (photoInput && photoInput.files && photoInput.files[0]) {
+          if (msgEl) msgEl.textContent = 'Uploading speaker photo...';
+          photoUrl = await uploadPhotoFile(photoInput.files[0]);
+        }
+
+        // Step 4: Create EVENTS table record with all fields
         if (msgEl) msgEl.textContent = 'Creating event record...';
+        const eventFields = { 'EVENT NAME': name, 'DATE': date };
+        if (speaker) eventFields['SPEAKER'] = speaker;
+        if (time) eventFields['TIME'] = time;
+        if (room) eventFields['ROOM'] = room;
+        if (notes) eventFields['NOTES'] = notes;
+        if (photoUrl) eventFields['SPEAKER PHOTO'] = [{ url: photoUrl }];
         await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: { 'EVENT NAME': name, 'DATE': date }
-          })
+          body: JSON.stringify({ fields: eventFields })
         });
 
         // Reload everything

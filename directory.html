@@ -422,6 +422,7 @@
     <h1>HARUMPHERS</h1>
     <div class="header-links">
       <a href="index.html" class="back-link">Home</a>
+      <a href="events.html" class="back-link">Events</a>
       <a href="#" class="logout-link" onclick="logout()">Logout</a>
     </div>
   </header>
@@ -667,9 +668,11 @@
         actionsHtml += `<a class="detail-btn call" href="tel:+1${digits}">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24 11.36 11.36 0 003.58.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.36 11.36 0 00.57 3.58 1 1 0 01-.25 1.02l-2.2 2.19z"/></svg>
           Call ${m.phone}</a>`;
-        actionsHtml += `<a class="detail-btn sms" href="sms:+1${digits}">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
-          Text Message</a>`;
+        if (authMode !== 'guest') {
+          actionsHtml += `<a class="detail-btn sms" href="sms:+1${digits}">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+            Text Message</a>`;
+        }
       }
       if (m.email) {
         actionsHtml += `<a class="detail-btn email" href="mailto:${m.email}">
@@ -677,8 +680,8 @@
           ${m.email}</a>`;
       }
 
-      // Add to Contacts (vCard download)
-      {
+      // Add to Contacts (vCard download) — members and admin only
+      if (authMode !== 'guest') {
         const vcardParts = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${m.name}`];
         if (m.phone) vcardParts.push(`TEL;TYPE=CELL:+1${m.phone.replace(/\D/g, '')}`);
         if (m.email) vcardParts.push(`EMAIL:${m.email}`);
@@ -797,88 +800,6 @@
       } catch (err) {
         msgEl.className = 'edit-msg error';
         msgEl.textContent = 'Failed to save. Try again.';
-        submitBtn.disabled = false;
-      }
-    }
-
-    // Member: submit change request
-    async function submitChangeRequest(idx) {
-      const m = allMembers[idx];
-      const msgEl = document.getElementById('edit-msg');
-      const submitBtn = document.getElementById('edit-submit-btn');
-
-      const newName = document.getElementById('edit-name').value.trim();
-      const newPhone = document.getElementById('edit-phone').value.trim();
-      const newEmail = document.getElementById('edit-email').value.trim();
-      const notes = document.getElementById('edit-notes').value.trim();
-      const photoInput = document.getElementById('edit-photo');
-
-      const changes = [];
-      if (newName && newName !== m.name) changes.push(`Name: ${m.name} -> ${newName}`);
-      if (newPhone && newPhone !== m.phone) changes.push(`Phone: ${m.phone || '(none)'} -> ${newPhone}`);
-      if (newEmail && newEmail !== m.email) changes.push(`Email: ${m.email || '(none)'} -> ${newEmail}`);
-      if (photoInput.files.length > 0) changes.push('New photo attached');
-      if (notes) changes.push(`Notes: ${notes}`);
-
-      if (changes.length === 0) {
-        msgEl.className = 'edit-msg error';
-        msgEl.textContent = 'No changes detected';
-        return;
-      }
-
-      submitBtn.disabled = true;
-      msgEl.className = 'edit-msg';
-      msgEl.textContent = 'Submitting...';
-
-      try {
-        const fields = {
-          'MEMBER NAME': m.name,
-          'MEMBER RECORD ID': m.recordId,
-          'REQUESTED CHANGES': changes.join('\n'),
-          'STATUS': 'Pending',
-          'SUBMITTED': new Date().toISOString(),
-        };
-
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${API_TOKEN}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ fields })
-        });
-
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-        const record = await res.json();
-
-        if (photoInput.files.length > 0) {
-          const file = photoInput.files[0];
-          const reader = new FileReader();
-          reader.onload = async function() {
-            try {
-              await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${record.id}`, {
-                method: 'PATCH',
-                headers: {
-                  'Authorization': `Bearer ${API_TOKEN}`,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  fields: { 'NEW PHOTO': [{ url: reader.result }] }
-                })
-              });
-            } catch (e) {
-              console.log('Photo upload skipped:', e.message);
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-
-        msgEl.className = 'edit-msg success';
-        msgEl.textContent = 'Request submitted! Changes will appear after admin approval.';
-        submitBtn.disabled = true;
-      } catch (err) {
-        msgEl.className = 'edit-msg error';
-        msgEl.textContent = 'Failed to submit. Please try again.';
         submitBtn.disabled = false;
       }
     }
