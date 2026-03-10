@@ -1169,6 +1169,7 @@
                 <span class="event-edit-label">Status</span>
                 <select class="event-edit-select" id="edit-status-${i}">
                   <option value="Upcoming"${eStat === 'upcoming' || !ev.status ? ' selected' : ''}>Upcoming</option>
+                  <option value="Todo"${eStat === 'todo' ? ' selected' : ''}>Todo</option>
                   <option value="In Progress"${eStat === 'in progress' ? ' selected' : ''}>In Progress</option>
                   <option value="Done"${eStat === 'done' ? ' selected' : ''}>Done</option>
                 </select>
