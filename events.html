@@ -1197,6 +1197,24 @@
                 <input class="event-edit-input" id="edit-room-${i}" value="${eRoom}" placeholder="e.g. Walnut Room">
               </div>
               <div class="event-edit-row">
+                <span class="event-edit-label">Photo</span>
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                  <input class="event-edit-input" id="edit-photo-url-${i}" placeholder="Paste image URL" style="margin:0">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <label style="font-size:12px;color:#FFD700;cursor:pointer;white-space:nowrap">
+                      <input type="file" accept="image/*" id="edit-photo-file-${i}" style="display:none" onchange="handlePhotoFile(${i})">
+                      Or choose file
+                    </label>
+                    <span id="edit-photo-filename-${i}" style="font-size:11px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+                  </div>
+                  ${ev.speakerPhoto ? `<div style="margin-top:4px"><img src="${ev.speakerPhoto}" style="width:48px;height:48px;border-radius:8px;object-fit:cover"></div>` : ''}
+                </div>
+              </div>
+              <div class="event-edit-row">
+                <span class="event-edit-label">Notes</span>
+                <textarea class="event-edit-input" id="edit-notes-${i}" rows="3" placeholder="Event notes" style="resize:vertical">${(ev.notes || '').replace(/</g, '&lt;')}</textarea>
+              </div>
+              <div class="event-edit-row">
                 <span class="event-edit-label">Status</span>
                 <select class="event-edit-select" id="edit-status-${i}">
                   <option value="Upcoming"${eStat === 'upcoming' || !ev.status ? ' selected' : ''}>Upcoming</option>
@@ -1618,6 +1636,38 @@
       render();
     }
 
+    // Store pending file uploads per event index
+    const pendingPhotoFiles = {};
+
+    function handlePhotoFile(eventIdx) {
+      const fileInput = document.getElementById(`edit-photo-file-${eventIdx}`);
+      const filenameEl = document.getElementById(`edit-photo-filename-${eventIdx}`);
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        pendingPhotoFiles[eventIdx] = file;
+        if (filenameEl) filenameEl.textContent = file.name;
+        // Clear URL input since file takes precedence
+        const urlInput = document.getElementById(`edit-photo-url-${eventIdx}`);
+        if (urlInput) urlInput.value = '';
+      }
+    }
+
+    async function uploadPhotoFile(file) {
+      // Upload to tmpfiles.org (free, no API key, 1 hour expiry — enough for Airtable to download)
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('https://tmpfiles.org/api/v1/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Photo upload failed');
+      const data = await res.json();
+      // tmpfiles.org returns URL like https://tmpfiles.org/12345/image.jpg
+      // Direct download URL is https://tmpfiles.org/dl/12345/image.jpg
+      const url = data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+      return url;
+    }
+
     async function saveEventDetails(eventIdx) {
       const ev = allEvents[eventIdx];
       const name = document.getElementById(`edit-name-${eventIdx}`).value.trim();
@@ -1625,6 +1675,8 @@
       const date = document.getElementById(`edit-date-${eventIdx}`).value.trim();
       const time = document.getElementById(`edit-time-${eventIdx}`).value.trim();
       const room = document.getElementById(`edit-room-${eventIdx}`).value.trim();
+      const notes = document.getElementById(`edit-notes-${eventIdx}`).value.trim();
+      const photoUrl = document.getElementById(`edit-photo-url-${eventIdx}`).value.trim();
       const status = document.getElementById(`edit-status-${eventIdx}`).value;
       const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
       const saveBtn = document.getElementById(`edit-save-${eventIdx}`);
@@ -1638,11 +1690,22 @@
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Saving...'; }
 
       try {
-        const fields = { 'EVENT NAME': name, 'Status': status };
+        const fields = { 'EVENT NAME': name, 'Status': status, 'NOTES': notes };
         if (date) fields['DATE'] = date;
         if (speaker) fields['SPEAKER'] = speaker;
         if (time) fields['TIME'] = time;
         if (room) fields['ROOM'] = room;
+
+        // Handle photo: file upload takes precedence over URL
+        let finalPhotoUrl = photoUrl;
+        if (pendingPhotoFiles[eventIdx]) {
+          if (msgEl) msgEl.textContent = 'Uploading photo...';
+          finalPhotoUrl = await uploadPhotoFile(pendingPhotoFiles[eventIdx]);
+          delete pendingPhotoFiles[eventIdx];
+        }
+        if (finalPhotoUrl) {
+          fields['SPEAKER PHOTO'] = [{ url: finalPhotoUrl }];
+        }
 
         if (ev.eventRecordId) {
           // Update existing EVENTS record
@@ -1678,8 +1741,10 @@
         ev.date = date;
         ev.time = time;
         ev.room = room;
+        ev.notes = notes;
         ev.status = status;
         ev.isDone = status.toLowerCase() === 'done';
+        if (finalPhotoUrl) ev.speakerPhoto = finalPhotoUrl;
         editingEvent = null;
         render();
       } catch (err) {
