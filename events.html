@@ -1149,14 +1149,6 @@
             </div>`;
         }
 
-        const exportBtn = authMode === 'admin'
-          ? `<button class="export-btn" onclick="event.stopPropagation(); toggleExport(${i})">Export</button>`
-          : '';
-
-        const editBtn = authMode === 'admin'
-          ? `<button class="edit-icon-btn" onclick="event.stopPropagation(); toggleEditEvent(${i})" title="Edit event">&#9998;</button>`
-          : '';
-
         // Admin edit form for event details
         let editForm = '';
         if (authMode === 'admin' && editingEvent === i) {
@@ -1189,6 +1181,13 @@
             </div>`;
         }
 
+        // Admin toolbar (inside expanded body)
+        const adminToolbar = authMode === 'admin' ? `
+          <div style="display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid #333">
+            <button class="export-btn" onclick="toggleEditEvent(${i})">${editingEvent === i ? 'Close Edit' : 'Edit'}</button>
+            <button class="export-btn" onclick="toggleExport(${i})">${exportState && exportState.eventIdx === i ? 'Close Export' : 'Export'}</button>
+          </div>` : '';
+
         const isOpen = openEvents.has(i) ? ' open' : '';
         return `<div class="event-card${isOpen}">
           <div class="event-header" onclick="toggleEvent(${i})">
@@ -1202,12 +1201,11 @@
                 <span>${total} responded${guestCountNote}</span>
               </div>
             </div>
-            ${editBtn}
-            ${exportBtn}
             <span class="event-status status-${statusClass}">${statusLabel}</span>
             <span class="chevron">&#8250;</span>
           </div>
           <div class="event-body">
+            ${adminToolbar}
             ${editForm}
             ${exportPanel}
             <div class="rsvp-section">
