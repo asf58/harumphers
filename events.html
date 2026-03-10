@@ -969,8 +969,8 @@
       });
 
       allEvents.sort((a, b) => {
-        const aActive = a.status.toLowerCase() !== 'done';
-        const bActive = b.status.toLowerCase() !== 'done';
+        const aActive = (a.status || '').toLowerCase() !== 'done';
+        const bActive = (b.status || '').toLowerCase() !== 'done';
         if (aActive !== bActive) return aActive ? -1 : 1;
         return 0;
       });
@@ -1093,8 +1093,8 @@
           if (s === 'todo') return '';
         }
 
-        const statusClass = ev.status.toLowerCase() === 'done' ? 'past'
-          : ev.status.toLowerCase() === 'in progress' ? 'active' : 'upcoming';
+        const sLower = (ev.status || '').toLowerCase();
+        const statusClass = sLower === 'done' ? 'past' : sLower === 'in progress' ? 'active' : 'upcoming';
         const statusLabel = ev.status || 'Upcoming';
 
         function chipHtml(entry, cls) {
@@ -1331,7 +1331,7 @@
               <div class="event-edit-row">
                 <span class="event-edit-label">Status</span>
                 <select class="event-edit-select" id="edit-status-${i}">
-                  <option value="Upcoming"${eStat === 'upcoming' || !ev.status ? ' selected' : ''}>Upcoming</option>
+                  <option value=""${!ev.status || eStat === 'upcoming' ? ' selected' : ''}>Upcoming</option>
                   <option value="Todo"${eStat === 'todo' ? ' selected' : ''}>Todo</option>
                   <option value="In progress"${eStat === 'in progress' ? ' selected' : ''}>In Progress</option>
                   <option value="Done"${eStat === 'done' ? ' selected' : ''}>Done</option>
@@ -1938,11 +1938,15 @@
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Saving...'; }
 
       try {
-        const fields = { 'EVENT NAME': name, 'Status': status, 'NOTES': notes };
-        if (date) fields['DATE'] = date;
-        if (speaker) fields['SPEAKER'] = speaker;
-        if (time) fields['TIME'] = time;
-        if (room) fields['ROOM'] = room;
+        const fields = {
+          'EVENT NAME': name,
+          'Status': status || null,
+          'NOTES': notes || null,
+          'DATE': date || null,
+          'SPEAKER': speaker || null,
+          'TIME': time || null,
+          'ROOM': room || null,
+        };
 
         // Handle photo: file upload takes precedence over URL
         let finalPhotoUrl = photoUrl;
@@ -2072,7 +2076,7 @@
           method: 'POST',
           headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            fields: { 'EVENT NAME': name, 'DATE': date, 'Status': 'Upcoming' }
+            fields: { 'EVENT NAME': name, 'DATE': date }
           })
         });
 
