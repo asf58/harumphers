@@ -428,6 +428,181 @@
       color: #aaa;
       margin-bottom: 8px;
     }
+
+    /* Admin event editing */
+    .edit-icon-btn {
+      background: none;
+      border: none;
+      color: #666;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 8px;
+      flex-shrink: 0;
+    }
+    .edit-icon-btn:active { color: #FFD700; }
+
+    .event-edit-form {
+      padding: 12px 16px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .event-edit-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .event-edit-label {
+      font-size: 12px;
+      color: #888;
+      width: 50px;
+      flex-shrink: 0;
+    }
+
+    .event-edit-input, .event-edit-select {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #333;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .event-edit-input:focus, .event-edit-select:focus { border-color: #FFD700; }
+
+    .event-edit-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .edit-save-btn, .edit-cancel-btn {
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+
+    .edit-save-btn { background: #4CAF50; color: #fff; }
+    .edit-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .edit-cancel-btn { background: #555; color: #ccc; }
+
+    /* New event form */
+    .new-event-bar { margin-bottom: 16px; }
+
+    .new-event-toggle {
+      background: #8B0000;
+      color: #FFD700;
+      border: 1px solid #FFD700;
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      width: 100%;
+    }
+    .new-event-toggle:active { opacity: 0.7; }
+
+    .new-event-form {
+      background: #2a2a2a;
+      border: 1px solid #FFD700;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 8px;
+    }
+
+    .new-event-form h3 { color: #FFD700; font-size: 16px; margin-bottom: 12px; }
+
+    .new-event-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .new-event-label {
+      font-size: 13px;
+      color: #aaa;
+      width: 80px;
+      flex-shrink: 0;
+    }
+
+    .new-event-input {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #333;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+    }
+    .new-event-input:focus { border-color: #FFD700; }
+
+    .new-event-hint {
+      font-size: 11px;
+      color: #666;
+      padding-left: 88px;
+      margin-top: -6px;
+      margin-bottom: 10px;
+    }
+
+    .new-event-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 12px;
+      padding-left: 88px;
+    }
+
+    .new-event-actions { display: flex; gap: 8px; }
+
+    .new-event-create-btn {
+      flex: 1;
+      padding: 10px;
+      background: #4CAF50;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .new-event-create-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .new-event-cancel-btn {
+      padding: 10px 20px;
+      background: #555;
+      color: #ccc;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .new-event-msg { font-size: 13px; margin-top: 8px; min-height: 20px; }
+
+    .no-events-msg {
+      text-align: center;
+      padding: 40px 20px;
+      color: #888;
+      font-size: 15px;
+    }
   </style>
 </head>
 <body>
@@ -502,6 +677,9 @@
 
     // Export state: { eventIdx, filter } or null
     let exportState = null;
+    // Admin edit state
+    let editingEvent = null; // eventIdx being edited
+    let showingNewEvent = false;
 
     async function apiFetch(url) {
       const res = await fetch(url, {
@@ -613,7 +791,7 @@
       const eventsData = await apiFetchAll(
         `https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`
       );
-      const eventDetails = eventsData.records.map(r => r.fields);
+      const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
 
       const params = new URLSearchParams({
         'sort[0][field]': 'LAST NAME',
@@ -684,6 +862,7 @@
           guestFieldName: pairedGuestField,
           date: matched ? (matched['DATE'] || '') : '',
           status: matched ? (matched['Status'] || '') : '',
+          eventRecordId: matched ? matched._recordId : null,
           yes, no, maybe, pending,
           isDone,
         };
@@ -745,7 +924,48 @@
     function render() {
       const content = document.getElementById('content');
 
-      content.innerHTML = allEvents.map((ev, i) => {
+      // Admin: new event button/form
+      let topHtml = '';
+      if (authMode === 'admin') {
+        if (showingNewEvent) {
+          topHtml = `<div class="new-event-bar">
+            <div class="new-event-form">
+              <h3>Add New Event</h3>
+              <div class="new-event-row">
+                <span class="new-event-label">Name</span>
+                <input class="new-event-input" id="new-event-name" placeholder="e.g. Bob Smith Speaker Night">
+              </div>
+              <div class="new-event-row">
+                <span class="new-event-label">Date</span>
+                <input class="new-event-input" type="date" id="new-event-date">
+              </div>
+              <div class="new-event-row">
+                <span class="new-event-label">RSVP Field</span>
+                <input class="new-event-input" id="new-event-prefix" placeholder="Auto-generated from name + date">
+              </div>
+              <div class="new-event-hint">Column name in Airtable (auto-fills when you enter name + date)</div>
+              <div class="new-event-checkbox">
+                <input type="checkbox" id="new-event-guests" checked>
+                <label for="new-event-guests">Enable guest count tracking</label>
+              </div>
+              <div class="new-event-actions">
+                <button class="new-event-cancel-btn" onclick="toggleNewEvent()">Cancel</button>
+                <button class="new-event-create-btn" id="new-event-create-btn" onclick="createNewEvent()">Create Event</button>
+              </div>
+              <div class="new-event-msg" id="new-event-msg"></div>
+            </div>
+          </div>`;
+        } else {
+          topHtml = `<div class="new-event-bar">
+            <button class="new-event-toggle" onclick="toggleNewEvent()">+ Add New Event</button>
+          </div>`;
+        }
+      }
+
+      content.innerHTML = topHtml + allEvents.map((ev, i) => {
+        // Non-admins only see "in progress" events
+        if (authMode !== 'admin' && ev.status.toLowerCase() !== 'in progress') return '';
+
         const statusClass = ev.status.toLowerCase() === 'done' ? 'past'
           : ev.status.toLowerCase() === 'in progress' ? 'active' : 'upcoming';
         const statusLabel = ev.status || 'Upcoming';
@@ -933,6 +1153,42 @@
           ? `<button class="export-btn" onclick="event.stopPropagation(); toggleExport(${i})">Export</button>`
           : '';
 
+        const editBtn = authMode === 'admin'
+          ? `<button class="edit-icon-btn" onclick="event.stopPropagation(); toggleEditEvent(${i})" title="Edit event">&#9998;</button>`
+          : '';
+
+        // Admin edit form for event details
+        let editForm = '';
+        if (authMode === 'admin' && editingEvent === i) {
+          const eName = ev.name.replace(/"/g, '&quot;');
+          const eDate = (ev.date || '').replace(/"/g, '&quot;');
+          const eStat = (ev.status || '').toLowerCase();
+          editForm = `
+            <div class="event-edit-form" onclick="event.stopPropagation()">
+              <div class="event-edit-row">
+                <span class="event-edit-label">Name</span>
+                <input class="event-edit-input" id="edit-name-${i}" value="${eName}">
+              </div>
+              <div class="event-edit-row">
+                <span class="event-edit-label">Date</span>
+                <input class="event-edit-input" id="edit-date-${i}" value="${eDate}">
+              </div>
+              <div class="event-edit-row">
+                <span class="event-edit-label">Status</span>
+                <select class="event-edit-select" id="edit-status-${i}">
+                  <option value="Upcoming"${eStat === 'upcoming' || !ev.status ? ' selected' : ''}>Upcoming</option>
+                  <option value="In Progress"${eStat === 'in progress' ? ' selected' : ''}>In Progress</option>
+                  <option value="Done"${eStat === 'done' ? ' selected' : ''}>Done</option>
+                </select>
+              </div>
+              <div class="event-edit-actions">
+                <button class="edit-cancel-btn" onclick="cancelEditEvent()">Cancel</button>
+                <button class="edit-save-btn" id="edit-save-${i}" onclick="saveEventDetails(${i})">Save</button>
+              </div>
+              <div class="rsvp-msg" id="edit-msg-${i}"></div>
+            </div>`;
+        }
+
         const isOpen = openEvents.has(i) ? ' open' : '';
         return `<div class="event-card${isOpen}">
           <div class="event-header" onclick="toggleEvent(${i})">
@@ -946,11 +1202,13 @@
                 <span>${total} responded${guestCountNote}</span>
               </div>
             </div>
+            ${editBtn}
             ${exportBtn}
             <span class="event-status status-${statusClass}">${statusLabel}</span>
             <span class="chevron">&#8250;</span>
           </div>
           <div class="event-body">
+            ${editForm}
             ${exportPanel}
             <div class="rsvp-section">
               ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
@@ -959,6 +1217,35 @@
           </div>
         </div>`;
       }).join('');
+
+      // Non-admin: show message if no visible events
+      if (authMode !== 'admin') {
+        const hasVisible = allEvents.some(ev => ev.status.toLowerCase() === 'in progress');
+        if (!hasVisible) {
+          content.innerHTML += '<div class="no-events-msg">No active events right now. Check back soon!</div>';
+        }
+      }
+
+      // Auto-fill RSVP field name when new event form is showing
+      if (showingNewEvent) {
+        const nameInput = document.getElementById('new-event-name');
+        const dateInput = document.getElementById('new-event-date');
+        const prefixInput = document.getElementById('new-event-prefix');
+        if (nameInput && dateInput && prefixInput) {
+          const autoFill = () => {
+            const n = nameInput.value.trim().toUpperCase();
+            const d = dateInput.value;
+            if (n && d) {
+              const dt = new Date(d + 'T12:00:00');
+              const mon = dt.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+              const day = dt.getDate();
+              prefixInput.value = `${mon}${day}-${n} RSVP`;
+            }
+          };
+          nameInput.addEventListener('input', autoFill);
+          dateInput.addEventListener('input', autoFill);
+        }
+      }
     }
 
     // Member RSVP: uses stored identity
@@ -1246,6 +1533,158 @@
       }
       copyToClipboard(phones.join(', '), eventIdx,
         `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
+    }
+
+    // --- Admin Event Editing ---
+    function toggleEditEvent(eventIdx) {
+      if (editingEvent === eventIdx) {
+        editingEvent = null;
+      } else {
+        editingEvent = eventIdx;
+        openEvents.add(eventIdx);
+      }
+      render();
+    }
+
+    function cancelEditEvent() {
+      editingEvent = null;
+      render();
+    }
+
+    async function saveEventDetails(eventIdx) {
+      const ev = allEvents[eventIdx];
+      const name = document.getElementById(`edit-name-${eventIdx}`).value.trim();
+      const date = document.getElementById(`edit-date-${eventIdx}`).value.trim();
+      const status = document.getElementById(`edit-status-${eventIdx}`).value;
+      const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
+      const saveBtn = document.getElementById(`edit-save-${eventIdx}`);
+
+      if (!name) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Name is required'; }
+        return;
+      }
+
+      if (saveBtn) saveBtn.disabled = true;
+      if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Saving...'; }
+
+      try {
+        const fields = { 'EVENT NAME': name, 'Status': status };
+        if (date) fields['DATE'] = date;
+
+        if (ev.eventRecordId) {
+          // Update existing EVENTS record
+          await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields })
+          });
+        } else {
+          // Create new EVENTS record for this RSVP field
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields })
+          });
+          const data = await res.json();
+          ev.eventRecordId = data.id;
+        }
+
+        // Update local state
+        ev.name = name;
+        ev.date = date;
+        ev.status = status;
+        ev.isDone = status.toLowerCase() === 'done';
+        editingEvent = null;
+        render();
+      } catch (err) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Failed to save. Try again.'; }
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
+    // --- New Event Creation ---
+    function toggleNewEvent() {
+      showingNewEvent = !showingNewEvent;
+      render();
+    }
+
+    async function createNewEvent() {
+      const name = document.getElementById('new-event-name').value.trim();
+      const date = document.getElementById('new-event-date').value;
+      const prefix = document.getElementById('new-event-prefix').value.trim();
+      const enableGuests = document.getElementById('new-event-guests').checked;
+      const msgEl = document.getElementById('new-event-msg');
+      const createBtn = document.getElementById('new-event-create-btn');
+
+      if (!name || !date || !prefix) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Please fill in all fields'; }
+        return;
+      }
+
+      // Validate prefix ends with RSVP
+      const rsvpFieldName = prefix.toUpperCase().endsWith('RSVP') ? prefix.toUpperCase() : prefix.toUpperCase() + ' RSVP';
+
+      if (createBtn) createBtn.disabled = true;
+      if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating RSVP field...'; }
+
+      try {
+        // Step 1: Create singleSelect RSVP field on Members table
+        const fieldRes = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: rsvpFieldName,
+            type: 'singleSelect',
+            options: {
+              choices: [
+                { name: 'YES', color: 'greenLight2' },
+                { name: 'NO', color: 'redLight2' },
+                { name: 'MAYBE', color: 'yellowLight2' }
+              ]
+            }
+          })
+        });
+
+        if (!fieldRes.ok) {
+          const errData = await fieldRes.json().catch(() => ({}));
+          if (fieldRes.status === 403 || fieldRes.status === 422) {
+            throw new Error('Token needs schema.bases:write scope. Update token at airtable.com/create/tokens');
+          }
+          throw new Error(errData.error?.message || `Field creation failed (${fieldRes.status})`);
+        }
+
+        // Step 2: Optionally create guest count field
+        if (enableGuests) {
+          if (msgEl) msgEl.textContent = 'Creating guest field...';
+          const nameWords = name.toUpperCase().split(/\s+/);
+          const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
+          const guestFieldName = `GUESTS-${guestKey}`;
+
+          await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
+          });
+        }
+
+        // Step 3: Create EVENTS table record
+        if (msgEl) msgEl.textContent = 'Creating event record...';
+        await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: { 'EVENT NAME': name, 'DATE': date, 'Status': 'Upcoming' }
+          })
+        });
+
+        // Reload everything
+        if (msgEl) { msgEl.style.color = '#4CAF50'; msgEl.textContent = 'Event created! Reloading...'; }
+        showingNewEvent = false;
+        await loadEvents();
+      } catch (err) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = err.message; }
+        if (createBtn) createBtn.disabled = false;
+      }
     }
 
     function showExportMsg(eventIdx, msg, isError) {
