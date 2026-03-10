@@ -688,6 +688,32 @@
       min-height: 16px;
       margin-top: 4px;
     }
+
+    .gallery-admin {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      display: flex;
+      gap: 2px;
+    }
+
+    .gallery-delete-btn, .gallery-edit-btn {
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      width: 22px;
+      height: 22px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .gallery-delete-btn:hover { background: #8B0000; }
+    .gallery-edit-btn:hover { background: #555; }
   </style>
 </head>
 <body>
@@ -1747,12 +1773,23 @@
       let gridHtml = '';
       if (photos.length > 0) {
         gridHtml = `<div class="gallery-grid">
-          ${photos.map((p, pi) => `
-            <div class="gallery-item" onclick="showFullPhoto('${p.url.replace(/'/g, "\\'")}', '${(p.memberName + (p.caption ? ' — ' + p.caption : '')).replace(/'/g, "\\'")}')">
-              <img src="${p.thumb}" alt="" loading="lazy">
-              ${p.memberName ? `<div class="gallery-caption">${p.memberName}</div>` : ''}
-            </div>
-          `).join('')}
+          ${photos.map((p, pi) => {
+            const safeUrl = p.url.replace(/'/g, "\\'");
+            const safeName = (p.memberName || '').replace(/'/g, "\\'");
+            const safeCaption = (p.caption || '').replace(/'/g, "\\'");
+            const fullLabel = safeName + (safeCaption ? ' — ' + safeCaption : '');
+            const adminControls = authMode === 'admin' ? `
+              <div class="gallery-admin" onclick="event.stopPropagation()">
+                <button class="gallery-delete-btn" onclick="removeGalleryPhoto('${ev.eventRecordId}', '${p.recordId}')" title="Remove">&#x2715;</button>
+                <button class="gallery-edit-btn" onclick="editGalleryCaption('${p.recordId}', '${safeCaption}')" title="Edit caption">&#9998;</button>
+              </div>` : '';
+            return `
+            <div class="gallery-item">
+              <img src="${p.thumb}" alt="" loading="lazy" onclick="showFullPhoto('${safeUrl}', '${fullLabel}')">
+              ${p.memberName ? `<div class="gallery-caption">${p.memberName}${p.caption ? ': ' + p.caption : ''}</div>` : ''}
+              ${adminControls}
+            </div>`;
+          }).join('')}
         </div>`;
       } else {
         gridHtml = '<div style="font-size:13px;color:#666;text-align:center;padding:8px 0">No photos yet — be the first to add one!</div>';
@@ -1843,6 +1880,48 @@
         render();
       } catch (err) {
         if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Upload failed: ' + err.message; }
+      }
+    }
+
+    async function removeGalleryPhoto(eventRecordId, photoRecordId) {
+      try {
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Remove from local data
+        if (galleryPhotos[eventRecordId]) {
+          galleryPhotos[eventRecordId] = galleryPhotos[eventRecordId].filter(p => p.recordId !== photoRecordId);
+        }
+        render();
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
+      }
+    }
+
+    function editGalleryCaption(photoRecordId, currentCaption) {
+      const newCaption = prompt('Edit caption:', currentCaption);
+      if (newCaption === null) return; // cancelled
+      saveGalleryCaption(photoRecordId, newCaption);
+    }
+
+    async function saveGalleryCaption(photoRecordId, caption) {
+      try {
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'CAPTION': caption } })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Update local data
+        for (const eventId in galleryPhotos) {
+          const photo = galleryPhotos[eventId].find(p => p.recordId === photoRecordId);
+          if (photo) { photo.caption = caption; break; }
+        }
+        render();
+      } catch (err) {
+        alert('Caption update failed: ' + err.message);
       }
     }
 
