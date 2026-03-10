@@ -343,6 +343,91 @@
 
     .error { color: #ff6b6b; }
     .error a { color: #FFD700; display: inline-block; margin-top: 12px; }
+
+    /* Export feature (admin only) */
+    .export-btn {
+      background: #444;
+      color: #FFD700;
+      border: 1px solid #666;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+
+    .export-btn:active { opacity: 0.7; }
+
+    .export-panel {
+      background: #1f1f1f;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 14px;
+      margin: 8px 16px 12px;
+    }
+
+    .export-panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFD700;
+      margin-bottom: 10px;
+    }
+
+    .export-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .export-row-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      width: 100%;
+      margin-bottom: 2px;
+    }
+
+    .export-filter-btn, .export-action-btn {
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #555;
+      background: #333;
+      color: #ccc;
+      font-family: inherit;
+    }
+
+    .export-filter-btn.active {
+      border-color: #FFD700;
+      color: #FFD700;
+      background: rgba(255,215,0,0.1);
+    }
+
+    .export-action-btn { color: #fff; }
+    .export-action-btn.email { background: #2a6496; border-color: #2a6496; }
+    .export-action-btn.sms { background: #4CAF50; border-color: #4CAF50; }
+    .export-action-btn.copy { background: #555; border-color: #666; }
+
+    .export-action-btn:active { opacity: 0.7; }
+
+    .export-msg {
+      font-size: 12px;
+      color: #4CAF50;
+      min-height: 18px;
+      margin-top: 4px;
+    }
+
+    .export-count {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
@@ -414,6 +499,9 @@
     // Inline edit state: { eventIdx, memberId } or null
     let inlineEdit = null;
     let openEvents = new Set();
+
+    // Export state: { eventIdx, filter } or null
+    let exportState = null;
 
     async function apiFetch(url) {
       const res = await fetch(url, {
@@ -533,6 +621,8 @@
       });
       params.append('fields[]', 'FULL NAME');
       params.append('fields[]', 'IN DIRECTORY');
+      params.append('fields[]', 'CELL #');
+      params.append('fields[]', 'E-MAIL ADDRESS');
       rsvpFields.forEach(f => params.append('fields[]', f.name));
       guestFields.forEach(f => params.append('fields[]', f.name));
 
@@ -559,7 +649,9 @@
           const rsvp = f[field.name];
           const name = f['FULL NAME'] || '';
           const guestCount = pairedGuestField ? (f[pairedGuestField] || 0) : 0;
-          const entry = { name, guestCount, recordId: r.id };
+          const email = f['E-MAIL ADDRESS'] || '';
+          const phone = f['CELL #'] || '';
+          const entry = { name, guestCount, recordId: r.id, email, phone };
           if (!rsvp) {
             pending.push(entry);
             return;
@@ -805,6 +897,42 @@
           }
         }
 
+        // Export panel (admin only)
+        let exportPanel = '';
+        if (authMode === 'admin' && exportState && exportState.eventIdx === i) {
+          const f = exportState.filter;
+          const list = getExportList(i, f);
+          const emailCount = list.filter(e => e.email).length;
+          const phoneCount = list.filter(e => e.phone).length;
+          const filterLabels = { yes: 'Going', maybe: 'Maybe', no: 'Not Going', pending: 'Not Responded', all: 'All' };
+
+          exportPanel = `
+            <div class="export-panel" onclick="event.stopPropagation()">
+              <div class="export-panel-title">Export List</div>
+              <div class="export-row">
+                <div class="export-row-label">Filter</div>
+                <button class="export-filter-btn${f === 'yes' ? ' active' : ''}" onclick="setExportFilter(${i}, 'yes')">Going (${ev.yes.length})</button>
+                <button class="export-filter-btn${f === 'maybe' ? ' active' : ''}" onclick="setExportFilter(${i}, 'maybe')">Maybe (${ev.maybe.length})</button>
+                <button class="export-filter-btn${f === 'no' ? ' active' : ''}" onclick="setExportFilter(${i}, 'no')">No (${ev.no.length})</button>
+                <button class="export-filter-btn${f === 'pending' ? ' active' : ''}" onclick="setExportFilter(${i}, 'pending')">No Reply (${ev.pending.length})</button>
+                <button class="export-filter-btn${f === 'all' ? ' active' : ''}" onclick="setExportFilter(${i}, 'all')">All (${ev.yes.length + ev.maybe.length + ev.no.length + ev.pending.length})</button>
+              </div>
+              <div class="export-count">${filterLabels[f]}: ${list.length} members (${emailCount} emails, ${phoneCount} phones)</div>
+              <div class="export-row">
+                <div class="export-row-label">Action</div>
+                <button class="export-action-btn email" onclick="exportEmail(${i})">Email</button>
+                <button class="export-action-btn sms" onclick="exportSms(${i})">Text</button>
+                <button class="export-action-btn copy" onclick="exportCopyEmails(${i})">Copy Emails</button>
+                <button class="export-action-btn copy" onclick="exportCopyPhones(${i})">Copy Phones</button>
+              </div>
+              <div class="export-msg" id="export-msg-${i}"></div>
+            </div>`;
+        }
+
+        const exportBtn = authMode === 'admin'
+          ? `<button class="export-btn" onclick="event.stopPropagation(); toggleExport(${i})">Export</button>`
+          : '';
+
         const isOpen = openEvents.has(i) ? ' open' : '';
         return `<div class="event-card${isOpen}">
           <div class="event-header" onclick="toggleEvent(${i})">
@@ -818,10 +946,12 @@
                 <span>${total} responded${guestCountNote}</span>
               </div>
             </div>
+            ${exportBtn}
             <span class="event-status status-${statusClass}">${statusLabel}</span>
             <span class="chevron">&#8250;</span>
           </div>
           <div class="event-body">
+            ${exportPanel}
             <div class="rsvp-section">
               ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
             </div>
@@ -986,7 +1116,9 @@
         const rsvp = f[ev.fieldName];
         const name = f['FULL NAME'] || '';
         const guestCount = ev.guestFieldName ? (f[ev.guestFieldName] || 0) : 0;
-        const entry = { name, guestCount, recordId: r.id };
+        const email = f['E-MAIL ADDRESS'] || '';
+        const phone = f['CELL #'] || '';
+        const entry = { name, guestCount, recordId: r.id, email, phone };
         if (!rsvp) {
           ev.pending.push(entry);
           return;
@@ -1000,6 +1132,108 @@
           ev.maybe.push(entry);
         }
       });
+    }
+
+    // --- Export Functions (admin only) ---
+    function toggleExport(eventIdx) {
+      if (exportState && exportState.eventIdx === eventIdx) {
+        exportState = null;
+      } else {
+        exportState = { eventIdx, filter: 'yes' };
+      }
+      render();
+    }
+
+    function setExportFilter(eventIdx, filter) {
+      exportState = { eventIdx, filter };
+      render();
+    }
+
+    function getExportList(eventIdx, filter) {
+      const ev = allEvents[eventIdx];
+      switch (filter) {
+        case 'yes': return ev.yes;
+        case 'maybe': return ev.maybe;
+        case 'no': return ev.no;
+        case 'pending': return ev.pending;
+        case 'all': return [...ev.yes, ...ev.maybe, ...ev.no, ...ev.pending];
+        default: return ev.yes;
+      }
+    }
+
+    function exportEmail(eventIdx) {
+      const list = getExportList(eventIdx, exportState.filter);
+      const emails = list.map(e => e.email).filter(Boolean);
+      if (emails.length === 0) {
+        showExportMsg(eventIdx, 'No email addresses found', true);
+        return;
+      }
+      window.location.href = 'mailto:' + emails.join(',');
+      showExportMsg(eventIdx, `Opening email for ${emails.length} recipient${emails.length > 1 ? 's' : ''}`);
+    }
+
+    function exportSms(eventIdx) {
+      const list = getExportList(eventIdx, exportState.filter);
+      const phones = list.map(e => e.phone).filter(Boolean);
+      if (phones.length === 0) {
+        showExportMsg(eventIdx, 'No phone numbers found', true);
+        return;
+      }
+      // sms: URI with comma-separated numbers works on iOS and Android
+      window.location.href = 'sms:' + phones.join(',');
+      showExportMsg(eventIdx, `Opening messages for ${phones.length} number${phones.length > 1 ? 's' : ''}`);
+    }
+
+    function exportCopyEmails(eventIdx) {
+      const list = getExportList(eventIdx, exportState.filter);
+      const emails = list.map(e => e.email).filter(Boolean);
+      if (emails.length === 0) {
+        showExportMsg(eventIdx, 'No email addresses found', true);
+        return;
+      }
+      const text = emails.join('; ');
+      navigator.clipboard.writeText(text).then(() => {
+        showExportMsg(eventIdx, `${emails.length} email${emails.length > 1 ? 's' : ''} copied`);
+      }).catch(() => {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showExportMsg(eventIdx, `${emails.length} email${emails.length > 1 ? 's' : ''} copied`);
+      });
+    }
+
+    function exportCopyPhones(eventIdx) {
+      const list = getExportList(eventIdx, exportState.filter);
+      const phones = list.map(e => e.phone).filter(Boolean);
+      if (phones.length === 0) {
+        showExportMsg(eventIdx, 'No phone numbers found', true);
+        return;
+      }
+      const text = phones.join(', ');
+      navigator.clipboard.writeText(text).then(() => {
+        showExportMsg(eventIdx, `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
+      }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showExportMsg(eventIdx, `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
+      });
+    }
+
+    function showExportMsg(eventIdx, msg, isError) {
+      const el = document.getElementById(`export-msg-${eventIdx}`);
+      if (el) {
+        el.style.color = isError ? '#ff6b6b' : '#4CAF50';
+        el.textContent = msg;
+        if (!isError) setTimeout(() => { if (el) el.textContent = ''; }, 3000);
+      }
     }
 
     applyApprovedChanges().then(() => loadEvents()).catch(err => {
