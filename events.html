@@ -1140,6 +1140,8 @@
         exportState = null;
       } else {
         exportState = { eventIdx, filter: 'yes' };
+        // Always expand the event card when opening export
+        openEvents.add(eventIdx);
       }
       render();
     }
@@ -1179,9 +1181,49 @@
         showExportMsg(eventIdx, 'No phone numbers found', true);
         return;
       }
-      // sms: URI with comma-separated numbers works on iOS and Android
-      window.location.href = 'sms:' + phones.join(',');
-      showExportMsg(eventIdx, `Opening messages for ${phones.length} number${phones.length > 1 ? 's' : ''}`);
+      if (phones.length === 1) {
+        // Single recipient: sms: URI works reliably
+        window.location.href = 'sms:' + phones[0];
+        showExportMsg(eventIdx, 'Opening messages');
+      } else {
+        // Group SMS URIs are unreliable on iOS — copy numbers instead
+        copyToClipboard(phones.join(', '), eventIdx,
+          `${phones.length} numbers copied — paste into group message`);
+      }
+    }
+
+    function copyToClipboard(text, eventIdx, successMsg) {
+      // Try modern API first, then iOS-compatible fallback
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showExportMsg(eventIdx, successMsg);
+        }).catch(() => {
+          fallbackCopy(text, eventIdx, successMsg);
+        });
+      } else {
+        fallbackCopy(text, eventIdx, successMsg);
+      }
+    }
+
+    function fallbackCopy(text, eventIdx, successMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '0';
+      ta.style.top = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      // iOS Safari requires setSelectionRange
+      ta.setSelectionRange(0, text.length);
+      try {
+        document.execCommand('copy');
+        showExportMsg(eventIdx, successMsg);
+      } catch (e) {
+        showExportMsg(eventIdx, 'Copy failed — tap and hold to select text', true);
+      }
+      document.body.removeChild(ta);
     }
 
     function exportCopyEmails(eventIdx) {
@@ -1191,19 +1233,8 @@
         showExportMsg(eventIdx, 'No email addresses found', true);
         return;
       }
-      const text = emails.join('; ');
-      navigator.clipboard.writeText(text).then(() => {
-        showExportMsg(eventIdx, `${emails.length} email${emails.length > 1 ? 's' : ''} copied`);
-      }).catch(() => {
-        // Fallback for older browsers
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        showExportMsg(eventIdx, `${emails.length} email${emails.length > 1 ? 's' : ''} copied`);
-      });
+      copyToClipboard(emails.join('; '), eventIdx,
+        `${emails.length} email${emails.length > 1 ? 's' : ''} copied`);
     }
 
     function exportCopyPhones(eventIdx) {
@@ -1213,18 +1244,8 @@
         showExportMsg(eventIdx, 'No phone numbers found', true);
         return;
       }
-      const text = phones.join(', ');
-      navigator.clipboard.writeText(text).then(() => {
-        showExportMsg(eventIdx, `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
-      }).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        showExportMsg(eventIdx, `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
-      });
+      copyToClipboard(phones.join(', '), eventIdx,
+        `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
     }
 
     function showExportMsg(eventIdx, msg, isError) {
