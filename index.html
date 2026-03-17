@@ -1659,7 +1659,8 @@
 
       try {
         // Check for duplicate pending request with same number
-        const checkUrl = `https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=AND({SUBMITTED MEMBER #}=${num},{STATUS}="Pending")`;
+        const formula = encodeURIComponent(`AND({SUBMITTED MEMBER #}=${num},{STATUS}="Pending")`);
+        const checkUrl = `https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=${formula}`;
         const existing = await apiFetch(checkUrl);
         if (existing.records && existing.records.length > 0) {
           msgEl.className = 'submit-request-msg error';
