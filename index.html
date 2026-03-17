@@ -1903,8 +1903,8 @@
       if (msgEl) { msgEl.className = 'request-msg'; msgEl.textContent = 'Linking member...'; }
 
       try {
-        // Step 1: Update the member's MEMBER # field
-        await apiPatch(selected.recordId, { 'MEMBER #': memberNum });
+        // Step 1: Update the member's MEMBER # field (text field, needs string)
+        await apiPatch(selected.recordId, { 'MEMBER #': String(memberNum) });
 
         // Step 2: Mark request as approved with linked member ID
         await fetch(`https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}/${requestId}`, {
