@@ -1722,14 +1722,22 @@
 
       try {
         // Load pending requests
+        const reqFormula = encodeURIComponent('{STATUS}="Pending"');
+        const reqSort = encodeURIComponent('SUBMITTED DATE');
         const reqData = await apiFetch(
-          `https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula={STATUS}="Pending"&sort[0][field]=SUBMITTED DATE&sort[0][direction]=desc`
+          `https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=${reqFormula}&sort[0][field]=${reqSort}&sort[0][direction]=desc`
         );
         pendingRequests = reqData.records || [];
 
         // Load all members for the search dropdown
+        const memberParams = new URLSearchParams();
+        memberParams.append('fields[]', 'FULL NAME');
+        memberParams.append('fields[]', 'MEMBER #');
+        memberParams.append('fields[]', 'IN DIRECTORY');
+        memberParams.append('sort[0][field]', 'LAST NAME');
+        memberParams.append('sort[0][direction]', 'asc');
         const memberData = await apiFetchAll(
-          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?fields[]=FULL NAME&fields[]=MEMBER #&fields[]=IN DIRECTORY&sort[0][field]=LAST NAME&sort[0][direction]=asc`
+          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?${memberParams}`
         );
         allMembersForSearch = memberData.records.filter(r => r.fields['IN DIRECTORY']);
 
