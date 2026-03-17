@@ -1199,7 +1199,10 @@
 
         function section(label, cls, list) {
           if (list.length === 0) return '';
-          return `<div class="rsvp-label ${cls}">${label} (${list.length})</div>
+          const totalGuests = list.reduce((sum, e) => sum + (e.guestCount || 0), 0);
+          const guestNote = totalGuests > 0 ? ` + ${totalGuests} guest${totalGuests !== 1 ? 's' : ''}` : '';
+          const countLabel = `${list.length} member${list.length !== 1 ? 's' : ''}${guestNote}`;
+          return `<div class="rsvp-label ${cls}">${label} (${countLabel})</div>
             <div class="rsvp-list">${list.map(entry => chipHtml(entry, cls)).join('')}</div>`;
         }
 
@@ -1212,10 +1215,12 @@
 
         const totalYesGuests = ev.yes.reduce((sum, e) => sum + (e.guestCount || 0), 0);
         const totalMaybeGuests = ev.maybe.reduce((sum, e) => sum + (e.guestCount || 0), 0);
+        const totalGuests = totalYesGuests + totalMaybeGuests;
+        const totalAttending = ev.yes.length + totalYesGuests;
         const total = ev.yes.length + ev.no.length + ev.maybe.length;
 
-        const guestCountNote = totalYesGuests > 0
-          ? ` <span style="font-size:11px;color:#888">(+${totalYesGuests + totalMaybeGuests} guests)</span>` : '';
+        const guestCountNote = totalGuests > 0
+          ? ` <span style="font-size:11px;color:#888">(${totalAttending} total attending${totalMaybeGuests > 0 ? `, +${ev.maybe.length + totalMaybeGuests} maybe` : ''})</span>` : '';
 
         let rsvpForm = '';
 
