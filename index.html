@@ -584,6 +584,275 @@
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Member Request Submission Form (login screen) */
+    .submit-request {
+      margin-top: 20px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 15px;
+      padding: 20px;
+      backdrop-filter: blur(10px);
+      text-align: left;
+    }
+
+    .submit-request h3 {
+      text-align: center;
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #FFD700;
+    }
+
+    .submit-request p {
+      text-align: center;
+      font-size: 13px;
+      opacity: 0.8;
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+
+    .submit-request .field {
+      margin-bottom: 12px;
+    }
+
+    .submit-request label {
+      display: block;
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .submit-request input {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 16px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .submit-request input:focus { border-color: #FFD700; }
+
+    .submit-request-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 12px;
+      background: #FFD700;
+      color: #8B0000;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 4px;
+    }
+
+    .submit-request-btn:active { opacity: 0.7; }
+    .submit-request-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .submit-request-msg {
+      text-align: center;
+      padding: 8px 0 0;
+      font-size: 13px;
+      min-height: 24px;
+    }
+
+    .submit-request-msg.success { color: #4CAF50; }
+    .submit-request-msg.error { color: #ff6b6b; }
+
+    .submit-request-back {
+      display: block;
+      text-align: center;
+      margin-top: 12px;
+      color: #FFD700;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+
+    /* Admin: Pending Requests Section */
+    .admin-requests {
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .admin-requests-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .request-card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,215,0,0.3);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .request-card:last-child { margin-bottom: 0; }
+
+    .request-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .request-name {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .request-num {
+      font-size: 13px;
+      color: #FFD700;
+      font-weight: 600;
+    }
+
+    .request-date {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 10px;
+    }
+
+    .member-search-wrap {
+      position: relative;
+      margin-bottom: 10px;
+    }
+
+    .member-search-input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .member-search-input:focus { border-color: #FFD700; }
+
+    .member-search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 10px;
+      margin-top: 4px;
+      z-index: 50;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+
+    .member-search-item {
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      border-bottom: 1px solid #333;
+      color: #fff;
+    }
+
+    .member-search-item:last-child { border-bottom: none; }
+    .member-search-item:hover, .member-search-item:active { background: rgba(255,215,0,0.15); }
+
+    .member-search-item .already-linked {
+      font-size: 11px;
+      color: #888;
+      margin-left: 6px;
+    }
+
+    .request-selected {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(255,215,0,0.1);
+      border: 1px solid rgba(255,215,0,0.3);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .request-selected-name { flex: 1; color: #FFD700; font-weight: 600; }
+
+    .request-selected-clear {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+    }
+
+    .request-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .request-approve-btn {
+      flex: 1;
+      padding: 8px 12px;
+      background: #4CAF50;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .request-approve-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .request-reject-btn {
+      padding: 8px 12px;
+      background: rgba(255,107,107,0.2);
+      color: #ff8a8a;
+      border: 1px solid rgba(255,107,107,0.3);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .request-msg {
+      text-align: center;
+      font-size: 12px;
+      min-height: 18px;
+      margin-top: 6px;
+    }
+
+    .request-msg.success { color: #4CAF50; }
+    .request-msg.error { color: #ff6b6b; }
+
+    .no-requests {
+      text-align: center;
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      padding: 8px 0;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -678,6 +947,10 @@
       You have admin access. You can edit any member's info in the directory and manage RSVPs in events.
     </div>
 
+    <div id="admin-requests" class="admin-requests hidden">
+      <div class="spinner-small"></div>
+    </div>
+
     <div class="profile-card" id="profile-card">
       <div class="spinner-small"></div>
     </div>
@@ -743,6 +1016,7 @@
     const BASE_ID = 'appW7Df1qJlznxxtf';
     const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
     const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
+    const REQUESTS_TABLE = 'tblz8NLFYE7XsOhrR';
 
     // --- Auth Helpers (duplicated in each page) ---
     function getAuthMode() {
@@ -836,6 +1110,8 @@
       if (getAuthMode() === 'admin') {
         document.getElementById('admin-badge').classList.remove('hidden');
         document.getElementById('admin-note').classList.remove('hidden');
+        document.getElementById('admin-requests').classList.remove('hidden');
+        loadPendingRequests();
       }
 
       loadMemberProfile();
@@ -884,10 +1160,7 @@
             showMemberHome();
             return;
           } else {
-            errorEl.style.color = '#ff6b6b';
-            errorEl.textContent = 'Member # not found';
-            document.getElementById('pw').value = '';
-            document.getElementById('pw').focus();
+            showSubmissionForm(raw);
             return;
           }
         } catch (err) {
@@ -1318,6 +1591,351 @@
         if (msgEl) {
           msgEl.className = 'qe-msg error';
           msgEl.textContent = 'Failed. Try again.';
+        }
+      }
+    }
+
+    // --- Member Request Submission (login screen) ---
+    function showSubmissionForm(memberNum) {
+      const gate = document.getElementById('gate');
+      gate.innerHTML = `
+        <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
+        <h1>HARUMPHERS</h1>
+        <div class="submit-request">
+          <h3>Member # Not Found</h3>
+          <p>The number you entered isn't linked to a member yet. If this is your Duquesne member number, submit it for approval.</p>
+          <div class="field">
+            <label>Your Full Name</label>
+            <input type="text" id="req-name" placeholder="First Last" autocomplete="name">
+          </div>
+          <div class="field">
+            <label>Member #</label>
+            <input type="text" id="req-num" value="${memberNum}" inputmode="numeric">
+          </div>
+          <button class="submit-request-btn" id="req-submit-btn" onclick="submitMemberRequest()">Submit for Approval</button>
+          <div class="submit-request-msg" id="req-msg"></div>
+          <button class="submit-request-back" onclick="backToLogin()">Back to Login</button>
+        </div>
+      `;
+      document.getElementById('req-name').focus();
+    }
+
+    function backToLogin() {
+      const gate = document.getElementById('gate');
+      gate.innerHTML = `
+        <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
+        <h1>HARUMPHERS</h1>
+        <p class="subtitle" style="margin-bottom:30px">Member Directory & Events</p>
+        <input type="text" id="pw" placeholder="Password or Member #" autocomplete="off">
+        <div class="gate-error" id="gate-error"></div>
+        <button class="btn" onclick="checkPassword()">Enter</button>
+      `;
+      document.getElementById('pw').addEventListener('keydown', e => {
+        if (e.key === 'Enter') checkPassword();
+      });
+      document.getElementById('pw').focus();
+    }
+
+    async function submitMemberRequest() {
+      const name = document.getElementById('req-name').value.trim();
+      const num = document.getElementById('req-num').value.trim();
+      const msgEl = document.getElementById('req-msg');
+      const btn = document.getElementById('req-submit-btn');
+
+      if (!name) {
+        msgEl.className = 'submit-request-msg error';
+        msgEl.textContent = 'Please enter your name';
+        return;
+      }
+      if (!num || !/^\d+$/.test(num)) {
+        msgEl.className = 'submit-request-msg error';
+        msgEl.textContent = 'Please enter a valid member number';
+        return;
+      }
+
+      btn.disabled = true;
+      msgEl.className = 'submit-request-msg';
+      msgEl.textContent = 'Submitting...';
+
+      try {
+        // Check for duplicate pending request with same number
+        const checkUrl = `https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=AND({SUBMITTED MEMBER #}=${num},{STATUS}="Pending")`;
+        const existing = await apiFetch(checkUrl);
+        if (existing.records && existing.records.length > 0) {
+          msgEl.className = 'submit-request-msg error';
+          msgEl.textContent = 'This number has already been submitted and is pending review.';
+          btn.disabled = false;
+          return;
+        }
+
+        // Create the request
+        const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${API_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fields: {
+              'SUBMITTED NAME': name,
+              'SUBMITTED MEMBER #': parseInt(num),
+              'STATUS': 'Pending',
+              'SUBMITTED DATE': today
+            }
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+        }
+
+        // Show success
+        const gate = document.getElementById('gate');
+        gate.innerHTML = `
+          <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
+          <h1>HARUMPHERS</h1>
+          <div class="submit-request">
+            <h3 style="color:#4CAF50">Request Submitted!</h3>
+            <p>Your request to link member # <strong>${num}</strong> to <strong>${name}</strong> has been submitted for review.</p>
+            <p>Once approved, you'll be able to log in with your member number.</p>
+            <button class="submit-request-back" onclick="backToLogin()">Back to Login</button>
+          </div>
+        `;
+      } catch (err) {
+        msgEl.className = 'submit-request-msg error';
+        msgEl.textContent = 'Failed to submit: ' + err.message;
+        btn.disabled = false;
+      }
+    }
+
+    // --- Admin: Pending Member Requests ---
+    let pendingRequests = [];
+    let allMembersForSearch = [];
+    let selectedMembers = {}; // requestId -> { recordId, name }
+    let openDropdowns = {}; // requestId -> true/false
+
+    async function loadPendingRequests() {
+      const container = document.getElementById('admin-requests');
+
+      try {
+        // Load pending requests
+        const reqData = await apiFetch(
+          `https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula={STATUS}="Pending"&sort[0][field]=SUBMITTED DATE&sort[0][direction]=desc`
+        );
+        pendingRequests = reqData.records || [];
+
+        // Load all members for the search dropdown
+        const memberData = await apiFetchAll(
+          `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?fields[]=FULL NAME&fields[]=MEMBER #&fields[]=IN DIRECTORY&sort[0][field]=LAST NAME&sort[0][direction]=asc`
+        );
+        allMembersForSearch = memberData.records.filter(r => r.fields['IN DIRECTORY']);
+
+        renderAdminRequests();
+      } catch (err) {
+        container.innerHTML = `
+          <div class="admin-requests-title">Member Requests</div>
+          <div class="no-requests">Could not load requests</div>
+        `;
+      }
+    }
+
+    function renderAdminRequests() {
+      const container = document.getElementById('admin-requests');
+
+      if (pendingRequests.length === 0) {
+        container.innerHTML = `
+          <div class="admin-requests-title">Member Requests</div>
+          <div class="no-requests">No pending requests</div>
+        `;
+        return;
+      }
+
+      const cards = pendingRequests.map((req, i) => {
+        const f = req.fields;
+        const selected = selectedMembers[req.id];
+        const isDropdownOpen = openDropdowns[req.id];
+
+        let linkSection;
+        if (selected) {
+          // Show selected member with option to clear
+          linkSection = `
+            <div class="request-selected">
+              <span class="request-selected-name">${selected.name}</span>
+              <button class="request-selected-clear" onclick="clearSelectedMember('${req.id}')" title="Clear">&times;</button>
+            </div>`;
+        } else {
+          // Show searchable dropdown
+          linkSection = `
+            <div class="member-search-wrap">
+              <input class="member-search-input" id="search-${req.id}"
+                placeholder="Search member to link..."
+                oninput="filterMemberDropdown('${req.id}')"
+                onfocus="openMemberDropdown('${req.id}')">
+              ${isDropdownOpen ? buildMemberDropdown(req.id) : ''}
+            </div>`;
+        }
+
+        return `<div class="request-card">
+          <div class="request-info">
+            <span class="request-name">${f['SUBMITTED NAME'] || 'Unknown'}</span>
+            <span class="request-num"># ${f['SUBMITTED MEMBER #'] || '?'}</span>
+          </div>
+          <div class="request-date">Submitted ${f['SUBMITTED DATE'] || 'unknown date'}</div>
+          ${linkSection}
+          <div class="request-actions">
+            <button class="request-approve-btn" id="approve-${req.id}"
+              onclick="approveMemberRequest('${req.id}', ${i})"
+              ${!selected ? 'disabled' : ''}>Approve & Link</button>
+            <button class="request-reject-btn" onclick="rejectMemberRequest('${req.id}', ${i})">Reject</button>
+          </div>
+          <div class="request-msg" id="req-msg-${req.id}"></div>
+        </div>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div class="admin-requests-title">Member Requests (${pendingRequests.length})</div>
+        ${cards}
+      `;
+
+      // Restore focus to any open search input
+      for (const reqId in openDropdowns) {
+        if (openDropdowns[reqId]) {
+          const input = document.getElementById(`search-${reqId}`);
+          if (input && document.activeElement !== input) {
+            // Don't steal focus, just ensure dropdown is visible
+          }
+        }
+      }
+    }
+
+    function buildMemberDropdown(requestId) {
+      const input = document.getElementById(`search-${requestId}`);
+      const query = input ? input.value.trim().toLowerCase() : '';
+
+      let filtered = allMembersForSearch;
+      if (query) {
+        filtered = filtered.filter(m => {
+          const name = (m.fields['FULL NAME'] || '').toLowerCase();
+          return name.includes(query);
+        });
+      }
+
+      if (filtered.length === 0) {
+        return `<div class="member-search-dropdown"><div class="member-search-item" style="color:#888;cursor:default">No members found</div></div>`;
+      }
+
+      const items = filtered.slice(0, 50).map(m => {
+        const name = m.fields['FULL NAME'] || 'Unknown';
+        const hasNum = m.fields['MEMBER #'];
+        const linkedNote = hasNum ? `<span class="already-linked">(# ${hasNum})</span>` : '';
+        return `<div class="member-search-item" onclick="selectMember('${requestId}', '${m.id}', '${name.replace(/'/g, "\\'")}')">
+          ${name} ${linkedNote}
+        </div>`;
+      }).join('');
+
+      return `<div class="member-search-dropdown">${items}</div>`;
+    }
+
+    function openMemberDropdown(requestId) {
+      openDropdowns[requestId] = true;
+      renderAdminRequests();
+      // Re-focus the input after render
+      setTimeout(() => {
+        const input = document.getElementById(`search-${requestId}`);
+        if (input) input.focus();
+      }, 10);
+    }
+
+    function filterMemberDropdown(requestId) {
+      openDropdowns[requestId] = true;
+      // Re-render just the dropdown portion
+      const wrap = document.getElementById(`search-${requestId}`).parentElement;
+      const existingDropdown = wrap.querySelector('.member-search-dropdown');
+      if (existingDropdown) existingDropdown.remove();
+      wrap.insertAdjacentHTML('beforeend', buildMemberDropdown(requestId));
+    }
+
+    function selectMember(requestId, memberId, memberName) {
+      selectedMembers[requestId] = { recordId: memberId, name: memberName };
+      openDropdowns[requestId] = false;
+      renderAdminRequests();
+    }
+
+    function clearSelectedMember(requestId) {
+      delete selectedMembers[requestId];
+      openDropdowns[requestId] = false;
+      renderAdminRequests();
+    }
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.member-search-wrap')) {
+        let changed = false;
+        for (const reqId in openDropdowns) {
+          if (openDropdowns[reqId]) { openDropdowns[reqId] = false; changed = true; }
+        }
+        if (changed) renderAdminRequests();
+      }
+    });
+
+    async function approveMemberRequest(requestId, idx) {
+      const selected = selectedMembers[requestId];
+      if (!selected) return;
+
+      const req = pendingRequests[idx];
+      const memberNum = req.fields['SUBMITTED MEMBER #'];
+      const msgEl = document.getElementById(`req-msg-${requestId}`);
+      const btn = document.getElementById(`approve-${requestId}`);
+
+      if (btn) btn.disabled = true;
+      if (msgEl) { msgEl.className = 'request-msg'; msgEl.textContent = 'Linking member...'; }
+
+      try {
+        // Step 1: Update the member's MEMBER # field
+        await apiPatch(selected.recordId, { 'MEMBER #': memberNum });
+
+        // Step 2: Mark request as approved with linked member ID
+        await fetch(`https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}/${requestId}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'STATUS': 'Approved', 'LINKED MEMBER ID': selected.recordId } })
+        });
+
+        // Remove from pending list
+        pendingRequests = pendingRequests.filter(r => r.id !== requestId);
+        delete selectedMembers[requestId];
+        delete openDropdowns[requestId];
+        renderAdminRequests();
+      } catch (err) {
+        if (msgEl) {
+          msgEl.className = 'request-msg error';
+          msgEl.textContent = 'Failed: ' + err.message;
+        }
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function rejectMemberRequest(requestId, idx) {
+      const msgEl = document.getElementById(`req-msg-${requestId}`);
+      if (msgEl) { msgEl.className = 'request-msg'; msgEl.textContent = 'Rejecting...'; }
+
+      try {
+        await fetch(`https://api.airtable.com/v0/${BASE_ID}/${REQUESTS_TABLE}/${requestId}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'STATUS': 'Rejected' } })
+        });
+
+        pendingRequests = pendingRequests.filter(r => r.id !== requestId);
+        delete selectedMembers[requestId];
+        delete openDropdowns[requestId];
+        renderAdminRequests();
+      } catch (err) {
+        if (msgEl) {
+          msgEl.className = 'request-msg error';
+          msgEl.textContent = 'Failed: ' + err.message;
         }
       }
     }
