@@ -754,8 +754,10 @@
       top: 100%;
       left: 0;
       right: 0;
-      max-height: 200px;
-      overflow-y: auto;
+      max-height: 250px;
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
       background: #2a2a2a;
       border: 1px solid #444;
       border-radius: 10px;
@@ -1848,18 +1850,17 @@
     }
 
     function openMemberDropdown(requestId) {
+      if (openDropdowns[requestId]) return; // Already open
       openDropdowns[requestId] = true;
-      renderAdminRequests();
-      // Re-focus the input after render
-      setTimeout(() => {
-        const input = document.getElementById(`search-${requestId}`);
-        if (input) input.focus();
-      }, 10);
+      // Just inject the dropdown, don't re-render everything
+      const wrap = document.getElementById(`search-${requestId}`).parentElement;
+      const existingDropdown = wrap.querySelector('.member-search-dropdown');
+      if (existingDropdown) existingDropdown.remove();
+      wrap.insertAdjacentHTML('beforeend', buildMemberDropdown(requestId));
     }
 
     function filterMemberDropdown(requestId) {
       openDropdowns[requestId] = true;
-      // Re-render just the dropdown portion
       const wrap = document.getElementById(`search-${requestId}`).parentElement;
       const existingDropdown = wrap.querySelector('.member-search-dropdown');
       if (existingDropdown) existingDropdown.remove();
