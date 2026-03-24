@@ -1461,13 +1461,21 @@
           const list = getExportList(i, f);
           const emailCount = list.filter(e => e.email).length;
           const phoneCount = list.filter(e => e.phone).length;
-          const filterLabels = { yes: 'Going', maybe: 'Maybe', no: 'Not Going', pending: 'Not Responded', all: 'All' };
+          const filterLabels = { yes: 'Going', maybe: 'Maybe', no: 'Not Going', pending: 'Not Responded', all: 'All', attended: 'Attended' };
+
+          // Count attended members for Done events
+          const evAtt = ev.eventRecordId ? (attendanceData[ev.eventRecordId] || {}) : {};
+          const attendedCount = Object.values(evAtt).filter(a => a.attended).length;
+          const attendedBtn = ev.isDone && attendedCount > 0
+            ? `<button class="export-filter-btn${f === 'attended' ? ' active' : ''}" style="${f !== 'attended' ? 'border-color:#4CAF50;color:#4CAF50' : ''}" onclick="setExportFilter(${i}, 'attended')">Attended (${attendedCount})</button>`
+            : '';
 
           exportPanel = `
             <div class="export-panel" onclick="event.stopPropagation()">
               <div class="export-panel-title">Export List</div>
               <div class="export-row">
                 <div class="export-row-label">Filter</div>
+                ${attendedBtn}
                 <button class="export-filter-btn${f === 'yes' ? ' active' : ''}" onclick="setExportFilter(${i}, 'yes')">Going (${ev.yes.length})</button>
                 <button class="export-filter-btn${f === 'maybe' ? ' active' : ''}" onclick="setExportFilter(${i}, 'maybe')">Maybe (${ev.maybe.length})</button>
                 <button class="export-filter-btn${f === 'no' ? ' active' : ''}" onclick="setExportFilter(${i}, 'no')">No (${ev.no.length})</button>
@@ -1858,6 +1866,11 @@
         case 'no': return ev.no;
         case 'pending': return ev.pending;
         case 'all': return [...ev.yes, ...ev.maybe, ...ev.no, ...ev.pending];
+        case 'attended': {
+          const evAtt = ev.eventRecordId ? (attendanceData[ev.eventRecordId] || {}) : {};
+          const all = [...ev.yes, ...ev.maybe, ...ev.no, ...ev.pending];
+          return all.filter(e => evAtt[e.recordId] && evAtt[e.recordId].attended);
+        }
         default: return ev.yes;
       }
     }
