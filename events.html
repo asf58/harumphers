@@ -1112,10 +1112,8 @@
         f.name.toUpperCase().startsWith('GUESTS-')
       );
 
-      if (rsvpFields.length === 0) {
-        document.getElementById('content').innerHTML = '<div class="loading"><p>No events found</p></div>';
-        return;
-      }
+      // Note: rsvpFields may be empty if no events have RSVP columns yet
+      // (e.g., all events are Suggested or Upcoming). We still proceed to load events.
 
       const eventsData = await apiFetchAll(
         `https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`
@@ -1213,6 +1211,42 @@
           yes, no, maybe, pending,
           isCompleted, isSuggested, isUpcoming, isScheduled, isCancelled,
         };
+      });
+
+      // Second pass: add EVENTS records that have no matching RSVP column
+      // (Suggested, Upcoming events without RSVP fields)
+      const matchedEventIds = new Set(allEvents.map(ev => ev.eventRecordId).filter(Boolean));
+      eventDetails.forEach(ed => {
+        if (matchedEventIds.has(ed._recordId)) return; // already in allEvents
+        if (!ed['EVENT NAME']) return; // skip junk records
+        const normalizedStatus = normalizeStatus(ed['Status'] || '');
+        const statusLower = normalizedStatus.toLowerCase();
+
+        let speakerPhotoUrl = null;
+        if (ed['SPEAKER PHOTO'] && ed['SPEAKER PHOTO'].length > 0) {
+          const photo = ed['SPEAKER PHOTO'][0];
+          speakerPhotoUrl = (photo.thumbnails && photo.thumbnails.large) ? photo.thumbnails.large.url : photo.url;
+        }
+
+        allEvents.push({
+          name: ed['EVENT NAME'],
+          fieldName: null,
+          guestFieldName: null,
+          date: ed['DATE'] || '',
+          speaker: ed['SPEAKER'] || '',
+          time: ed['TIME'] || '',
+          room: ed['ROOM'] || '',
+          speakerPhoto: speakerPhotoUrl,
+          notes: ed['NOTES'] || '',
+          status: normalizedStatus,
+          eventRecordId: ed._recordId,
+          yes: [], no: [], maybe: [], pending: [],
+          isCompleted: statusLower === 'completed',
+          isSuggested: statusLower === 'suggested',
+          isUpcoming: statusLower === 'upcoming' || statusLower === '',
+          isScheduled: statusLower === 'scheduled',
+          isCancelled: statusLower === 'cancelled',
+        });
       });
 
       const tierOrder = { scheduled: 0, upcoming: 1, suggested: 2, completed: 3, cancelled: 4 };
