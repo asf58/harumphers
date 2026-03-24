@@ -555,6 +555,64 @@
       font-style: italic;
     }
 
+    .qe-group-header {
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 14px 0 8px;
+      padding-left: 2px;
+    }
+
+    .qe-group-header:first-child { margin-top: 0; }
+
+    .rsvp-pill.tbd {
+      background: rgba(150,150,150,0.2);
+      color: #aaa;
+    }
+
+    .rsvp-pill.suggested {
+      background: rgba(156,39,176,0.2);
+      color: #CE93D8;
+    }
+
+    .qe-vote-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    .qe-vote-btn {
+      flex: 1;
+      padding: 8px 4px;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+
+    .qe-vote-btn:active { opacity: 0.7; }
+    .qe-vote-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .qe-vote-btn.up-btn { background: rgba(76,175,80,0.3); color: #81C784; }
+    .qe-vote-btn.down-btn { background: rgba(255,107,107,0.3); color: #ff8a8a; }
+
+    .qe-vote-btn.active {
+      border-color: #fff;
+      transform: scale(1.05);
+      box-shadow: 0 0 8px rgba(255,255,255,0.3);
+    }
+
+    .qe-vote-tally {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 6px;
+      text-align: center;
+    }
+
     .admin-note {
       background: rgba(255,215,0,0.1);
       border: 1px solid rgba(255,215,0,0.3);
@@ -887,6 +945,11 @@
       You're logged in as a <strong>guest</strong>. Give Johnny your Member # to log in to your personal member site with RSVP and profile editing.
     </div>
 
+    <div class="quick-events" id="guest-quick-events">
+      <div class="quick-events-title">Events</div>
+      <div class="spinner-small"></div>
+    </div>
+
     <a href="directory.html" class="btn">
       Member Directory
     </a>
@@ -958,7 +1021,7 @@
     </div>
 
     <div class="quick-events" id="quick-events">
-      <div class="quick-events-title">Upcoming Events</div>
+      <div class="quick-events-title">Events</div>
       <div class="spinner-small"></div>
     </div>
 
@@ -1019,6 +1082,18 @@
     const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
     const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
     const REQUESTS_TABLE = 'tblz8NLFYE7XsOhrR';
+    const VOTES_TABLE = 'tblnpBxZ7N6X7004t';
+    let votesData = {}; // eventRecordId -> { memberRecordId: { vote, recordId } }
+    let votingInFlight = new Set();
+
+    function normalizeStatus(raw) {
+      const s = (raw || '').toLowerCase();
+      if (s === 'done') return 'Completed';
+      if (s === 'in progress') return 'Scheduled';
+      if (s === 'todo') return 'Upcoming';
+      if (['suggested', 'upcoming', 'scheduled', 'completed', 'cancelled'].includes(s)) return raw;
+      return 'Upcoming';
+    }
 
     // --- Auth Helpers (duplicated in each page) ---
     function getAuthMode() {
@@ -1100,6 +1175,7 @@
       document.getElementById('member-home').classList.add('hidden');
       document.getElementById('top-bar').classList.remove('hidden');
       document.body.classList.add('logged-in');
+      loadGuestQuickEvents();
     }
 
     function showMemberHome() {
@@ -1326,7 +1402,7 @@
     }
 
     // --- Quick Events with inline RSVP ---
-    let quickEventData = []; // stores { name, date, fieldName, guestFieldName, rsvp, guestCount }
+    let quickEventData = []; // stores event objects with status flags
     let myMemberRecord = null; // full member record for RSVP updates
 
     // Find matching guest field using multiple strategies
@@ -1354,7 +1430,7 @@
 
       if (!info) {
         container.innerHTML = `
-          <div class="quick-events-title">Upcoming Events</div>
+          <div class="quick-events-title">Events</div>
           <div class="quick-events-empty">Log in with your Member # to see your RSVPs</div>
         `;
         return;
@@ -1371,17 +1447,28 @@
           f.name.toUpperCase().startsWith('GUESTS-')
         );
 
-        if (rsvpFields.length === 0) {
-          container.innerHTML = `
-            <div class="quick-events-title">Upcoming Events</div>
-            <div class="quick-events-empty">No events found</div>
-          `;
-          return;
-        }
-
-        // Get event details
+        // Get event details (preserve record IDs)
         const eventsData = await apiFetchAll(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`);
-        const eventDetails = eventsData.records.map(r => r.fields);
+        const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
+
+        // Load votes data
+        votesData = {};
+        try {
+          const votesRaw = await apiFetchAll(
+            `https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`
+          );
+          votesRaw.records.forEach(r => {
+            const f = r.fields;
+            const eventId = f['EVENT RECORD ID'];
+            const memberId = f['MEMBER RECORD ID'];
+            if (!eventId || !memberId) return;
+            if (!votesData[eventId]) votesData[eventId] = {};
+            votesData[eventId][memberId] = {
+              vote: f['VOTE'] || null,
+              recordId: r.id,
+            };
+          });
+        } catch (e) { /* votes load failure is non-fatal */ }
 
         // Get member's full record (no fields filter)
         const memberData = await apiFetch(
@@ -1390,8 +1477,8 @@
         myMemberRecord = memberData;
         const myFields = memberData.fields || {};
 
-        // Build quick event cards (active events only)
-        quickEventData = rsvpFields.map(field => {
+        // Build quick event list from RSVP fields (Scheduled events have RSVP columns)
+        const rsvpEvents = rsvpFields.map(field => {
           const fieldWords = field.name.toUpperCase()
             .replace('RSVP', '').replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
 
@@ -1400,9 +1487,7 @@
             return fieldWords.some(w => w.length > 2 && eName.includes(w));
           });
 
-          const isDone = matched && (matched['Status'] || '').toLowerCase() === 'done';
-
-          // Find paired guest field using improved matching
+          const normalizedStatus = normalizeStatus(matched ? matched['Status'] : '');
           const guestFieldName = findGuestField(guestFields, fieldWords, matched);
 
           let displayName = field.name
@@ -1412,14 +1497,11 @@
             .trim();
           if (matched && matched['EVENT NAME']) displayName = matched['EVENT NAME'];
 
-          // Extract speaker photo thumbnail
           let speakerPhotoUrl = null;
           if (matched && matched['SPEAKER PHOTO'] && matched['SPEAKER PHOTO'].length > 0) {
             const photo = matched['SPEAKER PHOTO'][0];
             speakerPhotoUrl = (photo.thumbnails && photo.thumbnails.large) ? photo.thumbnails.large.url : photo.url;
           }
-
-          const status = matched ? (matched['Status'] || '') : '';
 
           return {
             name: displayName,
@@ -1428,92 +1510,200 @@
             time: matched ? (matched['TIME'] || '') : '',
             room: matched ? (matched['ROOM'] || '') : '',
             speakerPhoto: speakerPhotoUrl,
-            status,
-            isDone,
+            status: normalizedStatus,
+            isScheduled: normalizedStatus === 'Scheduled',
+            isUpcoming: normalizedStatus === 'Upcoming',
+            isSuggested: normalizedStatus === 'Suggested',
+            isCompleted: normalizedStatus === 'Completed',
+            isCancelled: normalizedStatus === 'Cancelled',
+            _recordId: matched ? matched._recordId : null,
             fieldName: field.name,
             guestFieldName,
             rsvp: myFields[field.name] || null,
             guestCount: guestFieldName ? (myFields[guestFieldName] || 0) : 0,
           };
-        }).filter(ev => {
-          if (ev.isDone) return false;
-          const s = (ev.status || '').toLowerCase();
-          if (s === 'cancelled') return false;
-          if (getAuthMode() !== 'admin') {
-            if (s === 'todo') return false;
-          }
+        });
+
+        // Also add events without RSVP columns (Upcoming/Suggested)
+        const rsvpEventRecordIds = new Set(rsvpEvents.map(e => e._recordId).filter(Boolean));
+        const nonRsvpEvents = eventDetails
+          .filter(e => !rsvpEventRecordIds.has(e._recordId))
+          .map(e => {
+            const normalizedStatus = normalizeStatus(e['Status'] || '');
+            let speakerPhotoUrl = null;
+            if (e['SPEAKER PHOTO'] && e['SPEAKER PHOTO'].length > 0) {
+              const photo = e['SPEAKER PHOTO'][0];
+              speakerPhotoUrl = (photo.thumbnails && photo.thumbnails.large) ? photo.thumbnails.large.url : photo.url;
+            }
+            return {
+              name: e['EVENT NAME'] || 'Untitled',
+              date: e['DATE'] || '',
+              speaker: e['SPEAKER'] || '',
+              time: e['TIME'] || '',
+              room: e['ROOM'] || '',
+              speakerPhoto: speakerPhotoUrl,
+              status: normalizedStatus,
+              isScheduled: normalizedStatus === 'Scheduled',
+              isUpcoming: normalizedStatus === 'Upcoming',
+              isSuggested: normalizedStatus === 'Suggested',
+              isCompleted: normalizedStatus === 'Completed',
+              isCancelled: normalizedStatus === 'Cancelled',
+              _recordId: e._recordId,
+              fieldName: null,
+              guestFieldName: null,
+              rsvp: null,
+              guestCount: 0,
+            };
+          });
+
+        // Combine and filter out Completed and Cancelled
+        quickEventData = [...rsvpEvents, ...nonRsvpEvents].filter(ev => {
+          if (ev.isCompleted || ev.isCancelled) return false;
           return true;
         });
 
         renderQuickEvents();
       } catch (err) {
         container.innerHTML = `
-          <div class="quick-events-title">Upcoming Events</div>
+          <div class="quick-events-title">Events</div>
           <div class="quick-events-empty">Could not load events</div>
         `;
       }
     }
 
-    function renderQuickEvents() {
-      const container = document.getElementById('quick-events');
+    // Guest version: loads events without member-specific data
+    async function loadGuestQuickEvents() {
+      const container = document.getElementById('guest-quick-events');
+
+      try {
+        const eventsData = await apiFetchAll(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`);
+        const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
+
+        // Load votes data for tallies
+        votesData = {};
+        try {
+          const votesRaw = await apiFetchAll(
+            `https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`
+          );
+          votesRaw.records.forEach(r => {
+            const f = r.fields;
+            const eventId = f['EVENT RECORD ID'];
+            const memberId = f['MEMBER RECORD ID'];
+            if (!eventId || !memberId) return;
+            if (!votesData[eventId]) votesData[eventId] = {};
+            votesData[eventId][memberId] = {
+              vote: f['VOTE'] || null,
+              recordId: r.id,
+            };
+          });
+        } catch (e) { /* non-fatal */ }
+
+        quickEventData = eventDetails.map(e => {
+          const normalizedStatus = normalizeStatus(e['Status'] || '');
+          let speakerPhotoUrl = null;
+          if (e['SPEAKER PHOTO'] && e['SPEAKER PHOTO'].length > 0) {
+            const photo = e['SPEAKER PHOTO'][0];
+            speakerPhotoUrl = (photo.thumbnails && photo.thumbnails.large) ? photo.thumbnails.large.url : photo.url;
+          }
+          return {
+            name: e['EVENT NAME'] || 'Untitled',
+            date: e['DATE'] || '',
+            speaker: e['SPEAKER'] || '',
+            time: e['TIME'] || '',
+            room: e['ROOM'] || '',
+            speakerPhoto: speakerPhotoUrl,
+            status: normalizedStatus,
+            isScheduled: normalizedStatus === 'Scheduled',
+            isUpcoming: normalizedStatus === 'Upcoming',
+            isSuggested: normalizedStatus === 'Suggested',
+            isCompleted: normalizedStatus === 'Completed',
+            isCancelled: normalizedStatus === 'Cancelled',
+            _recordId: e._recordId,
+            fieldName: null,
+            guestFieldName: null,
+            rsvp: null,
+            guestCount: 0,
+          };
+        }).filter(ev => !ev.isCompleted && !ev.isCancelled);
+
+        renderQuickEvents('guest-quick-events');
+      } catch (err) {
+        container.innerHTML = `
+          <div class="quick-events-title">Events</div>
+          <div class="quick-events-empty">Could not load events</div>
+        `;
+      }
+    }
+
+    function renderQuickEvents(containerId) {
+      containerId = containerId || 'quick-events';
+      const container = document.getElementById(containerId);
+      const isGuest = getAuthMode() === 'guest';
+      const isMemberOrAdmin = !isGuest && getMemberInfo();
 
       if (quickEventData.length === 0) {
         container.innerHTML = `
-          <div class="quick-events-title">Upcoming Events</div>
-          <div class="quick-events-empty">No upcoming events</div>
+          <div class="quick-events-title">Events</div>
+          <div class="quick-events-empty">No events</div>
         `;
         return;
       }
 
-      const eventsHtml = quickEventData.map((ev, i) => {
-        let pillClass = 'none';
-        let pillText = 'NEEDS RSVP';
-        let needsRsvp = true;
-        if (ev.rsvp) {
-          needsRsvp = false;
-          const upper = ev.rsvp.toUpperCase();
-          if (upper.includes('YES') || upper.includes('GOING')) { pillClass = 'yes'; pillText = 'GOING'; }
-          else if (upper.includes('NO')) { pillClass = 'no'; pillText = 'NOT GOING'; }
-          else { pillClass = 'maybe'; pillText = 'MAYBE'; }
-        }
+      // Split into 3 groups
+      const scheduled = quickEventData.filter(ev => ev.isScheduled);
+      const upcoming = quickEventData.filter(ev => ev.isUpcoming);
+      const suggested = quickEventData.filter(ev => ev.isSuggested);
 
-        // Active button highlighting
-        let activeYes = '', activeMaybe = '', activeNo = '';
-        if (ev.rsvp) {
-          const upper = ev.rsvp.toUpperCase();
-          if (upper.includes('YES') || upper.includes('GOING')) activeYes = ' active';
-          else if (upper.includes('NO')) activeNo = ' active';
-          else activeMaybe = ' active';
-        }
+      let html = '<div class="quick-events-title">Events</div>';
 
-        // Guest count row: editable for admin, read-only for member
-        let guestRow = '';
-        if (ev.guestFieldName) {
-          if (getAuthMode() === 'admin') {
-            guestRow = `
-              <div class="qe-guest-row">
-                <span class="qe-guest-label">Guests:</span>
-                <input type="number" class="qe-guest-input" id="qe-guests-${i}"
-                  value="${ev.guestCount}" min="0" max="20"
-                  onchange="submitQeGuestCount(${i})">
-              </div>`;
-          } else {
-            guestRow = `
-              <div class="qe-guest-row">
-                <span class="qe-guest-label">Guests: <strong style="color:#fff">${ev.guestCount}</strong>${ev.guestCount === 0 ? ' <span style="opacity:0.4;font-size:11px">(contact admin to update)</span>' : ''}</span>
-              </div>`;
-          }
-        }
+      // --- Scheduled group ---
+      if (scheduled.length > 0) {
+        html += '<div class="qe-group-header">Scheduled</div>';
+        html += scheduled.map((ev, localIdx) => {
+          const i = quickEventData.indexOf(ev);
+          return buildScheduledCard(ev, i, isGuest);
+        }).join('');
+      }
 
-        const speakerImg = ev.speakerPhoto
-          ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
-          : '';
-        const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
-        const detailLine = detailParts.length > 0
-          ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
-          : '';
+      // --- Upcoming group ---
+      if (upcoming.length > 0) {
+        html += '<div class="qe-group-header">Upcoming</div>';
+        html += upcoming.map((ev, localIdx) => {
+          const i = quickEventData.indexOf(ev);
+          return buildUpcomingCard(ev, i);
+        }).join('');
+      }
 
-        return `<div class="qe-card${needsRsvp ? ' needs-rsvp' : ''}">
+      // --- Suggested group ---
+      if (suggested.length > 0) {
+        html += '<div class="qe-group-header">Suggested Speakers</div>';
+        html += suggested.map((ev, localIdx) => {
+          const i = quickEventData.indexOf(ev);
+          return buildSuggestedCard(ev, i, isGuest, isMemberOrAdmin);
+        }).join('');
+      }
+
+      // If all groups are empty (shouldn't happen given the outer check, but be safe)
+      if (scheduled.length === 0 && upcoming.length === 0 && suggested.length === 0) {
+        html += '<div class="quick-events-empty">No events</div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function buildScheduledCard(ev, i, isGuest) {
+      const speakerImg = ev.speakerPhoto
+        ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+        : '';
+      const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
+      const detailLine = detailParts.length > 0
+        ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+        : '';
+
+      // RSVP pill and buttons only for members/admins with RSVP field
+      if (isGuest || !ev.fieldName) {
+        // Read-only card: no RSVP buttons
+        return `<div class="qe-card">
           <div class="qe-top">
             ${speakerImg}
             <div class="qe-info" style="flex:1;min-width:0">
@@ -1521,22 +1711,248 @@
               ${ev.date ? `<div class="qe-date">${ev.date}</div>` : ''}
               ${detailLine}
             </div>
-            <span class="rsvp-pill ${pillClass}">${pillText}</span>
           </div>
-          <div class="qe-buttons">
-            <button class="qe-btn yes-btn${activeYes}" onclick="submitQeRsvp(${i}, 'YES')">YES</button>
-            <button class="qe-btn maybe-btn${activeMaybe}" onclick="submitQeRsvp(${i}, 'MAYBE')">MAYBE</button>
-            <button class="qe-btn no-btn${activeNo}" onclick="submitQeRsvp(${i}, 'NO')">NO</button>
-          </div>
-          ${guestRow}
-          <div class="qe-msg" id="qe-msg-${i}"></div>
         </div>`;
-      }).join('');
+      }
 
-      container.innerHTML = `
-        <div class="quick-events-title">Upcoming Events</div>
-        ${eventsHtml}
-      `;
+      let pillClass = 'none';
+      let pillText = 'NEEDS RSVP';
+      let needsRsvp = true;
+      if (ev.rsvp) {
+        needsRsvp = false;
+        const upper = ev.rsvp.toUpperCase();
+        if (upper.includes('YES') || upper.includes('GOING')) { pillClass = 'yes'; pillText = 'GOING'; }
+        else if (upper.includes('NO')) { pillClass = 'no'; pillText = 'NOT GOING'; }
+        else { pillClass = 'maybe'; pillText = 'MAYBE'; }
+      }
+
+      let activeYes = '', activeMaybe = '', activeNo = '';
+      if (ev.rsvp) {
+        const upper = ev.rsvp.toUpperCase();
+        if (upper.includes('YES') || upper.includes('GOING')) activeYes = ' active';
+        else if (upper.includes('NO')) activeNo = ' active';
+        else activeMaybe = ' active';
+      }
+
+      let guestRow = '';
+      if (ev.guestFieldName) {
+        if (getAuthMode() === 'admin') {
+          guestRow = `
+            <div class="qe-guest-row">
+              <span class="qe-guest-label">Guests:</span>
+              <input type="number" class="qe-guest-input" id="qe-guests-${i}"
+                value="${ev.guestCount}" min="0" max="20"
+                onchange="submitQeGuestCount(${i})">
+            </div>`;
+        } else {
+          guestRow = `
+            <div class="qe-guest-row">
+              <span class="qe-guest-label">Guests: <strong style="color:#fff">${ev.guestCount}</strong>${ev.guestCount === 0 ? ' <span style="opacity:0.4;font-size:11px">(contact admin to update)</span>' : ''}</span>
+            </div>`;
+        }
+      }
+
+      return `<div class="qe-card${needsRsvp ? ' needs-rsvp' : ''}">
+        <div class="qe-top">
+          ${speakerImg}
+          <div class="qe-info" style="flex:1;min-width:0">
+            <div class="qe-name">${ev.name}</div>
+            ${ev.date ? `<div class="qe-date">${ev.date}</div>` : ''}
+            ${detailLine}
+          </div>
+          <span class="rsvp-pill ${pillClass}">${pillText}</span>
+        </div>
+        <div class="qe-buttons">
+          <button class="qe-btn yes-btn${activeYes}" onclick="submitQeRsvp(${i}, 'YES')">YES</button>
+          <button class="qe-btn maybe-btn${activeMaybe}" onclick="submitQeRsvp(${i}, 'MAYBE')">MAYBE</button>
+          <button class="qe-btn no-btn${activeNo}" onclick="submitQeRsvp(${i}, 'NO')">NO</button>
+        </div>
+        ${guestRow}
+        <div class="qe-msg" id="qe-msg-${i}"></div>
+      </div>`;
+    }
+
+    function buildUpcomingCard(ev, i) {
+      const speakerImg = ev.speakerPhoto
+        ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+        : '';
+      const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
+      const detailLine = detailParts.length > 0
+        ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+        : '';
+
+      return `<div class="qe-card">
+        <div class="qe-top">
+          ${speakerImg}
+          <div class="qe-info" style="flex:1;min-width:0">
+            <div class="qe-name">${ev.name}</div>
+            ${detailLine}
+          </div>
+          <span class="rsvp-pill tbd">TBD</span>
+        </div>
+      </div>`;
+    }
+
+    function buildSuggestedCard(ev, i, isGuest, isMemberOrAdmin) {
+      const speakerImg = ev.speakerPhoto
+        ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+        : '';
+
+      // Vote tally
+      const evVotes = ev._recordId ? (votesData[ev._recordId] || {}) : {};
+      let upCount = 0, downCount = 0;
+      for (const memberId in evVotes) {
+        if (evVotes[memberId].vote === 'UP') upCount++;
+        else if (evVotes[memberId].vote === 'DOWN') downCount++;
+      }
+      const tallyHtml = (upCount > 0 || downCount > 0)
+        ? `<div class="qe-vote-tally">${upCount} up / ${downCount} down</div>`
+        : `<div class="qe-vote-tally">No votes yet</div>`;
+
+      // Vote buttons for members/admins
+      let voteButtonsHtml = '';
+      if (isMemberOrAdmin && ev._recordId) {
+        const info = getMemberInfo();
+        const myVote = info && evVotes[info.recordId] ? evVotes[info.recordId].vote : null;
+        const upActive = myVote === 'UP' ? ' active' : '';
+        const downActive = myVote === 'DOWN' ? ' active' : '';
+        const isInFlight = votingInFlight.has(i);
+        voteButtonsHtml = `
+          <div class="qe-vote-buttons">
+            <button class="qe-vote-btn up-btn${upActive}" id="qe-vote-up-${i}" onclick="submitHomeVote(${i}, 'UP')" ${isInFlight ? 'disabled' : ''}>Interested</button>
+            <button class="qe-vote-btn down-btn${downActive}" id="qe-vote-down-${i}" onclick="submitHomeVote(${i}, 'DOWN')" ${isInFlight ? 'disabled' : ''}>Not Interested</button>
+          </div>`;
+      }
+
+      // Vote status pill for the header
+      let votePill = '';
+      if (isMemberOrAdmin && ev._recordId) {
+        const info = getMemberInfo();
+        const myVote = info && evVotes[info.recordId] ? evVotes[info.recordId].vote : null;
+        if (myVote === 'UP') votePill = '<span class="rsvp-pill yes">INTERESTED</span>';
+        else if (myVote === 'DOWN') votePill = '<span class="rsvp-pill no">NOT INTERESTED</span>';
+        else votePill = '<span class="rsvp-pill suggested">NO VOTE</span>';
+      } else {
+        votePill = '<span class="rsvp-pill suggested">SUGGESTED</span>';
+      }
+
+      return `<div class="qe-card">
+        <div class="qe-top">
+          ${speakerImg}
+          <div class="qe-info" style="flex:1;min-width:0">
+            <div class="qe-name">${ev.name}</div>
+            ${ev.speaker ? `<div style="font-size:11px;color:#888;margin-top:2px">${ev.speaker}</div>` : ''}
+          </div>
+          ${votePill}
+        </div>
+        ${voteButtonsHtml}
+        ${tallyHtml}
+        <div class="qe-msg" id="qe-msg-${i}"></div>
+      </div>`;
+    }
+
+    async function submitHomeVote(idx, value) {
+      if (votingInFlight.has(idx)) return;
+      const info = getMemberInfo();
+      if (!info) return;
+
+      const ev = quickEventData[idx];
+      if (!ev || !ev._recordId) return;
+
+      votingInFlight.add(idx);
+
+      // Disable vote buttons
+      const upBtn = document.getElementById(`qe-vote-up-${idx}`);
+      const downBtn = document.getElementById(`qe-vote-down-${idx}`);
+      [upBtn, downBtn].forEach(b => { if (b) b.disabled = true; });
+
+      const msgEl = document.getElementById(`qe-msg-${idx}`);
+      if (msgEl) { msgEl.className = 'qe-msg'; msgEl.textContent = 'Submitting...'; }
+
+      try {
+        const evVotes = votesData[ev._recordId] || {};
+        const existing = evVotes[info.recordId];
+
+        // If clicking the same vote, toggle it off (clear)
+        const currentVote = existing ? existing.vote : null;
+        const newValue = (currentVote === value) ? null : value;
+
+        if (newValue === null) {
+          // DELETE existing vote
+          if (existing && existing.recordId) {
+            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+            });
+            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
+          }
+          if (votesData[ev._recordId]) {
+            delete votesData[ev._recordId][info.recordId];
+          }
+        } else if (existing && existing.recordId) {
+          // PATCH existing vote record
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { 'VOTE': newValue } })
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
+          votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: existing.recordId };
+        } else {
+          // No local record — query Airtable for deduplication
+          const formula = encodeURIComponent(`AND({MEMBER RECORD ID}="${info.recordId}",{EVENT RECORD ID}="${ev._recordId}")`);
+          const checkRes = await apiFetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
+          if (checkRes.records && checkRes.records.length > 0) {
+            const existingId = checkRes.records[0].id;
+            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
+              method: 'PATCH',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: { 'VOTE': newValue } })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
+            votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: existingId };
+          } else {
+            // POST new vote
+            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fields: {
+                  'MEMBER RECORD ID': info.recordId,
+                  'MEMBER NAME': info.name || '',
+                  'EVENT RECORD ID': ev._recordId,
+                  'VOTE': newValue,
+                }
+              })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
+            votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: data.id };
+          }
+        }
+
+        // Re-render
+        renderQuickEvents();
+        const newMsg = document.getElementById(`qe-msg-${idx}`);
+        if (newMsg) {
+          newMsg.className = 'qe-msg success';
+          newMsg.textContent = newValue === null ? 'Vote cleared' : (newValue === 'UP' ? 'Marked as interested' : 'Marked as not interested');
+          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 2500);
+        }
+      } catch (err) {
+        if (msgEl) {
+          msgEl.className = 'qe-msg error';
+          msgEl.textContent = 'Failed: ' + err.message;
+        }
+      } finally {
+        votingInFlight.delete(idx);
+        const upBtn2 = document.getElementById(`qe-vote-up-${idx}`);
+        const downBtn2 = document.getElementById(`qe-vote-down-${idx}`);
+        [upBtn2, downBtn2].forEach(b => { if (b) b.disabled = false; });
+      }
     }
 
     async function submitQeRsvp(idx, value) {

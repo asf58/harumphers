@@ -98,6 +98,7 @@
     .status-past { background: #555; color: #ccc; }
     .status-active { background: #4CAF50; color: #fff; }
     .status-cancelled { background: #8B0000; color: #fff; }
+    .status-suggested { background: #9C27B0; color: #fff; }
 
     .event-counts {
       display: flex;
@@ -353,6 +354,58 @@
     .attendance-chip.attended { background: rgba(76,175,80,0.15); color: #81C784; }
     .attendance-chip.no-show { background: rgba(255,107,107,0.15); color: #ff8a8a; }
     .attendance-chip.walk-in { background: rgba(100,149,237,0.15); color: #6495ED; }
+
+    /* Voting UI for Suggested events */
+    .vote-section {
+      padding: 12px 16px 16px;
+      border-top: 1px solid #333;
+    }
+    .vote-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #9C27B0;
+    }
+    .vote-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .vote-btn {
+      flex: 1;
+      padding: 10px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .vote-btn:active { opacity: 0.7; }
+    .vote-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .vote-btn.up-btn { background: rgba(76,175,80,0.15); color: #81C784; }
+    .vote-btn.down-btn { background: rgba(255,107,107,0.15); color: #ff8a8a; }
+    .vote-btn.clear-btn { background: #555; color: #ccc; font-size: 12px; flex: 0.6; }
+    .vote-btn.active {
+      border-color: #fff;
+      transform: scale(1.05);
+      box-shadow: 0 0 12px rgba(255,255,255,0.3);
+    }
+    .vote-tally {
+      font-size: 13px;
+      color: #aaa;
+      margin-top: 8px;
+    }
+    .vote-msg {
+      text-align: center;
+      padding: 8px 0 0;
+      font-size: 13px;
+      min-height: 24px;
+    }
+    .vote-msg.success { color: #4CAF50; }
+    .vote-msg.error { color: #ff6b6b; }
+    .vote-chip.up { background: rgba(76,175,80,0.15); color: #81C784; padding: 5px 10px; border-radius: 14px; font-size: 13px; display: inline-block; margin: 2px 3px; }
+    .vote-chip.down { background: rgba(255,107,107,0.15); color: #ff8a8a; padding: 5px 10px; border-radius: 14px; font-size: 13px; display: inline-block; margin: 2px 3px; }
 
     .no-rsvp {
       font-size: 13px;
@@ -728,6 +781,17 @@
 
     .new-event-msg { font-size: 13px; margin-top: 8px; min-height: 20px; }
 
+    .tier-section { margin-bottom: 8px; }
+    .tier-header {
+      font-size: 14px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 16px 0 8px;
+      margin: 0;
+    }
+    .tier-section:first-child .tier-header { padding-top: 0; }
+
     .no-events-msg {
       text-align: center;
       padding: 40px 20px;
@@ -913,11 +977,14 @@
     const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
     const PHOTOS_TABLE = 'tblTQM3DY7BAqs9BL';
     const ATTENDANCE_TABLE = 'tbloa1qulpNHKkFNk';
+    const VOTES_TABLE = 'tblnpBxZ7N6X7004t';
 
     let allMembers = [];
     let allEvents = [];
     let galleryPhotos = {}; // eventRecordId -> [{url, thumb, memberName, caption}]
     let attendanceData = {}; // eventRecordId -> { memberRecordId: { attended, actualGuests, recordId } }
+    let votesData = {}; // eventRecordId -> { memberRecordId: { vote, recordId } }
+    let votingInFlight = new Set(); // per-event lock
     let showingAttendance = null; // eventIdx or null
 
     // Inline edit state: { eventIdx, memberId } or null
@@ -929,6 +996,15 @@
     // Admin edit state
     let editingEvent = null; // eventIdx being edited
     let showingNewEvent = false;
+
+    function normalizeStatus(raw) {
+      const s = (raw || '').toLowerCase();
+      if (s === 'done') return 'Completed';
+      if (s === 'in progress') return 'Scheduled';
+      if (s === 'todo') return 'Upcoming';
+      if (['suggested', 'upcoming', 'scheduled', 'completed', 'cancelled'].includes(s)) return raw;
+      return 'Upcoming';
+    }
 
     async function apiFetch(url) {
       const res = await fetch(url, {
@@ -1107,7 +1183,13 @@
           displayName = matched['EVENT NAME'];
         }
 
-        const isDone = matched && (matched['Status'] || '').toLowerCase() === 'done';
+        const normalizedStatus = normalizeStatus(matched ? matched['Status'] : '');
+        const statusLower = normalizedStatus.toLowerCase();
+        const isCompleted = statusLower === 'completed';
+        const isSuggested = statusLower === 'suggested';
+        const isUpcoming = statusLower === 'upcoming' || statusLower === '';
+        const isScheduled = statusLower === 'scheduled';
+        const isCancelled = statusLower === 'cancelled';
 
         // Extract speaker photo thumbnail URL
         let speakerPhotoUrl = null;
@@ -1126,17 +1208,21 @@
           room: matched ? (matched['ROOM'] || '') : '',
           speakerPhoto: speakerPhotoUrl,
           notes: matched ? (matched['NOTES'] || '') : '',
-          status: matched ? (matched['Status'] || '') : '',
+          status: normalizedStatus,
           eventRecordId: matched ? matched._recordId : null,
           yes, no, maybe, pending,
-          isDone,
+          isCompleted, isSuggested, isUpcoming, isScheduled, isCancelled,
         };
       });
 
+      const tierOrder = { scheduled: 0, upcoming: 1, suggested: 2, completed: 3, cancelled: 4 };
       allEvents.sort((a, b) => {
-        const aActive = (a.status || '').toLowerCase() !== 'done';
-        const bActive = (b.status || '').toLowerCase() !== 'done';
-        if (aActive !== bActive) return aActive ? -1 : 1;
+        const aTier = tierOrder[(a.status || 'upcoming').toLowerCase()] ?? 1;
+        const bTier = tierOrder[(b.status || 'upcoming').toLowerCase()] ?? 1;
+        if (aTier !== bTier) return aTier - bTier;
+        if (a.date && b.date) return a.date.localeCompare(b.date);
+        if (a.date) return -1;
+        if (b.date) return 1;
         return 0;
       });
 
@@ -1183,6 +1269,25 @@
           };
         });
       } catch (e) { /* attendance load failure is non-fatal */ }
+
+      // Load votes for suggested events
+      votesData = {};
+      try {
+        const votesRaw = await apiFetchAll(
+          `https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`
+        );
+        votesRaw.records.forEach(r => {
+          const f = r.fields;
+          const eventId = f['EVENT RECORD ID'];
+          const memberId = f['MEMBER RECORD ID'];
+          if (!eventId || !memberId) return;
+          if (!votesData[eventId]) votesData[eventId] = {};
+          votesData[eventId][memberId] = {
+            vote: f['VOTE'] || null,
+            recordId: r.id,
+          };
+        });
+      } catch (e) { /* votes load failure is non-fatal */ }
 
       render();
     }
@@ -1269,6 +1374,14 @@
                 <input class="new-event-input" id="new-event-notes" placeholder="Optional notes about the event">
               </div>
               <div class="new-event-row">
+                <span class="new-event-label">Status</span>
+                <select class="new-event-input" id="new-event-status">
+                  <option value="Suggested" selected>Suggested</option>
+                  <option value="Upcoming">Upcoming</option>
+                  <option value="Scheduled">Scheduled</option>
+                </select>
+              </div>
+              <div class="new-event-row">
                 <span class="new-event-label">RSVP Field</span>
                 <input class="new-event-input" id="new-event-prefix" placeholder="Auto-generated from name + date">
               </div>
@@ -1292,14 +1405,8 @@
       }
 
       const eventCards = allEvents.map((ev, i) => {
-        // Non-admins: hide todo and cancelled events (done shown in past section)
-        if (authMode !== 'admin') {
-          const s = (ev.status || '').toLowerCase();
-          if (s === 'todo' || s === 'cancelled') return '';
-        }
-
         const sLower = (ev.status || '').toLowerCase();
-        const statusClass = sLower === 'done' ? 'past' : sLower === 'cancelled' ? 'cancelled' : sLower === 'in progress' ? 'active' : 'upcoming';
+        const statusClass = sLower === 'completed' ? 'past' : sLower === 'cancelled' ? 'cancelled' : sLower === 'scheduled' ? 'active' : sLower === 'suggested' ? 'suggested' : 'upcoming';
         const statusLabel = ev.status || 'Upcoming';
 
         function chipHtml(entry, cls) {
@@ -1309,7 +1416,7 @@
           const youClass = isYou ? ' you' : '';
           const isEditing = inlineEdit && inlineEdit.eventIdx === i && inlineEdit.memberId === entry.recordId;
           const editingClass = isEditing ? ' editing' : '';
-          const clickable = authMode === 'admin' && !ev.isDone ? ' clickable' : '';
+          const clickable = authMode === 'admin' && !ev.isCompleted ? ' clickable' : '';
           const onclick = clickable ? ` onclick="event.stopPropagation(); toggleInlineEdit(${i}, '${entry.recordId}', event)"` : '';
 
           let html = `<span class="rsvp-chip ${cls}${youClass}${editingClass}${clickable}"${onclick}>${entry.name}${youLabel}${guestLabel}</span>`;
@@ -1363,7 +1470,7 @@
           section('Going', 'yes', ev.yes),
           section('Maybe', 'maybe', ev.maybe),
           section('Not Going', 'no', ev.no),
-          !ev.isDone ? section('Not Responded', 'pending', ev.pending) : '',
+          !ev.isCompleted ? section('Not Responded', 'pending', ev.pending) : '',
         ].filter(Boolean).join('');
 
         const totalYesGuests = ev.yes.reduce((sum, e) => sum + (e.guestCount || 0), 0);
@@ -1377,8 +1484,11 @@
 
         let rsvpForm = '';
 
-        if (!ev.isDone) {
-          if (authMode === 'guest') {
+        if (ev.isScheduled) {
+          const hasRsvpData = ev.yes.length + ev.no.length + ev.maybe.length + ev.pending.length > 0;
+          if (!hasRsvpData) {
+            rsvpForm = '<div style="padding:12px 16px;font-size:13px;color:#888;font-style:italic">RSVP not yet configured</div>';
+          } else if (authMode === 'guest') {
             rsvpForm = '';
           } else if (authMode === 'member') {
             // Member: RSVP buttons + read-only guest count
@@ -1453,6 +1563,8 @@
               </div>`;
           }
         }
+        // Completed/Cancelled: no rsvpForm (read-only lists come from body variable)
+        // Suggested/Upcoming: no rsvpForm
 
         // Export panel (admin only)
         let exportPanel = '';
@@ -1466,7 +1578,7 @@
           // Count attended members for Done events
           const evAtt = ev.eventRecordId ? (attendanceData[ev.eventRecordId] || {}) : {};
           const attendedCount = Object.values(evAtt).filter(a => a.attended).length;
-          const attendedBtn = ev.isDone && attendedCount > 0
+          const attendedBtn = ev.isCompleted && attendedCount > 0
             ? `<button class="export-filter-btn${f === 'attended' ? ' active' : ''}" style="${f !== 'attended' ? 'border-color:#4CAF50;color:#4CAF50' : ''}" onclick="setExportFilter(${i}, 'attended')">Attended (${attendedCount})</button>`
             : '';
 
@@ -1549,10 +1661,10 @@
               <div class="event-edit-row">
                 <span class="event-edit-label">Status</span>
                 <select class="event-edit-select" id="edit-status-${i}">
-                  <option value=""${!ev.status || eStat === 'upcoming' ? ' selected' : ''}>Upcoming</option>
-                  <option value="Todo"${eStat === 'todo' ? ' selected' : ''}>Todo</option>
-                  <option value="In progress"${eStat === 'in progress' ? ' selected' : ''}>In Progress</option>
-                  <option value="Done"${eStat === 'done' ? ' selected' : ''}>Done</option>
+                  <option value="Suggested"${eStat === 'suggested' ? ' selected' : ''}>Suggested</option>
+                  <option value="Upcoming"${eStat === 'upcoming' || (!ev.status) ? ' selected' : ''}>Upcoming</option>
+                  <option value="Scheduled"${eStat === 'scheduled' ? ' selected' : ''}>Scheduled</option>
+                  <option value="Completed"${eStat === 'completed' ? ' selected' : ''}>Completed</option>
                   <option value="Cancelled"${eStat === 'cancelled' ? ' selected' : ''}>Cancelled</option>
                 </select>
               </div>
@@ -1584,7 +1696,7 @@
             ${speakerPhotoHtml}
             <div style="flex:1;min-width:0">
               <div class="event-name">${ev.name}</div>
-              ${ev.date ? `<div class="event-date">${ev.date}</div>` : ''}
+              ${(() => { const dateDisplay = ev.isUpcoming || ev.isSuggested ? 'TBD' : (ev.date || 'TBD'); return `<div class="event-date">${dateDisplay}</div>`; })()}
               ${detailLine}
               <div class="event-counts">
                 <span class="count-yes">${ev.yes.length} going</span>
@@ -1603,6 +1715,7 @@
             ${ev.speakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${ev.speakerPhoto}" alt="${ev.speaker || 'Speaker'}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
             ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${ev.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g, '<br>')}</div>` : ''}
             ${rsvpForm}
+            ${buildVotingSection(ev, i)}
             ${buildAttendanceSection(ev, i)}
             ${buildGalleryHtml(ev, i)}
             <div class="rsvp-section">
@@ -1612,38 +1725,31 @@
         </div>`;
       });
 
-      // Split into active and past events
-      const activeCards = [];
-      const pastCards = [];
+      // Bucket events into 5 tiers
+      const tiers = { scheduled: [], upcoming: [], suggested: [], completed: [], cancelled: [] };
       allEvents.forEach((ev, i) => {
         const card = eventCards[i];
-        if (!card) return; // filtered out (non-admin viewing todo/done)
-        if (ev.isDone) {
-          pastCards.push(card);
-        } else {
-          activeCards.push(card);
-        }
+        if (!card) return;
+        const tier = (ev.status || 'upcoming').toLowerCase();
+        if (tiers[tier]) tiers[tier].push(card);
+        else tiers.upcoming.push(card);
       });
 
-      let eventsHtml = activeCards.join('');
-      if (pastCards.length > 0) {
-        eventsHtml += `<div style="margin-top:24px;padding:12px 0;border-top:2px solid #444">
-          <h2 style="font-size:16px;color:#888;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px">Past Events</h2>
-          ${pastCards.join('')}
-        </div>`;
+      let eventsHtml = '';
+      function addTier(cards, title) {
+        if (cards.length === 0) return;
+        eventsHtml += `<div class="tier-section"><h2 class="tier-header">${title}</h2>${cards.join('')}</div>`;
       }
+      addTier(tiers.scheduled, 'Scheduled');
+      addTier(tiers.upcoming, 'Upcoming');
+      addTier(tiers.suggested, 'Suggested Speakers');
+      addTier(tiers.completed, 'Completed');
+      addTier(tiers.cancelled, 'Cancelled');
 
       content.innerHTML = topHtml + eventsHtml;
 
-      // Non-admin: show message if no visible events at all
-      if (authMode !== 'admin') {
-        const hasVisible = allEvents.some(ev => {
-          const s = (ev.status || '').toLowerCase();
-          return s !== 'todo' && s !== 'cancelled';
-        });
-        if (!hasVisible) {
-          content.innerHTML += '<div class="no-events-msg">No events right now. Check back soon!</div>';
-        }
+      if (eventsHtml === '') {
+        content.innerHTML += '<div class="no-events-msg">No events right now. Check back soon!</div>';
       }
 
       // Auto-fill RSVP field name when new event form is showing
@@ -1982,7 +2088,7 @@
       const canUpload = authMode === 'member' || authMode === 'admin';
 
       // Show gallery for past events, or if photos exist
-      if (!ev.isDone && photos.length === 0) return '';
+      if (!ev.isCompleted && photos.length === 0) return '';
 
       let gridHtml = '';
       if (photos.length > 0) {
@@ -2227,6 +2333,12 @@
         return;
       }
 
+      if (status.toLowerCase() === 'scheduled' && !date) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Date is required for Scheduled events'; }
+        if (saveBtn) saveBtn.disabled = false;
+        return;
+      }
+
       if (saveBtn) saveBtn.disabled = true;
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Saving...'; }
 
@@ -2287,8 +2399,13 @@
         ev.time = time;
         ev.room = room;
         ev.notes = notes;
-        ev.status = status;
-        ev.isDone = status.toLowerCase() === 'done';
+        const ns = normalizeStatus(status).toLowerCase();
+        ev.isCompleted = ns === 'completed';
+        ev.isSuggested = ns === 'suggested';
+        ev.isUpcoming = ns === 'upcoming' || ns === '';
+        ev.isScheduled = ns === 'scheduled';
+        ev.isCancelled = ns === 'cancelled';
+        ev.status = normalizeStatus(status);
         if (finalPhotoUrl) ev.speakerPhoto = finalPhotoUrl;
         editingEvent = null;
         render();
@@ -2307,6 +2424,7 @@
     async function createNewEvent() {
       const name = document.getElementById('new-event-name').value.trim();
       const date = document.getElementById('new-event-date').value;
+      const status = document.getElementById('new-event-status').value;
       const prefix = document.getElementById('new-event-prefix').value.trim();
       const speaker = document.getElementById('new-event-speaker').value.trim();
       const time = document.getElementById('new-event-time').value.trim();
@@ -2317,55 +2435,66 @@
       const msgEl = document.getElementById('new-event-msg');
       const createBtn = document.getElementById('new-event-create-btn');
 
-      if (!name || !date || !prefix) {
-        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Please fill in name, date, and RSVP field'; }
+      if (!name) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Please fill in the event name'; }
+        return;
+      }
+      if (status === 'Scheduled' && !date) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Date is required for Scheduled events'; }
         return;
       }
 
-      // Validate prefix ends with RSVP
-      const rsvpFieldName = prefix.toUpperCase().endsWith('RSVP') ? prefix.toUpperCase() : prefix.toUpperCase() + ' RSVP';
+      // Validate prefix ends with RSVP (only needed for Scheduled events)
+      const rsvpFieldName = prefix ? (prefix.toUpperCase().endsWith('RSVP') ? prefix.toUpperCase() : prefix.toUpperCase() + ' RSVP') : null;
+
+      if (status === 'Scheduled' && !prefix) {
+        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'RSVP Field is required for Scheduled events'; }
+        return;
+      }
 
       if (createBtn) createBtn.disabled = true;
-      if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating RSVP field...'; }
 
       try {
-        // Step 1: Create singleSelect RSVP field on Members table
-        const fieldRes = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: rsvpFieldName,
-            type: 'singleSelect',
-            options: {
-              choices: [
-                { name: 'YES', color: 'greenLight2' },
-                { name: 'NO', color: 'redLight2' },
-                { name: 'MAYBE', color: 'yellowLight2' }
-              ]
-            }
-          })
-        });
-
-        if (!fieldRes.ok) {
-          const errData = await fieldRes.json().catch(() => ({}));
-          if (fieldRes.status === 403 || fieldRes.status === 422) {
-            throw new Error('Token needs schema.bases:write scope. Update token at airtable.com/create/tokens');
-          }
-          throw new Error(errData.error?.message || `Field creation failed (${fieldRes.status})`);
-        }
-
-        // Step 2: Optionally create guest count field
-        if (enableGuests) {
-          if (msgEl) msgEl.textContent = 'Creating guest field...';
-          const nameWords = name.toUpperCase().split(/\s+/);
-          const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
-          const guestFieldName = `GUESTS-${guestKey}`;
-
-          await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+        // Step 1: Create singleSelect RSVP field on Members table (Scheduled only)
+        if (status === 'Scheduled') {
+          if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating RSVP field...'; }
+          const fieldRes = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
+            body: JSON.stringify({
+              name: rsvpFieldName,
+              type: 'singleSelect',
+              options: {
+                choices: [
+                  { name: 'YES', color: 'greenLight2' },
+                  { name: 'NO', color: 'redLight2' },
+                  { name: 'MAYBE', color: 'yellowLight2' }
+                ]
+              }
+            })
           });
+
+          if (!fieldRes.ok) {
+            const errData = await fieldRes.json().catch(() => ({}));
+            if (fieldRes.status === 403 || fieldRes.status === 422) {
+              throw new Error('Token needs schema.bases:write scope. Update token at airtable.com/create/tokens');
+            }
+            throw new Error(errData.error?.message || `Field creation failed (${fieldRes.status})`);
+          }
+
+          // Step 2: Optionally create guest count field
+          if (enableGuests) {
+            if (msgEl) msgEl.textContent = 'Creating guest field...';
+            const nameWords = name.toUpperCase().split(/\s+/);
+            const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
+            const guestFieldName = `GUESTS-${guestKey}`;
+
+            await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
+            });
+          }
         }
 
         // Step 3: Handle speaker photo upload if provided
@@ -2376,8 +2505,9 @@
         }
 
         // Step 4: Create EVENTS table record with all fields
-        if (msgEl) msgEl.textContent = 'Creating event record...';
-        const eventFields = { 'EVENT NAME': name, 'DATE': date };
+        if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating event record...'; }
+        const eventFields = { 'EVENT NAME': name, 'Status': status };
+        if (date) eventFields['DATE'] = date;
         if (speaker) eventFields['SPEAKER'] = speaker;
         if (time) eventFields['TIME'] = time;
         if (room) eventFields['ROOM'] = room;
@@ -2410,7 +2540,7 @@
 
     // --- Attendance ---
     function buildAttendanceSection(ev, eventIdx) {
-      if (!ev.isDone) return '';
+      if (!ev.isCompleted) return '';
       if (!ev.eventRecordId) return '';
 
       const evAttendance = attendanceData[ev.eventRecordId] || {};
@@ -2624,6 +2754,185 @@
       } catch (err) {
         if (msgEl) { msgEl.className = 'attendance-msg error'; msgEl.textContent = 'Failed: ' + err.message; }
         if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
+    function buildVotingSection(ev, eventIdx) {
+      if (!ev.isSuggested) return '';
+      if (!ev.eventRecordId) return '';
+
+      const evVotes = votesData[ev.eventRecordId] || {};
+      let upCount = 0, downCount = 0;
+      const upVoters = [], downVoters = [];
+
+      for (const memberId in evVotes) {
+        const v = evVotes[memberId];
+        if (v.vote === 'UP') {
+          upCount++;
+          const member = allMembers.find(m => m.id === memberId);
+          if (member) upVoters.push(member.fields['FULL NAME'] || 'Unknown');
+        } else if (v.vote === 'DOWN') {
+          downCount++;
+          const member = allMembers.find(m => m.id === memberId);
+          if (member) downVoters.push(member.fields['FULL NAME'] || 'Unknown');
+        }
+      }
+
+      const noResponse = allMembers.length - upCount - downCount;
+      const tallyHtml = `<div class="vote-tally">${upCount} interested / ${downCount} not interested / ${noResponse} no response</div>`;
+
+      // Guest: tally only
+      if (authMode === 'guest') {
+        return `<div class="vote-section" onclick="event.stopPropagation()">
+          <div class="vote-section-title">Member Interest</div>
+          ${tallyHtml}
+        </div>`;
+      }
+
+      // Member/Admin: vote buttons
+      const myVote = myInfo && evVotes[myInfo.recordId] ? evVotes[myInfo.recordId].vote : null;
+      const upActive = myVote === 'UP' ? ' active' : '';
+      const downActive = myVote === 'DOWN' ? ' active' : '';
+      const clearBtn = myVote ? `<button class="vote-btn clear-btn" id="vote-clear-${eventIdx}" onclick="submitVote(${eventIdx}, null)">Clear</button>` : '';
+
+      // Admin: expandable voter lists
+      let voterLists = '';
+      if (authMode === 'admin') {
+        if (upVoters.length > 0) {
+          voterLists += `<div style="margin-top:8px"><span style="font-size:11px;color:#81C784;font-weight:600">INTERESTED</span> ${upVoters.map(n => `<span class="vote-chip up">${n}</span>`).join('')}</div>`;
+        }
+        if (downVoters.length > 0) {
+          voterLists += `<div style="margin-top:4px"><span style="font-size:11px;color:#ff8a8a;font-weight:600">NOT INTERESTED</span> ${downVoters.map(n => `<span class="vote-chip down">${n}</span>`).join('')}</div>`;
+        }
+      }
+
+      return `<div class="vote-section" onclick="event.stopPropagation()">
+        <div class="vote-section-title">Member Interest</div>
+        <div class="vote-buttons">
+          <button class="vote-btn up-btn${upActive}" id="vote-up-${eventIdx}" onclick="submitVote(${eventIdx}, 'UP')">Interested</button>
+          <button class="vote-btn down-btn${downActive}" id="vote-down-${eventIdx}" onclick="submitVote(${eventIdx}, 'DOWN')">Not Interested</button>
+          ${clearBtn}
+        </div>
+        ${tallyHtml}
+        ${voterLists}
+        <div class="vote-msg" id="vote-msg-${eventIdx}"></div>
+      </div>`;
+    }
+
+    async function submitVote(eventIdx, value) {
+      if (votingInFlight.has(eventIdx)) return;
+      if (!myInfo) return;
+
+      votingInFlight.add(eventIdx);
+
+      const ev = allEvents[eventIdx];
+      if (!ev || !ev.eventRecordId) {
+        votingInFlight.delete(eventIdx);
+        return;
+      }
+
+      // Disable vote buttons
+      const upBtn = document.getElementById(`vote-up-${eventIdx}`);
+      const downBtn = document.getElementById(`vote-down-${eventIdx}`);
+      const clearBtn = document.getElementById(`vote-clear-${eventIdx}`);
+      [upBtn, downBtn, clearBtn].forEach(b => { if (b) b.disabled = true; });
+
+      const msgEl = document.getElementById(`vote-msg-${eventIdx}`);
+      if (msgEl) { msgEl.className = 'vote-msg'; msgEl.textContent = 'Submitting...'; }
+
+      try {
+        const evVotes = votesData[ev.eventRecordId] || {};
+        const existing = evVotes[myInfo.recordId];
+
+        if (value === null) {
+          // DELETE existing vote
+          if (existing && existing.recordId) {
+            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+            });
+            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
+          }
+          // Remove from local cache
+          if (votesData[ev.eventRecordId]) {
+            delete votesData[ev.eventRecordId][myInfo.recordId];
+          }
+        } else if (existing && existing.recordId) {
+          // PATCH existing vote record
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { 'VOTE': value } })
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+          }
+          // Update local cache
+          if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
+          votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: existing.recordId };
+        } else {
+          // No local record — query Airtable for deduplication
+          const formula = encodeURIComponent(`AND({MEMBER RECORD ID}="${myInfo.recordId}",{EVENT RECORD ID}="${ev.eventRecordId}")`);
+          const checkRes = await apiFetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
+          if (checkRes.records && checkRes.records.length > 0) {
+            // Found existing — PATCH
+            const existingId = checkRes.records[0].id;
+            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
+              method: 'PATCH',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: { 'VOTE': value } })
+            });
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+            }
+            if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
+            votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: existingId };
+          } else {
+            // No existing record — POST new
+            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fields: {
+                  'MEMBER RECORD ID': myInfo.recordId,
+                  'MEMBER NAME': myInfo.name || '',
+                  'EVENT RECORD ID': ev.eventRecordId,
+                  'VOTE': value,
+                }
+              })
+            });
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
+            votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: data.id };
+          }
+        }
+
+        // Show success
+        render();
+        const newMsg = document.getElementById(`vote-msg-${eventIdx}`);
+        if (newMsg) {
+          newMsg.className = 'vote-msg success';
+          newMsg.textContent = value === null ? 'Vote cleared' : (value === 'UP' ? 'Marked as interested' : 'Marked as not interested');
+          setTimeout(() => { if (newMsg) newMsg.textContent = ''; }, 3000);
+        }
+      } catch (err) {
+        if (msgEl) {
+          msgEl.className = 'vote-msg error';
+          msgEl.textContent = 'Failed: ' + err.message;
+        }
+      } finally {
+        votingInFlight.delete(eventIdx);
+        // Re-enable buttons
+        const upBtn2 = document.getElementById(`vote-up-${eventIdx}`);
+        const downBtn2 = document.getElementById(`vote-down-${eventIdx}`);
+        const clearBtn2 = document.getElementById(`vote-clear-${eventIdx}`);
+        [upBtn2, downBtn2, clearBtn2].forEach(b => { if (b) b.disabled = false; });
       }
     }
 
