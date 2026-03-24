@@ -224,6 +224,136 @@
       min-height: 18px;
     }
 
+    /* Attendance checklist */
+    .attendance-btn {
+      display: block;
+      width: calc(100% - 32px);
+      margin: 8px 16px;
+      padding: 12px;
+      border: 2px solid #4CAF50;
+      border-radius: 10px;
+      background: rgba(76,175,80,0.1);
+      color: #4CAF50;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      text-align: center;
+    }
+    .attendance-btn:active { opacity: 0.7; }
+
+    .attendance-panel {
+      padding: 0 16px 16px;
+    }
+    .attendance-panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #FFD700;
+      margin-bottom: 8px;
+    }
+    .attendance-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: #222;
+      border-radius: 8px;
+      margin-bottom: 4px;
+    }
+    .attendance-row label {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .attendance-row input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: #4CAF50;
+      flex-shrink: 0;
+    }
+    .attendance-rsvp-pill {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .attendance-rsvp-pill.yes { background: rgba(76,175,80,0.2); color: #81C784; }
+    .attendance-rsvp-pill.no { background: rgba(255,107,107,0.2); color: #ff8a8a; }
+    .attendance-rsvp-pill.maybe { background: rgba(255,215,0,0.2); color: #FFD700; }
+    .attendance-rsvp-pill.pending { background: rgba(255,165,0,0.2); color: #FFA500; }
+    .attendance-guest-input {
+      width: 50px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #333;
+      color: #fff;
+      font-size: 13px;
+      text-align: center;
+      outline: none;
+      flex-shrink: 0;
+    }
+    .attendance-guest-input:focus { border-color: #FFD700; }
+    .attendance-save-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #4CAF50;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 8px;
+    }
+    .attendance-save-btn:active { opacity: 0.7; }
+    .attendance-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .attendance-msg {
+      text-align: center;
+      padding: 6px 0;
+      font-size: 13px;
+      min-height: 22px;
+    }
+    .attendance-msg.success { color: #4CAF50; }
+    .attendance-msg.error { color: #ff6b6b; }
+
+    /* Attendance summary for past events (all users) */
+    .attendance-summary {
+      padding: 0 16px 12px;
+      border-top: 1px solid #333;
+      margin-top: 4px;
+    }
+    .attendance-summary-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #4CAF50;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 10px 0 6px;
+    }
+    .attendance-summary-stats {
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+    .attendance-chip {
+      background: #333;
+      padding: 5px 10px;
+      border-radius: 14px;
+      font-size: 13px;
+      display: inline-block;
+      margin: 2px 3px;
+    }
+    .attendance-chip.attended { background: rgba(76,175,80,0.15); color: #81C784; }
+    .attendance-chip.no-show { background: rgba(255,107,107,0.15); color: #ff8a8a; }
+    .attendance-chip.walk-in { background: rgba(100,149,237,0.15); color: #6495ED; }
+
     .no-rsvp {
       font-size: 13px;
       color: #666;
@@ -782,10 +912,13 @@
     const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
     const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
     const PHOTOS_TABLE = 'tblTQM3DY7BAqs9BL';
+    const ATTENDANCE_TABLE = 'tbloa1qulpNHKkFNk';
 
     let allMembers = [];
     let allEvents = [];
     let galleryPhotos = {}; // eventRecordId -> [{url, thumb, memberName, caption}]
+    let attendanceData = {}; // eventRecordId -> { memberRecordId: { attended, actualGuests, recordId } }
+    let showingAttendance = null; // eventIdx or null
 
     // Inline edit state: { eventIdx, memberId } or null
     let inlineEdit = null;
@@ -1030,6 +1163,26 @@
           });
         });
       } catch (e) { /* gallery load failure is non-fatal */ }
+
+      // Load attendance records
+      attendanceData = {};
+      try {
+        const attData = await apiFetchAll(
+          `https://api.airtable.com/v0/${BASE_ID}/${ATTENDANCE_TABLE}`
+        );
+        attData.records.forEach(r => {
+          const f = r.fields;
+          const eventId = f['EVENT RECORD ID'];
+          const memberId = f['MEMBER RECORD ID'];
+          if (!eventId || !memberId) return;
+          if (!attendanceData[eventId]) attendanceData[eventId] = {};
+          attendanceData[eventId][memberId] = {
+            attended: !!f['ATTENDED'],
+            actualGuests: f['ACTUAL GUESTS'] || 0,
+            recordId: r.id,
+          };
+        });
+      } catch (e) { /* attendance load failure is non-fatal */ }
 
       render();
     }
@@ -1442,6 +1595,7 @@
             ${ev.speakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${ev.speakerPhoto}" alt="${ev.speaker || 'Speaker'}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
             ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${ev.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g, '<br>')}</div>` : ''}
             ${rsvpForm}
+            ${buildAttendanceSection(ev, i)}
             ${buildGalleryHtml(ev, i)}
             <div class="rsvp-section">
               ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
@@ -2226,11 +2380,231 @@
       }
     }
 
+    // --- Attendance ---
+    function buildAttendanceSection(ev, eventIdx) {
+      if (!ev.isDone) return '';
+      if (!ev.eventRecordId) return '';
+
+      const evAttendance = attendanceData[ev.eventRecordId] || {};
+      const hasAttendance = Object.keys(evAttendance).length > 0;
+
+      // Admin: show checklist button/panel
+      if (authMode === 'admin' && showingAttendance === eventIdx) {
+        // Build checklist rows sorted by RSVP status
+        const allEntries = [...ev.yes.map(e => ({...e, rsvp: 'YES'})),
+                           ...ev.maybe.map(e => ({...e, rsvp: 'MAYBE'})),
+                           ...ev.no.map(e => ({...e, rsvp: 'NO'})),
+                           ...ev.pending.map(e => ({...e, rsvp: null}))];
+
+        const rows = allEntries.map((entry, ri) => {
+          const att = evAttendance[entry.recordId];
+          const checked = att ? att.attended : false;
+          const guests = att ? att.actualGuests : 0;
+          const rsvpCls = entry.rsvp === 'YES' ? 'yes' : entry.rsvp === 'NO' ? 'no' : entry.rsvp === 'MAYBE' ? 'maybe' : 'pending';
+          const rsvpLabel = entry.rsvp || 'No RSVP';
+          return `<div class="attendance-row">
+            <label>
+              <input type="checkbox" id="att-chk-${eventIdx}-${ri}" ${checked ? 'checked' : ''}>
+              <span>${entry.name}</span>
+            </label>
+            <span class="attendance-rsvp-pill ${rsvpCls}">${rsvpLabel}</span>
+            <input type="number" class="attendance-guest-input" id="att-guests-${eventIdx}-${ri}"
+              value="${guests}" min="0" max="20" placeholder="0" title="Guests">
+          </div>`;
+        }).join('');
+
+        return `
+          <div class="attendance-panel" onclick="event.stopPropagation()">
+            <div class="attendance-panel-title">Record Attendance</div>
+            ${rows}
+            <button class="attendance-save-btn" id="att-save-btn-${eventIdx}" onclick="saveAttendance(${eventIdx})">Save Attendance</button>
+            <button class="attendance-btn" style="border-color:#888;color:#888;margin:8px 0 0;width:100%" onclick="toggleAttendance(${eventIdx})">Cancel</button>
+            <div class="attendance-msg" id="att-msg-${eventIdx}"></div>
+          </div>`;
+      }
+
+      // Admin: show button to open checklist + summary if data exists
+      if (authMode === 'admin') {
+        const btnLabel = hasAttendance ? 'Edit Attendance' : 'Record Attendance';
+        let adminHtml = `<button class="attendance-btn" onclick="event.stopPropagation(); toggleAttendance(${eventIdx})">${btnLabel}</button>`;
+        if (hasAttendance) {
+          adminHtml += buildAttendanceSummary(ev, evAttendance);
+        }
+        return adminHtml;
+      }
+
+      // Non-admin: show attendance summary if data exists
+      if (!hasAttendance) return '';
+      return buildAttendanceSummary(ev, evAttendance);
+    }
+
+    function buildAttendanceSummary(ev, evAttendance) {
+      const allEntries = [...ev.yes, ...ev.maybe, ...ev.no, ...ev.pending];
+      const attended = [];
+      const noShows = []; // RSVP'd YES but didn't attend
+      const walkIns = []; // No RSVP (or NO/MAYBE) but attended
+
+      allEntries.forEach(entry => {
+        const att = evAttendance[entry.recordId];
+        if (!att) return;
+        const rsvpYes = ev.yes.some(e => e.recordId === entry.recordId);
+        if (att.attended) {
+          const guestLabel = att.actualGuests > 0 ? ` (+${att.actualGuests})` : '';
+          if (!rsvpYes) {
+            walkIns.push({ name: entry.name, guestLabel });
+          } else {
+            attended.push({ name: entry.name, guestLabel });
+          }
+        } else if (rsvpYes) {
+          noShows.push({ name: entry.name });
+        }
+      });
+
+      // Also include attended members who RSVP'd yes (they're just "attended")
+      const totalAttended = attended.length + walkIns.length;
+      const totalGuests = Object.values(evAttendance)
+        .filter(a => a.attended)
+        .reduce((sum, a) => sum + (a.actualGuests || 0), 0);
+
+      if (totalAttended === 0 && noShows.length === 0) return '';
+
+      let html = `<div class="attendance-summary">
+        <div class="attendance-summary-title">Attendance</div>
+        <div class="attendance-summary-stats">${totalAttended} attended${totalGuests > 0 ? ` + ${totalGuests} guest${totalGuests !== 1 ? 's' : ''}` : ''}${noShows.length > 0 ? ` &middot; ${noShows.length} no-show${noShows.length !== 1 ? 's' : ''}` : ''}</div>`;
+
+      if (attended.length > 0) {
+        html += `<div style="margin-bottom:4px">${attended.map(a =>
+          `<span class="attendance-chip attended">${a.name}${a.guestLabel}</span>`).join('')}</div>`;
+      }
+      if (walkIns.length > 0) {
+        html += `<div style="margin-bottom:4px"><span style="font-size:11px;color:#6495ED;font-weight:600">WALK-INS</span> ${walkIns.map(a =>
+          `<span class="attendance-chip walk-in">${a.name}${a.guestLabel}</span>`).join('')}</div>`;
+      }
+      if (noShows.length > 0) {
+        html += `<div><span style="font-size:11px;color:#ff8a8a;font-weight:600">NO-SHOWS</span> ${noShows.map(a =>
+          `<span class="attendance-chip no-show">${a.name}</span>`).join('')}</div>`;
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function toggleAttendance(eventIdx) {
+      showingAttendance = showingAttendance === eventIdx ? null : eventIdx;
+      render();
+    }
+
+    async function saveAttendance(eventIdx) {
+      const ev = allEvents[eventIdx];
+      if (!ev || !ev.eventRecordId) return;
+
+      const msgEl = document.getElementById(`att-msg-${eventIdx}`);
+      const saveBtn = document.getElementById(`att-save-btn-${eventIdx}`);
+      if (saveBtn) saveBtn.disabled = true;
+      if (msgEl) { msgEl.className = 'attendance-msg'; msgEl.textContent = 'Saving...'; }
+
+      const allEntries = [...ev.yes.map(e => ({...e, rsvp: 'YES'})),
+                         ...ev.maybe.map(e => ({...e, rsvp: 'MAYBE'})),
+                         ...ev.no.map(e => ({...e, rsvp: 'NO'})),
+                         ...ev.pending.map(e => ({...e, rsvp: null}))];
+
+      const evAttendance = attendanceData[ev.eventRecordId] || {};
+
+      // Collect records to create and update
+      const toCreate = [];
+      const toUpdate = [];
+
+      allEntries.forEach((entry, ri) => {
+        const chk = document.getElementById(`att-chk-${eventIdx}-${ri}`);
+        const gInput = document.getElementById(`att-guests-${eventIdx}-${ri}`);
+        const attended = chk ? chk.checked : false;
+        const actualGuests = gInput ? parseInt(gInput.value) || 0 : 0;
+        const existing = evAttendance[entry.recordId];
+
+        if (existing) {
+          // Update if changed
+          if (existing.attended !== attended || existing.actualGuests !== actualGuests) {
+            toUpdate.push({
+              id: existing.recordId,
+              fields: { 'ATTENDED': attended, 'ACTUAL GUESTS': actualGuests }
+            });
+          }
+        } else {
+          // Only create if attended or has guests (skip empty rows)
+          if (attended || actualGuests > 0) {
+            toCreate.push({
+              fields: {
+                'MEMBER RECORD ID': entry.recordId,
+                'MEMBER NAME': entry.name,
+                'EVENT RECORD ID': ev.eventRecordId,
+                'ATTENDED': attended,
+                'ACTUAL GUESTS': actualGuests,
+              }
+            });
+          }
+        }
+      });
+
+      try {
+        // Batch creates (Airtable max 10 per request)
+        for (let j = 0; j < toCreate.length; j += 10) {
+          const batch = toCreate.slice(j, j + 10);
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: batch })
+          });
+          if (!res.ok) throw new Error(`Create failed: ${res.status}`);
+          // Update local cache with new record IDs
+          const data = await res.json();
+          data.records.forEach(r => {
+            const f = r.fields;
+            const memberId = f['MEMBER RECORD ID'];
+            if (!attendanceData[ev.eventRecordId]) attendanceData[ev.eventRecordId] = {};
+            attendanceData[ev.eventRecordId][memberId] = {
+              attended: !!f['ATTENDED'],
+              actualGuests: f['ACTUAL GUESTS'] || 0,
+              recordId: r.id,
+            };
+          });
+        }
+
+        // Batch updates (Airtable max 10 per request)
+        for (let j = 0; j < toUpdate.length; j += 10) {
+          const batch = toUpdate.slice(j, j + 10);
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: batch })
+          });
+          if (!res.ok) throw new Error(`Update failed: ${res.status}`);
+          // Update local cache
+          const data = await res.json();
+          data.records.forEach(r => {
+            const f = r.fields;
+            const memberId = f['MEMBER RECORD ID'];
+            if (attendanceData[ev.eventRecordId] && attendanceData[ev.eventRecordId][memberId]) {
+              attendanceData[ev.eventRecordId][memberId].attended = !!f['ATTENDED'];
+              attendanceData[ev.eventRecordId][memberId].actualGuests = f['ACTUAL GUESTS'] || 0;
+            }
+          });
+        }
+
+        if (msgEl) { msgEl.className = 'attendance-msg success'; msgEl.textContent = 'Attendance saved!'; }
+        showingAttendance = null;
+        setTimeout(() => render(), 1000);
+      } catch (err) {
+        if (msgEl) { msgEl.className = 'attendance-msg error'; msgEl.textContent = 'Failed: ' + err.message; }
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
     async function refreshEvents() {
       document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div><p>Refreshing...</p></div>';
       editingEvent = null;
       exportState = null;
       showingNewEvent = false;
+      showingAttendance = null;
       openEvents.clear();
       try {
         await loadEvents();
