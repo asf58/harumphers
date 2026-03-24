@@ -2403,7 +2403,7 @@
           const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
             method: 'PATCH',
             headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields })
+            body: JSON.stringify({ typecast: true, fields })
           });
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
@@ -2415,7 +2415,7 @@
           const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields })
+            body: JSON.stringify({ typecast: true, fields })
           });
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
@@ -2550,7 +2550,7 @@
         await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: eventFields })
+          body: JSON.stringify({ typecast: true, fields: eventFields })
         });
 
         // Reload everything
