@@ -1504,7 +1504,7 @@
           section('Going', 'yes', ev.yes),
           section('Maybe', 'maybe', ev.maybe),
           section('Not Going', 'no', ev.no),
-          !ev.isCompleted ? section('Not Responded', 'pending', ev.pending) : '',
+          (ev.isScheduled) ? section('Not Responded', 'pending', ev.pending) : '',
         ].filter(Boolean).join('');
 
         const totalYesGuests = ev.yes.reduce((sum, e) => sum + (e.guestCount || 0), 0);
@@ -1732,12 +1732,12 @@
               <div class="event-name">${ev.name}</div>
               ${(() => { const dateDisplay = ev.isUpcoming || ev.isSuggested ? 'TBD' : (ev.date || 'TBD'); return `<div class="event-date">${dateDisplay}</div>`; })()}
               ${detailLine}
-              <div class="event-counts">
+              ${(ev.isScheduled || ev.isCompleted || ev.isCancelled) && total > 0 ? `<div class="event-counts">
                 <span class="count-yes">${ev.yes.length} going</span>
                 <span class="count-maybe">${ev.maybe.length} maybe</span>
                 <span class="count-no">${ev.no.length} no</span>
                 <span>${total} responded${guestCountNote}</span>
-              </div>
+              </div>` : ''}
             </div>
             <span class="event-status status-${statusClass}">${statusLabel}</span>
             <span class="chevron">&#8250;</span>
@@ -1752,9 +1752,9 @@
             ${buildVotingSection(ev, i)}
             ${buildAttendanceSection(ev, i)}
             ${buildGalleryHtml(ev, i)}
-            <div class="rsvp-section">
+            ${(ev.isScheduled || ev.isCompleted || ev.isCancelled) ? `<div class="rsvp-section">
               ${body || '<div class="no-rsvp">No RSVPs yet</div>'}
-            </div>
+            </div>` : ''}
           </div>
         </div>`;
       });
