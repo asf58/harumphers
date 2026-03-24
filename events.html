@@ -1869,8 +1869,9 @@
         showExportMsg(eventIdx, 'No email addresses found', true);
         return;
       }
-      window.location.href = 'mailto:' + emails.join(',');
-      showExportMsg(eventIdx, `Opening email for ${emails.length} recipient${emails.length > 1 ? 's' : ''}`);
+      // Use BCC so recipients don't see each other's addresses
+      window.location.href = 'mailto:?bcc=' + emails.join(',');
+      showExportMsg(eventIdx, `Opening email for ${emails.length} recipient${emails.length > 1 ? 's' : ''} (BCC)`);
     }
 
     function exportSms(eventIdx) {
@@ -1880,15 +1881,9 @@
         showExportMsg(eventIdx, 'No phone numbers found', true);
         return;
       }
-      if (phones.length === 1) {
-        // Single recipient: sms: URI works reliably
-        window.location.href = 'sms:' + phones[0];
-        showExportMsg(eventIdx, 'Opening messages');
-      } else {
-        // Group SMS URIs are unreliable on iOS — copy numbers instead
-        copyToClipboard(phones.join(', '), eventIdx,
-          `${phones.length} numbers copied — paste into group message`);
-      }
+      // sms: URI with comma-separated numbers opens group message on iOS
+      window.location.href = 'sms:' + phones.join(',');
+      showExportMsg(eventIdx, `Opening messages for ${phones.length} recipient${phones.length > 1 ? 's' : ''}`);
     }
 
     function copyToClipboard(text, eventIdx, successMsg) {
@@ -1914,15 +1909,35 @@
       document.body.appendChild(ta);
       ta.focus();
       ta.select();
-      // iOS Safari requires setSelectionRange
       ta.setSelectionRange(0, text.length);
+      let ok = false;
       try {
-        document.execCommand('copy');
-        showExportMsg(eventIdx, successMsg);
-      } catch (e) {
-        showExportMsg(eventIdx, 'Copy failed — tap and hold to select text', true);
-      }
+        ok = document.execCommand('copy');
+      } catch (e) { /* ignore */ }
       document.body.removeChild(ta);
+      if (ok) {
+        showExportMsg(eventIdx, successMsg);
+      } else {
+        // Clipboard failed (common on iOS PWA) — show selectable text
+        showCopyableText(text, eventIdx);
+      }
+    }
+
+    function showCopyableText(text, eventIdx) {
+      const el = document.getElementById(`export-msg-${eventIdx}`);
+      if (!el) return;
+      el.innerHTML = `<div style="margin-top:6px">
+        <div style="color:#ff6b6b;margin-bottom:6px">Tap the box below, Select All, then Copy:</div>
+        <textarea readonly style="width:100%;min-height:48px;padding:8px;border-radius:6px;border:1px solid #666;background:#2a2a2a;color:#fff;font-size:13px;font-family:inherit;-webkit-user-select:text;user-select:text">${text.replace(/</g, '&lt;')}</textarea>
+      </div>`;
+      // Auto-select the textarea content for easy copying
+      const newTa = el.querySelector('textarea');
+      if (newTa) {
+        newTa.addEventListener('focus', () => {
+          newTa.select();
+          newTa.setSelectionRange(0, newTa.value.length);
+        });
+      }
     }
 
     function exportCopyEmails(eventIdx) {
