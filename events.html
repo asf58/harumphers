@@ -1480,7 +1480,7 @@
                   <div class="guest-count-row">
                     <span class="guest-count-label">Guests:</span>
                     <input type="number" class="guest-count-input" id="inline-guests-${i}-${entry.recordId}"
-                      value="${memberGuests}" min="0" max="20"
+                      value="${memberGuests}" min="0" max="9"
                       onchange="submitInlineGuestCount(${i}, '${entry.recordId}')">
                   </div>
                 ` : ''}
@@ -1525,7 +1525,7 @@
           } else if (authMode === 'guest') {
             rsvpForm = '';
           } else if (authMode === 'member') {
-            // Member: RSVP buttons + read-only guest count
+            // Member: RSVP buttons + editable guest count
             const myRsvp = getMyRsvpForEvent(ev);
             const myGuests = getMyGuestCountForEvent(ev);
 
@@ -1536,12 +1536,6 @@
               else if (upper.includes('NO')) activeClass.no = ' active';
               else activeClass.maybe = ' active';
             }
-
-            // Guest count is read-only for members
-            const guestDisplay = ev.guestFieldName
-              ? `<div class="guest-count-display">Guests: <strong>${myGuests}</strong>${myGuests === 0 ? ' (contact admin to update)' : ''}</div>`
-              : '';
-
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
                 <div class="rsvp-form-title">Your RSVP</div>
@@ -1552,7 +1546,14 @@
                   <button class="rsvp-btn no-btn${activeClass.no}" onclick="submitMemberRsvp(${i}, 'NO')">NO</button>
                   ${myRsvp ? `<button class="rsvp-btn clear-btn" onclick="submitMemberRsvp(${i}, null)">CLEAR</button>` : ''}
                 </div>
-                ${guestDisplay}
+                ${ev.guestFieldName ? `
+                  <div class="guest-count-row">
+                    <span class="guest-count-label">Your guests:</span>
+                    <input type="number" class="guest-count-input" id="guest-count-${i}"
+                      value="${myGuests}" min="0" max="9"
+                      onchange="submitGuestCount(${i})">
+                  </div>
+                ` : ''}
                 <div class="rsvp-msg" id="rsvp-msg-${i}"></div>
               </div>`;
           } else if (authMode === 'admin') {
@@ -1583,7 +1584,7 @@
                   <div class="guest-count-row">
                     <span class="guest-count-label">Your guests:</span>
                     <input type="number" class="guest-count-input" id="guest-count-${i}"
-                      value="${myGuests}" min="0" max="20"
+                      value="${myGuests}" min="0" max="9"
                       onchange="submitGuestCount(${i})">
                   </div>
                 ` : ''}
@@ -1852,7 +1853,7 @@
       }
     }
 
-    // Admin guest count for own record
+    // Guest count for own record (member + admin)
     async function submitGuestCount(eventIdx) {
       if (!myInfo) return;
       const ev = allEvents[eventIdx];
