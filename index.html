@@ -1230,7 +1230,8 @@
 
           if (data.records && data.records.length > 0) {
             const rec = data.records[0];
-            localStorage.setItem('harumphers_auth', 'member');
+            const role = rec.fields['IS ADMIN'] === true ? 'admin' : 'member';
+            localStorage.setItem('harumphers_auth', role);
             localStorage.setItem('harumphers_member_id', rec.id);
             localStorage.setItem('harumphers_member_name', rec.fields['FULL NAME'] || '');
             localStorage.setItem('harumphers_duq_id', raw);
