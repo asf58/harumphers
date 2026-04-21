@@ -442,6 +442,70 @@
       color: #ff6b6b;
       border: 1px solid rgba(255,107,107,0.4);
     }
+
+    /* Export feature (admin only) */
+    .export-trigger {
+      background: #444;
+      color: #FFD700;
+      border: 1px solid #666;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .export-trigger:active { opacity: 0.7; }
+
+    .export-panel {
+      background: #1f1f1f;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 14px;
+      margin: 8px 16px 12px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .export-panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFD700;
+      margin-bottom: 10px;
+    }
+    .export-count {
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+    .export-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .export-action-btn {
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #555;
+      background: #333;
+      color: #fff;
+      font-family: inherit;
+    }
+    .export-action-btn:active { opacity: 0.7; }
+    .export-action-btn.email { background: #2a6496; border-color: #2a6496; }
+    .export-action-btn.sms { background: #4CAF50; border-color: #4CAF50; }
+    .export-action-btn.copy { background: #555; border-color: #666; }
+    .export-msg {
+      font-size: 12px;
+      color: #4CAF50;
+      min-height: 18px;
+      margin-top: 8px;
+    }
+    .export-msg.error { color: #ff6b6b; }
   </style>
 </head>
 <body>
@@ -451,6 +515,7 @@
     <div class="header-links">
       <a href="index.html" class="back-link">Home</a>
       <a href="events.html" class="back-link">Events</a>
+      <button id="export-trigger" class="export-trigger" style="display:none" onclick="toggleExportPanel()">Export</button>
       <a href="#" class="logout-link" onclick="logout()">Logout</a>
     </div>
   </header>
@@ -458,6 +523,8 @@
   <div class="search-bar">
     <input type="search" id="search" placeholder="Search members..." autocomplete="off">
   </div>
+
+  <div id="export-panel-host"></div>
 
   <div id="count" class="member-count"></div>
   <div id="content" class="members">
@@ -518,6 +585,8 @@
 
     let allMembers = [];
     let allRecords = [];
+    let lastRendered = [];
+    let exportPanelOpen = false;
 
     async function applyApprovedChanges() {
       try {
@@ -615,6 +684,8 @@
     function render(members) {
       const content = document.getElementById('content');
       const countEl = document.getElementById('count');
+      lastRendered = members;
+      renderExportPanel();
 
       if (members.length === 0) {
         content.innerHTML = '<div class="no-results">No members found</div>';
@@ -843,6 +914,109 @@
         msgEl.textContent = 'Failed to save. Try again.';
         submitBtn.disabled = false;
       }
+    }
+
+    // --- Export (admin only) ---
+    function toggleExportPanel() {
+      exportPanelOpen = !exportPanelOpen;
+      const trig = document.getElementById('export-trigger');
+      if (trig) trig.textContent = exportPanelOpen ? 'Close' : 'Export';
+      renderExportPanel();
+    }
+
+    function renderExportPanel() {
+      const host = document.getElementById('export-panel-host');
+      if (!host) return;
+      if (authMode !== 'admin' || !exportPanelOpen) {
+        host.innerHTML = '';
+        return;
+      }
+      const list = lastRendered;
+      const emailCount = list.filter(m => m.email).length;
+      const phoneCount = list.filter(m => m.phone).length;
+      host.innerHTML = `
+        <div class="export-panel">
+          <div class="export-panel-title">Export ${list.length === allMembers.length ? 'All Members' : 'Filtered Members'}</div>
+          <div class="export-count">${list.length} member${list.length !== 1 ? 's' : ''} &middot; ${emailCount} email${emailCount !== 1 ? 's' : ''} &middot; ${phoneCount} phone${phoneCount !== 1 ? 's' : ''}</div>
+          <div class="export-row">
+            <button class="export-action-btn email" onclick="exportEmail()">Email (BCC)</button>
+            <button class="export-action-btn sms" onclick="exportSms()">Text</button>
+            <button class="export-action-btn copy" onclick="exportCopyEmails()">Copy Emails</button>
+            <button class="export-action-btn copy" onclick="exportCopyPhones()">Copy Phones</button>
+          </div>
+          <div class="export-msg" id="export-msg"></div>
+        </div>`;
+    }
+
+    function showExportMsg(text, isError) {
+      const el = document.getElementById('export-msg');
+      if (!el) return;
+      el.className = 'export-msg' + (isError ? ' error' : '');
+      el.textContent = text;
+    }
+
+    function exportEmail() {
+      const emails = lastRendered.map(m => m.email).filter(Boolean);
+      if (emails.length === 0) { showExportMsg('No email addresses found', true); return; }
+      window.location.href = 'mailto:?bcc=' + emails.join(',');
+      showExportMsg(`Opening email for ${emails.length} recipient${emails.length > 1 ? 's' : ''} (BCC)`);
+    }
+
+    function exportSms() {
+      const phones = lastRendered.map(m => m.phone).filter(Boolean);
+      if (phones.length === 0) { showExportMsg('No phone numbers found', true); return; }
+      window.location.href = 'sms:' + phones.join(',');
+      showExportMsg(`Opening messages for ${phones.length} recipient${phones.length > 1 ? 's' : ''}`);
+    }
+
+    function exportCopyEmails() {
+      const emails = lastRendered.map(m => m.email).filter(Boolean);
+      if (emails.length === 0) { showExportMsg('No email addresses found', true); return; }
+      copyToClipboard(emails.join('; '), `${emails.length} email${emails.length > 1 ? 's' : ''} copied`);
+    }
+
+    function exportCopyPhones() {
+      const phones = lastRendered.map(m => m.phone).filter(Boolean);
+      if (phones.length === 0) { showExportMsg('No phone numbers found', true); return; }
+      copyToClipboard(phones.join(', '), `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
+    }
+
+    function copyToClipboard(text, successMsg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showExportMsg(successMsg)).catch(() => fallbackCopy(text, successMsg));
+      } else {
+        fallbackCopy(text, successMsg);
+      }
+    }
+
+    function fallbackCopy(text, successMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.left = '0'; ta.style.top = '0'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      if (ok) { showExportMsg(successMsg); }
+      else { showCopyableText(text); }
+    }
+
+    function showCopyableText(text) {
+      const el = document.getElementById('export-msg');
+      if (!el) return;
+      el.innerHTML = `<div style="margin-top:6px">
+        <div style="color:#ff6b6b;margin-bottom:6px">Tap the box below, Select All, then Copy:</div>
+        <textarea readonly style="width:100%;min-height:48px;padding:8px;border-radius:6px;border:1px solid #666;background:#2a2a2a;color:#fff;font-size:13px;font-family:inherit;-webkit-user-select:text;user-select:text">${text.replace(/</g, '&lt;')}</textarea>
+      </div>`;
+      const newTa = el.querySelector('textarea');
+      if (newTa) newTa.addEventListener('focus', () => { newTa.select(); newTa.setSelectionRange(0, newTa.value.length); });
+    }
+
+    // Show the Export trigger for admins
+    if (authMode === 'admin') {
+      const trig = document.getElementById('export-trigger');
+      if (trig) trig.style.display = '';
     }
 
     async function toggleAdmin(idx) {
