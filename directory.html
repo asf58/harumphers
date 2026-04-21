@@ -21,10 +21,10 @@
 
     header {
       background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
-      padding: 16px 20px;
+      padding: 12px 16px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       position: sticky;
       top: 0;
       z-index: 10;
@@ -32,37 +32,58 @@
     }
 
     header img {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 8px;
+      flex-shrink: 0;
     }
 
     header h1 {
-      font-size: 20px;
+      font-size: 18px;
       flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .header-links {
       display: flex;
-      gap: 12px;
+      gap: 10px;
       align-items: center;
+      flex-shrink: 0;
     }
 
     .back-link, .logout-link {
       color: #FFD700;
       text-decoration: none;
-      font-size: 14px;
+      font-size: 13px;
       white-space: nowrap;
     }
 
     .logout-link { opacity: 0.7; }
     .logout-link:hover { opacity: 1; }
 
+    @media (max-width: 380px) {
+      header { padding: 10px 12px; gap: 8px; }
+      header h1 { font-size: 16px; }
+      .header-links { gap: 8px; }
+      .back-link, .logout-link { font-size: 12px; }
+    }
+
+    .admin-bar {
+      display: flex;
+      justify-content: flex-end;
+      padding: 8px 16px 0;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
     .search-bar {
-      padding: 12px 20px;
+      padding: 12px 16px;
       background: #222;
       position: sticky;
-      top: 72px;
+      top: 60px;
       z-index: 9;
     }
 
@@ -515,13 +536,16 @@
     <div class="header-links">
       <a href="index.html" class="back-link">Home</a>
       <a href="events.html" class="back-link">Events</a>
-      <button id="export-trigger" class="export-trigger" style="display:none" onclick="toggleExportPanel()">Export</button>
       <a href="#" class="logout-link" onclick="logout()">Logout</a>
     </div>
   </header>
 
   <div class="search-bar">
     <input type="search" id="search" placeholder="Search members..." autocomplete="off">
+  </div>
+
+  <div id="admin-bar" class="admin-bar" style="display:none">
+    <button id="export-trigger" class="export-trigger" onclick="toggleExportPanel()">Export</button>
   </div>
 
   <div id="export-panel-host"></div>
@@ -1015,8 +1039,8 @@
 
     // Show the Export trigger for admins
     if (authMode === 'admin') {
-      const trig = document.getElementById('export-trigger');
-      if (trig) trig.style.display = '';
+      const bar = document.getElementById('admin-bar');
+      if (bar) bar.style.display = '';
     }
 
     async function toggleAdmin(idx) {
