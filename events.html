@@ -1117,6 +1117,65 @@
       return null;
     }
 
+    // Parse an RSVP column name into matching tokens.
+    // Supports optional date prefix like "MAY19-..." or "APR28-...".
+    // Returns { datePrefix: {month: 1-12, day: int} | null, words: string[] }
+    const RSVP_MONTHS = { JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12 };
+    function parseRsvpFieldName(fieldName) {
+      const upper = (fieldName || '').toUpperCase();
+      const dm = upper.match(/^([A-Z]{3})(\d{1,2})[-\s]/);
+      let datePrefix = null;
+      let body = upper;
+      if (dm && RSVP_MONTHS[dm[1]]) {
+        datePrefix = { month: RSVP_MONTHS[dm[1]], day: parseInt(dm[2], 10) };
+        body = upper.slice(dm[0].length);
+      }
+      // Strip trailing "RSVP" then keep only A-Z + spaces
+      body = body.replace(/RSVP\s*$/, '').replace(/[^A-Z\s]/g, ' ');
+      const words = body.trim().split(/\s+/).filter(w => w.length > 2);
+      return { datePrefix, words };
+    }
+
+    // Match an RSVP column to its event in EVENTS table.
+    // Strategy 1: if the column has a date prefix (e.g. MAY19-), prefer events with matching DATE.
+    // Strategy 2: scoring fallback — pick event with most fieldWord overlaps.
+    // Replaces the old .find() first-match which caused MAY19-MAY SPEAKER RSVP to attach
+    // to "SPEAKER - CORY OCONNOR" because both contain the word SPEAKER.
+    function matchEventToRsvpField(fieldName, eventDetails) {
+      const { datePrefix, words } = parseRsvpFieldName(fieldName);
+
+      // Strategy 1: exact DATE match against month+day from prefix
+      if (datePrefix) {
+        const dateHits = eventDetails.filter(e => {
+          const d = e['DATE'];
+          if (!d || typeof d !== 'string' || d.length < 10) return false;
+          const mo = parseInt(d.slice(5, 7), 10);
+          const day = parseInt(d.slice(8, 10), 10);
+          return mo === datePrefix.month && day === datePrefix.day;
+        });
+        if (dateHits.length === 1) return dateHits[0];
+        if (dateHits.length > 1) {
+          // Multiple events share the date — pick the one with most word overlap among them
+          let best = null, bestScore = -1;
+          dateHits.forEach(e => {
+            const eName = (e['EVENT NAME'] || '').toUpperCase();
+            const score = words.filter(w => eName.includes(w)).length;
+            if (score > bestScore) { best = e; bestScore = score; }
+          });
+          if (best) return best;
+        }
+      }
+
+      // Strategy 2: scoring fallback — most fieldWord overlaps wins
+      let best = null, bestScore = 0;
+      eventDetails.forEach(e => {
+        const eName = (e['EVENT NAME'] || '').toUpperCase();
+        const score = words.filter(w => eName.includes(w)).length;
+        if (score > bestScore) { best = e; bestScore = score; }
+      });
+      return best; // null if no event scored > 0
+    }
+
     async function loadEvents() {
       const meta = await apiFetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`);
       const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
@@ -1153,13 +1212,14 @@
       allMembers = membersData.records.filter(r => r.fields['IN DIRECTORY']);
 
       allEvents = rsvpFields.map((field, idx) => {
+        // fieldWords is used by findGuestField (preserves prior behavior for that path)
         const fieldWords = field.name.toUpperCase()
           .replace('RSVP', '').replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
 
-        let matched = eventDetails.find(e => {
-          const eName = (e['EVENT NAME'] || '').toUpperCase();
-          return fieldWords.some(w => w.length > 2 && eName.includes(w));
-        });
+        // Date-prefix-aware matching prevents word collisions like
+        // "MAY19-MAY SPEAKER RSVP" attaching to "SPEAKER - CORY OCONNOR"
+        // just because both contain the word SPEAKER.
+        let matched = matchEventToRsvpField(field.name, eventDetails);
 
         const pairedGuestField = findGuestField(guestFields, fieldWords, matched);
 
