@@ -2453,6 +2453,55 @@
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Saving...'; }
 
       try {
+        // If promoting Suggested/Upcoming → Scheduled and no RSVP column exists yet,
+        // auto-create the RSVP + GUESTS columns. Without this, the events page
+        // would show "RSVP not yet configured" because no Members-table column
+        // would ever match this event.
+        const ns = normalizeStatus(status).toLowerCase();
+        let createdColumns = false;
+        if (ns === 'scheduled' && !ev.fieldName && date && name) {
+          const dt = new Date(date + 'T12:00:00');
+          const mon = dt.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+          const day = dt.getDate();
+          const newRsvpFieldName = `${mon}${day}-${name.toUpperCase()} RSVP`;
+
+          if (msgEl) msgEl.textContent = 'Creating RSVP field...';
+          const fieldRes = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: newRsvpFieldName,
+              type: 'singleSelect',
+              options: { choices: [
+                { name: 'YES', color: 'greenLight2' },
+                { name: 'NO', color: 'redLight2' },
+                { name: 'MAYBE', color: 'yellowLight2' }
+              ]}
+            })
+          });
+          if (!fieldRes.ok) {
+            const errData = await fieldRes.json().catch(() => ({}));
+            if (fieldRes.status === 403 || fieldRes.status === 422) {
+              throw new Error('Cannot create RSVP field. Token needs schema.bases:write scope.');
+            }
+            throw new Error((errData.error && errData.error.message) || `RSVP field creation failed (${fieldRes.status})`);
+          }
+
+          if (msgEl) msgEl.textContent = 'Creating guest count field...';
+          const nameWords = name.toUpperCase().split(/\s+/);
+          const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
+          const guestFieldName = `GUESTS-${guestKey}`;
+          await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
+          });
+
+          ev.fieldName = newRsvpFieldName;
+          ev.guestFieldName = guestFieldName;
+          createdColumns = true;
+        }
+
         const fields = {
           'EVENT NAME': name,
           'Status': status || null,
@@ -2502,14 +2551,22 @@
           ev.eventRecordId = data.id;
         }
 
-        // Update local state
+        // If new RSVP/GUESTS columns were created, do a full reload so the
+        // members data and bucket fills include the new columns.
+        if (createdColumns) {
+          if (msgEl) { msgEl.style.color = '#4CAF50'; msgEl.textContent = 'Saved! Reloading...'; }
+          editingEvent = null;
+          await loadEvents();
+          return;
+        }
+
+        // Update local state (no reload needed)
         ev.name = name;
         ev.speaker = speaker;
         ev.date = date;
         ev.time = time;
         ev.room = room;
         ev.notes = notes;
-        const ns = normalizeStatus(status).toLowerCase();
         ev.isCompleted = ns === 'completed';
         ev.isSuggested = ns === 'suggested';
         ev.isUpcoming = ns === 'upcoming' || ns === '';
