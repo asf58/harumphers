@@ -1219,17 +1219,41 @@
 
       // Check for Duquesne member # (all digits)
       if (/^\d+$/.test(raw)) {
+        // Reject all-zeros input. In Airtable, a blank number field is treated
+        // as 0 in numeric comparisons, so {MEMBER #}=0 used to match all ~60
+        // members with blank MEMBER # — anyone typing "0", "00", "0000" etc.
+        // would log in as the first one returned (e.g. Lou Oliva). Real
+        // Duquesne IDs are positive integers.
+        if (parseInt(raw, 10) === 0) {
+          errorEl.style.color = '#ff6b6b';
+          errorEl.textContent = 'Incorrect password or member #';
+          document.getElementById('pw').value = '';
+          document.getElementById('pw').focus();
+          return;
+        }
+
         errorEl.textContent = 'Looking up member...';
         errorEl.style.color = '#FFD700';
 
         try {
-          // MEMBER # is a number field - compare without quotes
-          const formula = encodeURIComponent(`{MEMBER #}=${raw}`);
+          // The {MEMBER #}>0 clause excludes records with blank MEMBER #
+          // (which Airtable would otherwise coerce to 0 for the = comparison).
+          const formula = encodeURIComponent(`AND({MEMBER #}=${raw}, {MEMBER #}>0)`);
           const url = `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?filterByFormula=${formula}`;
           const data = await apiFetch(url);
 
           if (data.records && data.records.length > 0) {
             const rec = data.records[0];
+            // Defense in depth: verify the returned record's MEMBER # exactly
+            // equals the input. Guards against any future formula coercion.
+            const actualNum = rec.fields['MEMBER #'];
+            if (actualNum == null || parseInt(actualNum, 10) !== parseInt(raw, 10)) {
+              errorEl.style.color = '#ff6b6b';
+              errorEl.textContent = 'Incorrect password or member #';
+              document.getElementById('pw').value = '';
+              document.getElementById('pw').focus();
+              return;
+            }
             const role = rec.fields['IS ADMIN'] === true ? 'admin' : 'member';
             localStorage.setItem('harumphers_auth', role);
             localStorage.setItem('harumphers_member_id', rec.id);
