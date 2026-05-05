@@ -1004,6 +1004,8 @@
 
     // Inline edit state: { eventIdx, memberId } or null
     let inlineEdit = null;
+    // Admin: inline vote edit on Suggested events (parallel to inlineEdit for RSVPs)
+    let inlineVoteEdit = null;
     let openEvents = new Set();
 
     // Export state: { eventIdx, filter } or null
@@ -2924,6 +2926,21 @@
       }
     }
 
+    // Build the inline edit panel for a single member's vote on a suggested event.
+    // Reuses .vote-* classes for visual consistency with the main vote-section.
+    function buildInlineVoteEditPanel(eventIdx, memberId, currentVote) {
+      const upActive = currentVote === 'UP' ? ' active' : '';
+      const downActive = currentVote === 'DOWN' ? ' active' : '';
+      return `<div class="inline-edit" onclick="event.stopPropagation()" style="margin-top:6px">
+        <div class="vote-buttons">
+          <button class="vote-btn up-btn${upActive}" onclick="submitInlineVote(${eventIdx}, '${memberId}', 'UP')">Interested</button>
+          <button class="vote-btn down-btn${downActive}" onclick="submitInlineVote(${eventIdx}, '${memberId}', 'DOWN')">Not Interested</button>
+          <button class="vote-btn clear-btn" onclick="submitInlineVote(${eventIdx}, '${memberId}', null)">Clear</button>
+        </div>
+        <div class="vote-msg" id="inline-vote-msg-${eventIdx}-${memberId}"></div>
+      </div>`;
+    }
+
     function buildVotingSection(ev, eventIdx) {
       if (!ev.isSuggested) return '';
       if (!ev.eventRecordId) return '';
@@ -2934,14 +2951,15 @@
 
       for (const memberId in evVotes) {
         const v = evVotes[memberId];
+        const member = allMembers.find(m => m.id === memberId);
+        if (!member) continue;
+        const name = member.fields['FULL NAME'] || 'Unknown';
         if (v.vote === 'UP') {
           upCount++;
-          const member = allMembers.find(m => m.id === memberId);
-          if (member) upVoters.push(member.fields['FULL NAME'] || 'Unknown');
+          upVoters.push({ memberId, name });
         } else if (v.vote === 'DOWN') {
           downCount++;
-          const member = allMembers.find(m => m.id === memberId);
-          if (member) downVoters.push(member.fields['FULL NAME'] || 'Unknown');
+          downVoters.push({ memberId, name });
         }
       }
 
@@ -2962,14 +2980,46 @@
       const downActive = myVote === 'DOWN' ? ' active' : '';
       const clearBtn = myVote ? `<button class="vote-btn clear-btn" id="vote-clear-${eventIdx}" onclick="submitVote(${eventIdx}, null)">Clear</button>` : '';
 
-      // Admin: expandable voter lists
+      // Admin: clickable chips → inline edit panel + dropdown for non-voters
       let voterLists = '';
       if (authMode === 'admin') {
-        if (upVoters.length > 0) {
-          voterLists += `<div style="margin-top:8px"><span style="font-size:11px;color:#81C784;font-weight:600">INTERESTED</span> ${upVoters.map(n => `<span class="vote-chip up">${n}</span>`).join('')}</div>`;
-        }
-        if (downVoters.length > 0) {
-          voterLists += `<div style="margin-top:4px"><span style="font-size:11px;color:#ff8a8a;font-weight:600">NOT INTERESTED</span> ${downVoters.map(n => `<span class="vote-chip down">${n}</span>`).join('')}</div>`;
+        const renderChips = (voters, cls, label) => {
+          if (voters.length === 0) return '';
+          return `<div style="margin-top:8px"><span style="font-size:11px;color:${cls === 'up' ? '#81C784' : '#ff8a8a'};font-weight:600">${label}</span> ` +
+            voters.map(v => {
+              const isEditing = inlineVoteEdit && inlineVoteEdit.eventIdx === eventIdx && inlineVoteEdit.memberId === v.memberId;
+              const chip = `<span class="vote-chip ${cls}" style="cursor:pointer" onclick="event.stopPropagation(); openInlineVoteEdit(${eventIdx}, '${v.memberId}')" title="Click to edit ${v.name}'s vote">${v.name}</span>`;
+              return chip + (isEditing ? buildInlineVoteEditPanel(eventIdx, v.memberId, cls === 'up' ? 'UP' : 'DOWN') : '');
+            }).join('') +
+            `</div>`;
+        };
+        voterLists += renderChips(upVoters, 'up', 'INTERESTED');
+        voterLists += renderChips(downVoters, 'down', 'NOT INTERESTED');
+
+        // "Cast vote for non-voter" — surfaced when admin opens edit on a non-voter
+        const nonVoterEditing = inlineVoteEdit
+          && inlineVoteEdit.eventIdx === eventIdx
+          && !evVotes[inlineVoteEdit.memberId];
+        const nonVoterPanel = nonVoterEditing
+          ? `<div style="margin-top:6px;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px">
+               <div style="font-size:12px;color:#aaa;margin-bottom:4px">${(allMembers.find(m => m.id === inlineVoteEdit.memberId) || {}).fields?.['FULL NAME'] || 'Member'}</div>
+               ${buildInlineVoteEditPanel(eventIdx, inlineVoteEdit.memberId, null)}
+             </div>`
+          : '';
+        const nonVoterOptions = allMembers
+          .filter(m => !evVotes[m.id])
+          .map(m => `<option value="${m.id}">${m.fields['FULL NAME'] || 'Unknown'}</option>`)
+          .join('');
+        if (nonVoterOptions) {
+          voterLists += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">
+            <div style="font-size:11px;color:#888;font-weight:600;margin-bottom:4px">CAST VOTE ON BEHALF OF</div>
+            <select id="vote-add-select-${eventIdx}" style="background:#222;color:#eee;border:1px solid #444;border-radius:6px;padding:6px 8px;font-size:13px;width:100%;max-width:260px"
+              onchange="if(this.value) openInlineVoteEdit(${eventIdx}, this.value)">
+              <option value="">Select member…</option>
+              ${nonVoterOptions}
+            </select>
+            ${nonVoterPanel}
+          </div>`;
         }
       }
 
@@ -2984,6 +3034,16 @@
         ${voterLists}
         <div class="vote-msg" id="vote-msg-${eventIdx}"></div>
       </div>`;
+    }
+
+    // Toggle inline vote edit panel for a specific member on a specific event.
+    function openInlineVoteEdit(eventIdx, memberId) {
+      if (inlineVoteEdit && inlineVoteEdit.eventIdx === eventIdx && inlineVoteEdit.memberId === memberId) {
+        inlineVoteEdit = null;
+      } else {
+        inlineVoteEdit = { eventIdx, memberId };
+      }
+      render();
     }
 
     async function submitVote(eventIdx, value) {
@@ -3100,6 +3160,80 @@
         const downBtn2 = document.getElementById(`vote-down-${eventIdx}`);
         const clearBtn2 = document.getElementById(`vote-clear-${eventIdx}`);
         [upBtn2, downBtn2, clearBtn2].forEach(b => { if (b) b.disabled = false; });
+      }
+    }
+
+    // Admin: set or clear a vote for any member on a Suggested event.
+    // Mirrors submitVote() but operates on an arbitrary memberId (not myInfo).
+    async function submitInlineVote(eventIdx, memberId, value) {
+      if (authMode !== 'admin') return;
+      const lockKey = `vote-${eventIdx}-${memberId}`;
+      if (votingInFlight.has(lockKey)) return;
+      const ev = allEvents[eventIdx];
+      if (!ev || !ev.eventRecordId) return;
+      const member = allMembers.find(m => m.id === memberId);
+      if (!member) return;
+
+      votingInFlight.add(lockKey);
+
+      const msgEl = document.getElementById(`inline-vote-msg-${eventIdx}-${memberId}`);
+      if (msgEl) { msgEl.className = 'vote-msg'; msgEl.textContent = 'Saving...'; }
+
+      try {
+        if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
+        const evVotes = votesData[ev.eventRecordId];
+        const existing = evVotes[memberId];
+
+        if (value === null) {
+          if (existing && existing.recordId) {
+            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+            });
+            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
+          }
+          delete evVotes[memberId];
+        } else if (existing && existing.recordId) {
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { 'VOTE': value } })
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+          }
+          evVotes[memberId] = { vote: value, recordId: existing.recordId };
+        } else {
+          // No existing record — POST new (skip the dedup-query optimization
+          // since admin edits are rare and the local cache should be fresh enough).
+          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: {
+                'MEMBER RECORD ID': memberId,
+                'MEMBER NAME': member.fields['FULL NAME'] || '',
+                'EVENT RECORD ID': ev.eventRecordId,
+                'VOTE': value,
+              }
+            })
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          evVotes[memberId] = { vote: value, recordId: data.id };
+        }
+
+        // Close the inline editor and re-render so the chip moves to its new tier
+        inlineVoteEdit = null;
+        render();
+      } catch (err) {
+        if (msgEl) { msgEl.className = 'vote-msg error'; msgEl.textContent = 'Failed: ' + err.message; }
+      } finally {
+        votingInFlight.delete(lockKey);
       }
     }
 
