@@ -108,6 +108,34 @@
       color: #888;
     }
 
+    .view-toggle-bar {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      padding: 4px 16px 0;
+    }
+    .view-toggle-bar button {
+      background: #2a2a2a;
+      color: #888;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      font: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .view-toggle-bar button:hover { color: #ccc; border-color: #444; }
+    .view-toggle-bar button.active {
+      color: #FFD700;
+      border-color: #FFD700;
+      background: rgba(255,215,0,0.08);
+    }
+    .view-toggle-bar svg { width: 14px; height: 14px; }
+
     .members {
       padding: 8px 16px 24px;
       display: flex;
@@ -116,6 +144,64 @@
       max-width: 600px;
       margin: 0 auto;
     }
+
+    /* Grid view overrides .members layout */
+    .members.grid-view {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 12px;
+      max-width: 720px;
+    }
+    .grid-card {
+      background: #2a2a2a;
+      border-radius: 12px;
+      padding: 12px 6px 10px;
+      cursor: pointer;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+      overflow: hidden;
+    }
+    .grid-card:active { background: #333; }
+    .grid-avatar {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #444;
+      display: block;
+    }
+    .grid-initials {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: #8B0000;
+      color: #FFD700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 26px;
+    }
+    .grid-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: #ddd;
+      line-height: 1.25;
+      width: 100%;
+      word-break: break-word;
+    }
+    .grid-card .grid-badges {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .grid-card .you-badge,
+    .grid-card .admin-badge { font-size: 9px; padding: 1px 5px; }
 
     .card {
       background: #2a2a2a;
@@ -544,6 +630,15 @@
     <input type="search" id="search" placeholder="Search members..." autocomplete="off">
   </div>
 
+  <div class="view-toggle-bar">
+    <button id="view-list-btn" onclick="setViewMode('list')" title="List view (full contact info)">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h12v2H2z"/></svg>List
+    </button>
+    <button id="view-grid-btn" onclick="setViewMode('grid')" title="Grid view (photo gallery)">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/></svg>Grid
+    </button>
+  </div>
+
   <div id="admin-bar" class="admin-bar" style="display:none">
     <button id="export-trigger" class="export-trigger" onclick="toggleExportPanel()">Export</button>
   </div>
@@ -705,11 +800,82 @@
       render(allMembers);
     }
 
+    // View mode: 'list' (current) or 'grid' (photo gallery). Persisted across sessions.
+    let viewMode = localStorage.getItem('harumphers_view_mode') === 'grid' ? 'grid' : 'list';
+
+    function setViewMode(mode) {
+      if (mode !== 'list' && mode !== 'grid') return;
+      viewMode = mode;
+      localStorage.setItem('harumphers_view_mode', mode);
+      updateViewToggleButtons();
+      render(lastRendered.length ? lastRendered : allMembers);
+    }
+
+    function updateViewToggleButtons() {
+      const lBtn = document.getElementById('view-list-btn');
+      const gBtn = document.getElementById('view-grid-btn');
+      if (lBtn) lBtn.classList.toggle('active', viewMode === 'list');
+      if (gBtn) gBtn.classList.toggle('active', viewMode === 'grid');
+    }
+
+    function initialsFor(name) {
+      const words = (name || '').split(/\s+/);
+      return words.length > 1
+        ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
+        : (words[0] || '').substring(0,2).toUpperCase();
+    }
+
+    function buildListCardHtml(m, idx) {
+      const name = m.name;
+      const initials = initialsFor(name);
+      const avatarHtml = m.photoUrl
+        ? `<img class="avatar" src="${m.photoUrl}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`
+        : `<div class="initials">${initials}</div>`;
+      let contactHtml = '';
+      if (m.phone) {
+        const digits = m.phone.replace(/\D/g, '');
+        contactHtml += `<a href="tel:+1${digits}">${m.phone}</a>`;
+      }
+      if (m.email) {
+        contactHtml += `<a href="mailto:${m.email}">${m.email}</a>`;
+      }
+      const isMe = myInfo && m.recordId === myInfo.recordId;
+      const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
+      const adminBadge = (authMode === 'admin' && m.isAdmin) ? '<span class="admin-badge">ADMIN</span>' : '';
+      return `<div class="card" onclick="showDetail(${idx})">
+        ${avatarHtml}
+        <div class="info">
+          <div class="name">${name}${youBadge}${adminBadge}</div>
+          <div class="contact">${contactHtml}</div>
+        </div>
+      </div>`;
+    }
+
+    function buildGridCardHtml(m, idx) {
+      const name = m.name;
+      const initials = initialsFor(name);
+      const avatarHtml = m.photoUrl
+        ? `<img class="grid-avatar" src="${m.photoUrl}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'grid-initials\\'>${initials}</div>'">`
+        : `<div class="grid-initials">${initials}</div>`;
+      const isMe = myInfo && m.recordId === myInfo.recordId;
+      const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
+      const adminBadge = (authMode === 'admin' && m.isAdmin) ? '<span class="admin-badge">ADMIN</span>' : '';
+      const badges = (youBadge || adminBadge) ? `<div class="grid-badges">${youBadge}${adminBadge}</div>` : '';
+      return `<div class="grid-card" onclick="showDetail(${idx})">
+        ${avatarHtml}
+        <div class="grid-name">${name}</div>
+        ${badges}
+      </div>`;
+    }
+
     function render(members) {
       const content = document.getElementById('content');
       const countEl = document.getElementById('count');
       lastRendered = members;
       renderExportPanel();
+
+      // Toggle the grid-view class on the container so CSS picks up the right layout
+      content.classList.toggle('grid-view', viewMode === 'grid');
 
       if (members.length === 0) {
         content.innerHTML = '<div class="no-results">No members found</div>';
@@ -719,41 +885,12 @@
 
       countEl.textContent = `${members.length} member${members.length !== 1 ? 's' : ''}`;
 
-      content.innerHTML = members.map(m => {
-        const name = m.name;
-        const words = name.split(/\s+/);
-        const initials = words.length > 1
-          ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
-          : (words[0] || '').substring(0,2).toUpperCase();
-
-        const avatarHtml = m.photoUrl
-          ? `<img class="avatar" src="${m.photoUrl}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`
-          : `<div class="initials">${initials}</div>`;
-
-        let contactHtml = '';
-        if (m.phone) {
-          const digits = m.phone.replace(/\D/g, '');
-          contactHtml += `<a href="tel:+1${digits}">${m.phone}</a>`;
-        }
-        if (m.email) {
-          contactHtml += `<a href="mailto:${m.email}">${m.email}</a>`;
-        }
-
-        const isMe = myInfo && m.recordId === myInfo.recordId;
-        const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
-        const adminBadge = (authMode === 'admin' && m.isAdmin)
-          ? '<span class="admin-badge">ADMIN</span>' : '';
-
-        const idx = allMembers.indexOf(m);
-        return `<div class="card" onclick="showDetail(${idx})">
-          ${avatarHtml}
-          <div class="info">
-            <div class="name">${name}${youBadge}${adminBadge}</div>
-            <div class="contact">${contactHtml}</div>
-          </div>
-        </div>`;
-      }).join('');
+      const builder = viewMode === 'grid' ? buildGridCardHtml : buildListCardHtml;
+      content.innerHTML = members.map(m => builder(m, allMembers.indexOf(m))).join('');
     }
+
+    // Reflect the persisted view mode in the toggle buttons on page load
+    updateViewToggleButtons();
 
     document.getElementById('search').addEventListener('input', e => {
       const q = e.target.value.toLowerCase().trim();
