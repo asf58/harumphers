@@ -967,6 +967,7 @@
             <button class="export-action-btn sms" onclick="exportSms()">Text</button>
             <button class="export-action-btn copy" onclick="exportCopyEmails()">Copy Emails</button>
             <button class="export-action-btn copy" onclick="exportCopyPhones()">Copy Phones</button>
+            <button class="export-action-btn copy" onclick="exportPrintList()">Print List</button>
           </div>
           <div class="export-msg" id="export-msg"></div>
         </div>`;
@@ -1003,6 +1004,71 @@
       const phones = lastRendered.map(m => m.phone).filter(Boolean);
       if (phones.length === 0) { showExportMsg('No phone numbers found', true); return; }
       copyToClipboard(phones.join(', '), `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
+    }
+
+    // Open a printable list of currently-filtered members (name + member #).
+    function exportPrintList() {
+      if (!lastRendered || lastRendered.length === 0) { showExportMsg('List is empty', true); return; }
+      const title = 'Harumphers Members';
+      const subtitle = `${lastRendered.length === allMembers.length ? 'All Members' : 'Filtered Members'} — ${lastRendered.length} member${lastRendered.length !== 1 ? 's' : ''}`;
+      // Normalize entries to the shape openPrintListWindow expects (name, memberNum)
+      const items = lastRendered.map(m => ({ name: m.name, memberNum: m.memberNum }));
+      openPrintListWindow(title, subtitle, items);
+      showExportMsg('Opening print view…');
+    }
+
+    // Shared print-window builder. Items must have { name, memberNum? }.
+    function openPrintListWindow(title, subtitle, list) {
+      const esc = (s) => String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      const rows = list.map((e, i) => `
+        <tr>
+          <td class="idx">${i + 1}.</td>
+          <td class="nm">${esc(e.name)}</td>
+          <td class="mn">${esc(e.memberNum != null && e.memberNum !== '' ? e.memberNum : '')}</td>
+        </tr>`).join('');
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${esc(title)} — Print List</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #111; margin: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #555; font-size: 13px; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f3f3f3; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; }
+  td.idx { width: 36px; color: #888; }
+  td.mn  { width: 110px; font-variant-numeric: tabular-nums; color: #333; }
+  td.nm  { font-weight: 500; }
+  .actions { margin-top: 18px; }
+  button { font: inherit; padding: 6px 12px; cursor: pointer; }
+  @media print {
+    .actions { display: none; }
+    body { margin: 12mm; }
+  }
+</style></head>
+<body>
+  <h1>${esc(title)}</h1>
+  <div class="sub">${esc(subtitle)}</div>
+  <table>
+    <thead><tr><th>#</th><th>Name</th><th>Member #</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="actions">
+    <button onclick="window.print()">Print</button>
+    <button onclick="window.close()">Close</button>
+  </div>
+  <scr`+`ipt>setTimeout(() => window.print(), 250);</scr`+`ipt>
+</body></html>`;
+      const w = window.open('', '_blank');
+      if (!w) {
+        alert('Print window was blocked by your browser. Please allow pop-ups for this site.');
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
     }
 
     function copyToClipboard(text, successMsg) {

@@ -1204,6 +1204,7 @@
       params.append('fields[]', 'IN DIRECTORY');
       params.append('fields[]', 'CELL #');
       params.append('fields[]', 'E-MAIL ADDRESS');
+      params.append('fields[]', 'MEMBER #');
       rsvpFields.forEach(f => params.append('fields[]', f.name));
       guestFields.forEach(f => params.append('fields[]', f.name));
 
@@ -1233,7 +1234,8 @@
           const guestCount = pairedGuestField ? (f[pairedGuestField] || 0) : 0;
           const email = f['E-MAIL ADDRESS'] || '';
           const phone = f['CELL #'] || '';
-          const entry = { name, guestCount, recordId: r.id, email, phone };
+          const memberNum = f['MEMBER #'] || '';
+          const entry = { name, guestCount, recordId: r.id, email, phone, memberNum };
           if (!rsvp) {
             pending.push(entry);
             return;
@@ -1713,6 +1715,7 @@
                 <button class="export-action-btn sms" onclick="exportSms(${i})">Text</button>
                 <button class="export-action-btn copy" onclick="exportCopyEmails(${i})">Copy Emails</button>
                 <button class="export-action-btn copy" onclick="exportCopyPhones(${i})">Copy Phones</button>
+                <button class="export-action-btn copy" onclick="exportPrintList(${i})">Print List</button>
               </div>
               <div class="export-msg" id="export-msg-${i}"></div>
             </div>`;
@@ -2043,7 +2046,8 @@
         const guestCount = ev.guestFieldName ? (f[ev.guestFieldName] || 0) : 0;
         const email = f['E-MAIL ADDRESS'] || '';
         const phone = f['CELL #'] || '';
-        const entry = { name, guestCount, recordId: r.id, email, phone };
+        const memberNum = f['MEMBER #'] || '';
+        const entry = { name, guestCount, recordId: r.id, email, phone, memberNum };
         if (!rsvp) {
           ev.pending.push(entry);
           return;
@@ -2191,6 +2195,81 @@
       }
       copyToClipboard(phones.join(', '), eventIdx,
         `${phones.length} phone number${phones.length > 1 ? 's' : ''} copied`);
+    }
+
+    // Open a printable view of the current filtered list (name + member #).
+    // Pops a new window with a clean sheet and auto-triggers the print dialog.
+    function exportPrintList(eventIdx) {
+      const ev = allEvents[eventIdx];
+      const filter = exportState.filter;
+      const list = getExportList(eventIdx, filter);
+      if (list.length === 0) {
+        showExportMsg(eventIdx, 'List is empty', true);
+        return;
+      }
+      const filterLabel = ({yes:'Going',maybe:'Maybe',no:'Not Going',pending:'No Reply',attended:'Attended',all:'All'})[filter] || filter;
+      const dateStr = ev.date || '';
+      const subtitle = `${filterLabel} — ${list.length} member${list.length !== 1 ? 's' : ''}${dateStr ? ' — ' + dateStr : ''}`;
+      openPrintListWindow(ev.name || 'Event', subtitle, list);
+      showExportMsg(eventIdx, 'Opening print view…');
+    }
+
+    // Shared print-window builder. `list` items must have {name, memberNum?}.
+    function openPrintListWindow(title, subtitle, list) {
+      const esc = (s) => String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      const rows = list.map((e, i) => {
+        const num = e.memberNum != null && e.memberNum !== '' ? e.memberNum : '';
+        const guest = e.guestCount && e.guestCount > 0 ? ` <span class="g">(+${e.guestCount} guest${e.guestCount>1?'s':''})</span>` : '';
+        return `<tr>
+          <td class="idx">${i + 1}.</td>
+          <td class="nm">${esc(e.name)}${guest}</td>
+          <td class="mn">${esc(num)}</td>
+        </tr>`;
+      }).join('');
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${esc(title)} — Print List</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #111; margin: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #555; font-size: 13px; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f3f3f3; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #555; }
+  td.idx { width: 36px; color: #888; }
+  td.mn  { width: 110px; font-variant-numeric: tabular-nums; color: #333; }
+  td.nm  { font-weight: 500; }
+  .g { font-weight: 400; color: #666; font-size: 12px; }
+  .actions { margin-top: 18px; }
+  button { font: inherit; padding: 6px 12px; cursor: pointer; }
+  @media print {
+    .actions { display: none; }
+    body { margin: 12mm; }
+  }
+</style></head>
+<body>
+  <h1>${esc(title)}</h1>
+  <div class="sub">${esc(subtitle)}</div>
+  <table>
+    <thead><tr><th>#</th><th>Name</th><th>Member #</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="actions">
+    <button onclick="window.print()">Print</button>
+    <button onclick="window.close()">Close</button>
+  </div>
+  <scr`+`ipt>setTimeout(() => window.print(), 250);</scr`+`ipt>
+</body></html>`;
+      const w = window.open('', '_blank');
+      if (!w) {
+        alert('Print window was blocked by your browser. Please allow pop-ups for this site.');
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
     }
 
     // --- Photo Gallery ---
