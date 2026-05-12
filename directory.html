@@ -152,7 +152,9 @@
       gap: 12px;
       max-width: 720px;
     }
-    /* Phone portrait: force 3 columns and shrink avatars/spacing to fit */
+    /* Phone portrait: force 3 columns and shrink avatars/spacing to fit.
+       Selectors scoped under .members.grid-view to win specificity vs the
+       base .grid-avatar / .grid-card rules that appear later in the file. */
     @media (max-width: 480px) {
       .members.grid-view {
         grid-template-columns: repeat(3, 1fr);
@@ -160,14 +162,14 @@
         padding-left: 10px;
         padding-right: 10px;
       }
-      .grid-avatar,
-      .grid-initials {
+      .members.grid-view .grid-avatar,
+      .members.grid-view .grid-initials {
         width: 78px;
         height: 78px;
       }
-      .grid-initials { font-size: 22px; }
-      .grid-card { padding: 10px 4px 8px; gap: 6px; }
-      .grid-name { font-size: 11px; }
+      .members.grid-view .grid-initials { font-size: 22px; }
+      .members.grid-view .grid-card { padding: 10px 4px 8px; gap: 6px; }
+      .members.grid-view .grid-name { font-size: 11px; }
     }
     .grid-card {
       background: #2a2a2a;
