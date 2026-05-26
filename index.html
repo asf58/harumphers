@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>HARUMPHERS Directory</title>
 
   <!-- PWA Meta Tags -->
@@ -35,6 +35,7 @@
     body.logged-in {
       justify-content: flex-start;
       padding-top: 70px;
+      padding-bottom: calc(78px + env(safe-area-inset-bottom));
     }
 
     /* Top Bar */
@@ -913,6 +914,78 @@
       padding: 8px 0;
       font-style: italic;
     }
+    /* ===== Home redesign: welcome strip, nav tiles, bottom tab bar ===== */
+    .top-bar .admin-pill {
+      margin-left: auto;
+      margin-right: 12px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: #8B0000;
+      background: #FFD700;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+
+    .welcome-strip {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      text-align: left;
+      margin-bottom: 18px;
+      min-height: 54px;
+    }
+    .welcome-strip .ws-photo {
+      width: 54px; height: 54px; border-radius: 50%;
+      object-fit: cover; flex-shrink: 0;
+      border: 2px solid rgba(255,215,0,0.6);
+      background: rgba(255,255,255,0.15); color: #FFD700;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 18px;
+    }
+    .welcome-strip .ws-greet { flex: 1; min-width: 0; }
+    .welcome-strip .ws-hi { font-size: 13px; color: rgba(255,255,255,0.65); }
+    .welcome-strip .ws-name { font-size: 21px; font-weight: 700; line-height: 1.15; }
+    .welcome-strip .ws-edit {
+      flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; color: #FFD700;
+      background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.4);
+      padding: 8px 12px; border-radius: 999px; cursor: pointer;
+    }
+    .welcome-strip .ws-edit svg { width: 13px; height: 13px; }
+
+    .nav-tiles {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      margin-bottom: 22px;
+    }
+    .nav-tile {
+      background: rgba(255,255,255,0.12); border-radius: 16px;
+      padding: 15px 6px 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      text-decoration: none; color: #fff; backdrop-filter: blur(10px);
+      transition: background 0.15s;
+    }
+    .nav-tile:active { background: rgba(255,255,255,0.22); }
+    .nav-tile svg { width: 25px; height: 25px; color: #FFD700; }
+    .nav-tile span { font-size: 12px; font-weight: 600; }
+
+    /* Fixed bottom tab bar (shown only when logged in) */
+    .tab-bar { display: none; }
+    body.logged-in .tab-bar {
+      display: flex;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
+      background: linear-gradient(180deg, rgba(74,0,0,0.94), rgba(40,0,0,0.98));
+      backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(255,255,255,0.12);
+      padding: 9px 0 calc(9px + env(safe-area-inset-bottom));
+    }
+    .tab-bar .tab {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+      text-decoration: none; color: rgba(255,255,255,0.55); cursor: pointer;
+    }
+    .tab-bar .tab svg { width: 23px; height: 23px; }
+    .tab-bar .tab span { font-size: 10px; font-weight: 600; letter-spacing: 0.02em; }
+    .tab-bar .tab.active { color: #FFD700; }
   </style>
 </head>
 <body>
@@ -922,6 +995,7 @@
       <img src="apple-touch-icon.png" alt="">
       <span>HARUMPHERS</span>
     </div>
+    <span class="admin-pill hidden" id="admin-badge">ADMIN</span>
     <a href="#" class="top-bar-link" onclick="logout()">Logout</a>
   </div>
 
@@ -1001,12 +1075,13 @@
 
   <!-- Member/Admin Home -->
   <div class="member-home hidden" id="member-home">
-    <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
-    <div class="member-header">
-      <h1>HARUMPHERS</h1>
-      <span class="admin-badge hidden" id="admin-badge">ADMIN</span>
+    <!-- Welcome strip: photo + first name + edit info (populated by renderProfile) -->
+    <div class="welcome-strip" id="welcome-strip">
+      <div class="spinner-small"></div>
     </div>
-    <p class="subtitle" style="margin-bottom:20px">Member Directory & Events</p>
+
+    <!-- Profile edit form (hidden until "Edit info" tapped) -->
+    <div class="profile-card" id="profile-card" style="display:none"></div>
 
     <div id="admin-note" class="admin-note hidden">
       You have admin access. You can edit any member's info in the directory and manage RSVPs in events.
@@ -1016,22 +1091,25 @@
       <div class="spinner-small"></div>
     </div>
 
-    <div class="profile-card" id="profile-card">
-      <div class="spinner-small"></div>
+    <!-- Primary navigation tiles -->
+    <div class="nav-tiles">
+      <a href="directory.html" class="nav-tile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+        <span>Directory</span>
+      </a>
+      <a href="events.html" class="nav-tile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span>Events</span>
+      </a>
+      <a href="events.html" class="nav-tile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>My RSVPs</span>
+      </a>
     </div>
 
     <div class="quick-events" id="quick-events">
       <div class="quick-events-title">Events</div>
       <div class="spinner-small"></div>
-    </div>
-
-    <div class="nav-buttons">
-      <a href="directory.html" class="btn">
-        Member Directory
-      </a>
-      <a href="events.html" class="btn-outline">
-        Events & RSVPs
-      </a>
     </div>
 
     <div class="collapsible" style="margin-top:20px;" onclick="this.classList.toggle('expanded')">
@@ -1289,16 +1367,17 @@
     let editFormVisible = false;
 
     async function loadMemberProfile() {
+      const strip = document.getElementById('welcome-strip');
       const card = document.getElementById('profile-card');
       const info = getMemberInfo();
 
       if (!info) {
-        // Admin without member record
-        card.innerHTML = `
-          <div class="profile-initials">A</div>
-          <div class="profile-name">Admin</div>
-          <div class="profile-detail" style="opacity:0.5">Logged in as administrator</div>
+        // Admin without member record — greet, no editable profile
+        if (strip) strip.innerHTML = `
+          <div class="ws-photo">A</div>
+          <div class="ws-greet"><div class="ws-hi">Welcome back,</div><div class="ws-name">Admin</div></div>
         `;
+        if (card) { card.innerHTML = ''; card.style.display = 'none'; }
         return;
       }
 
@@ -1310,20 +1389,23 @@
         memberRecord = data;
         renderProfile();
       } catch (err) {
-        card.innerHTML = `
-          <div style="color:#ff6b6b;font-size:14px;">Could not load profile</div>
-          <div style="color:#888;font-size:12px;margin-top:4px;">${err.message}</div>
-          <button class="edit-my-info-btn" style="margin-top:12px" onclick="loadMemberProfile()">Retry</button>
+        if (strip) strip.innerHTML = `
+          <div class="ws-greet">
+            <div style="color:#ffd2d2;font-size:14px;">Could not load your profile</div>
+            <button class="ws-edit" style="margin-top:8px" onclick="loadMemberProfile()">Retry</button>
+          </div>
         `;
       }
     }
 
     function renderProfile() {
+      const strip = document.getElementById('welcome-strip');
       const card = document.getElementById('profile-card');
-      if (!memberRecord) return;
+      if (!memberRecord || !strip) return;
 
       const f = memberRecord.fields;
       const name = f['FULL NAME'] || '';
+      const firstName = (name.split(/\s+/)[0] || name);
       const phone = f['CELL #'] || '';
       const email = f['E-MAIL ADDRESS'] || '';
       const photo = f['PHOTO'] && f['PHOTO'][0];
@@ -1335,46 +1417,47 @@
         ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
         : (words[0] || '').substring(0,2).toUpperCase();
 
-      const avatarHtml = photoUrl
-        ? `<img class="profile-photo" src="${photoUrl}" alt="" onerror="this.outerHTML='<div class=\\'profile-initials\\'>${initials}</div>'">`
-        : `<div class="profile-initials">${initials}</div>`;
+      const photoHtml = photoUrl
+        ? `<img class="ws-photo" src="${photoUrl}" alt="" onerror="this.outerHTML='<div class=\\'ws-photo\\'>${initials}</div>'">`
+        : `<div class="ws-photo">${initials}</div>`;
 
-      const phoneHtml = phone
-        ? `<div class="profile-detail"><a href="tel:+1${phone.replace(/\D/g, '')}">${phone}</a></div>`
-        : '';
-      const emailHtml = email
-        ? `<div class="profile-detail"><a href="mailto:${email}">${email}</a></div>`
-        : '';
-
-      const editBtn = `<button class="edit-my-info-btn" onclick="toggleProfileEdit()">${editFormVisible ? 'Cancel' : 'Edit My Info'}</button>`;
-
-      const editForm = editFormVisible ? `
-        <div class="profile-edit-form">
-          <div class="field">
-            <label>Name</label>
-            <input type="text" id="prof-name" value="${name}">
-          </div>
-          <div class="field">
-            <label>Phone</label>
-            <input type="tel" id="prof-phone" value="${phone}" placeholder="(412) 555-1234">
-          </div>
-          <div class="field">
-            <label>Email</label>
-            <input type="email" id="prof-email" value="${email}" placeholder="email@example.com">
-          </div>
-          <button class="profile-save-btn" id="prof-save-btn" onclick="saveProfile()">Save Changes</button>
-          <div class="profile-edit-msg" id="prof-msg"></div>
+      const editLabel = editFormVisible ? 'Close' : 'Edit info';
+      strip.innerHTML = `
+        ${photoHtml}
+        <div class="ws-greet">
+          <div class="ws-hi">Welcome back,</div>
+          <div class="ws-name">${firstName}</div>
         </div>
-      ` : '';
-
-      card.innerHTML = `
-        ${avatarHtml}
-        <div class="profile-name">${name}</div>
-        ${phoneHtml}
-        ${emailHtml}
-        ${editBtn}
-        ${editForm}
+        <div class="ws-edit" onclick="toggleProfileEdit()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          ${editLabel}
+        </div>
       `;
+
+      if (editFormVisible) {
+        card.style.display = 'block';
+        card.innerHTML = `
+          <div class="profile-edit-form">
+            <div class="field">
+              <label>Name</label>
+              <input type="text" id="prof-name" value="${name}">
+            </div>
+            <div class="field">
+              <label>Phone</label>
+              <input type="tel" id="prof-phone" value="${phone}" placeholder="(412) 555-1234">
+            </div>
+            <div class="field">
+              <label>Email</label>
+              <input type="email" id="prof-email" value="${email}" placeholder="email@example.com">
+            </div>
+            <button class="profile-save-btn" id="prof-save-btn" onclick="saveProfile()">Save Changes</button>
+            <div class="profile-edit-msg" id="prof-msg"></div>
+          </div>
+        `;
+      } else {
+        card.style.display = 'none';
+        card.innerHTML = '';
+      }
     }
 
     function toggleProfileEdit() {
@@ -2392,5 +2475,21 @@
       showGuestHome();
     }
   </script>
+
+  <!-- Fixed bottom tab bar (shown when logged in) -->
+  <div class="tab-bar" id="tab-bar">
+    <a class="tab active" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="tab" href="directory.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+      <span>Directory</span>
+    </a>
+    <a class="tab" href="events.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <span>Events</span>
+    </a>
+  </div>
 </body>
 </html>
