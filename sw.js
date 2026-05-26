@@ -1,5 +1,5 @@
 // Service Worker for HARUMPHERS PWA
-const CACHE_NAME = 'harumphers-v26';
+const CACHE_NAME = 'harumphers-v27';
 const urlsToCache = [
   '/',
   '/index.html',

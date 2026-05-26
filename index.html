@@ -944,15 +944,25 @@
       font-weight: 700; font-size: 18px;
     }
     .welcome-strip .ws-greet { flex: 1; min-width: 0; }
-    .welcome-strip .ws-hi { font-size: 13px; color: rgba(255,255,255,0.65); }
-    .welcome-strip .ws-name { font-size: 21px; font-weight: 700; line-height: 1.15; }
+    .welcome-strip .ws-hi { font-size: 13px; color: rgba(255,255,255,0.65); white-space: nowrap; }
+    .welcome-strip .ws-name {
+      font-size: 21px; font-weight: 700; line-height: 1.15;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .welcome-strip .ws-edit {
-      flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+      flex-shrink: 0; align-self: center;
+      display: inline-flex; align-items: center; gap: 5px;
       font-size: 12px; font-weight: 600; color: #FFD700;
       background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.4);
       padding: 8px 12px; border-radius: 999px; cursor: pointer;
+      white-space: nowrap;
     }
-    .welcome-strip .ws-edit svg { width: 13px; height: 13px; }
+    .welcome-strip .ws-edit svg { width: 13px; height: 13px; flex-shrink: 0; }
+    /* Very narrow screens: drop the pill label, keep the pencil icon */
+    @media (max-width: 360px) {
+      .welcome-strip .ws-edit span { display: none; }
+      .welcome-strip .ws-edit { padding: 9px; }
+    }
 
     .nav-tiles {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
@@ -1405,7 +1415,9 @@
 
       const f = memberRecord.fields;
       const name = f['FULL NAME'] || '';
-      const firstName = (name.split(/\s+/)[0] || name);
+      const rawFirst = (name.split(/\s+/)[0] || name);
+      // Title-case the first name for a friendlier greeting (FULL NAME is stored all-caps)
+      const firstName = rawFirst ? rawFirst.charAt(0).toUpperCase() + rawFirst.slice(1).toLowerCase() : '';
       const phone = f['CELL #'] || '';
       const email = f['E-MAIL ADDRESS'] || '';
       const photo = f['PHOTO'] && f['PHOTO'][0];
@@ -1430,7 +1442,7 @@
         </div>
         <div class="ws-edit" onclick="toggleProfileEdit()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          ${editLabel}
+          <span>${editLabel}</span>
         </div>
       `;
 
