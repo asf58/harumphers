@@ -986,7 +986,11 @@
     const authMode = getAuthMode();
     const myInfo = getMemberInfo();
 
-    const API_TOKEN = 'patUyXb57QcsCO19p.0087dc0d916011881f3d3116ec8f314b422dcd0c05f37c4a5cfd8cd65350a76c';
+    // Airtable calls go through our Cloudflare Worker proxy.
+    // The Worker injects the real Airtable PAT server-side (no longer in client JS),
+    // and caches GET responses so all members share one upstream fetch per ~5min.
+    const API_BASE = 'https://harumphers-api.adamsfeuer.workers.dev';
+    const API_KEY = 'QtS8Oq-sU1SwjalDXjY4atSmwIW8fYs9gQ9w0KfvDJw';
     const BASE_ID = 'appW7Df1qJlznxxtf';
     const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
     const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
@@ -1026,7 +1030,7 @@
 
     async function apiFetch(url) {
       const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+        headers: { 'X-Harumphers-Key': API_KEY }
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
       return res.json();
@@ -1046,10 +1050,10 @@
     }
 
     async function apiPatch(recordId, fields) {
-      const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
+      const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${API_TOKEN}`,
+          'X-Harumphers-Key': API_KEY,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ fields })
@@ -1065,7 +1069,7 @@
     async function applyApprovedChanges() {
       try {
         const data = await apiFetch(
-          `https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`
+          `${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`
         );
         for (const rec of data.records) {
           const f = rec.fields;
@@ -1085,16 +1089,16 @@
           }
 
           if (Object.keys(updates).length > 0) {
-            await fetch(`https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}/${memberId}`, {
+            await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${memberId}`, {
               method: 'PATCH',
-              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
               body: JSON.stringify({ fields: updates })
             });
           }
 
-          await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
+          await fetch(`${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields: { 'APPLIED AT': new Date().toISOString() } })
           });
         }
@@ -1180,7 +1184,7 @@
     }
 
     async function loadEvents() {
-      const meta = await apiFetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`);
+      const meta = await apiFetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables`);
       const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
       const rsvpFields = membersTable.fields.filter(f =>
         f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
@@ -1193,7 +1197,7 @@
       // (e.g., all events are Suggested or Upcoming). We still proceed to load events.
 
       const eventsData = await apiFetchAll(
-        `https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`
+        `${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`
       );
       const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
 
@@ -1210,7 +1214,7 @@
       guestFields.forEach(f => params.append('fields[]', f.name));
 
       const membersData = await apiFetchAll(
-        `https://api.airtable.com/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
+        `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
       );
 
       allMembers = membersData.records.filter(r => r.fields['IN DIRECTORY']);
@@ -1344,7 +1348,7 @@
       galleryPhotos = {};
       try {
         const photosData = await apiFetchAll(
-          `https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}`
+          `${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}`
         );
         photosData.records.forEach(r => {
           const f = r.fields;
@@ -1368,7 +1372,7 @@
       attendanceData = {};
       try {
         const attData = await apiFetchAll(
-          `https://api.airtable.com/v0/${BASE_ID}/${ATTENDANCE_TABLE}`
+          `${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`
         );
         attData.records.forEach(r => {
           const f = r.fields;
@@ -1388,7 +1392,7 @@
       votesData = {};
       try {
         const votesRaw = await apiFetchAll(
-          `https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`
+          `${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`
         );
         votesRaw.records.forEach(r => {
           const f = r.fields;
@@ -2352,9 +2356,9 @@
         const publicUrl = await uploadPhotoFile(file);
 
         // Create record in EVENT PHOTOS table
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}`, {
+        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             fields: {
               'EVENT RECORD ID': ev.eventRecordId,
@@ -2397,9 +2401,9 @@
 
     async function removeGalleryPhoto(eventRecordId, photoRecordId) {
       try {
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
           method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+          headers: { 'X-Harumphers-Key': API_KEY },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         // Remove from local data
@@ -2420,9 +2424,9 @@
 
     async function saveGalleryCaption(photoRecordId, caption) {
       try {
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
           method: 'PATCH',
-          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fields: { 'CAPTION': caption } })
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2475,9 +2479,9 @@
       const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Removing photo...'; }
       try {
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
+        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
           method: 'PATCH',
-          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fields: { 'SPEAKER PHOTO': [] } })
         });
         if (!res.ok) {
@@ -2548,9 +2552,9 @@
           const newRsvpFieldName = `${mon}${day}-${name.toUpperCase()} RSVP`;
 
           if (msgEl) msgEl.textContent = 'Creating RSVP field...';
-          const fieldRes = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+          const fieldRes = await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name: newRsvpFieldName,
               type: 'singleSelect',
@@ -2573,9 +2577,9 @@
           const nameWords = name.toUpperCase().split(/\s+/);
           const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
           const guestFieldName = `GUESTS-${guestKey}`;
-          await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+          await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
           });
 
@@ -2607,9 +2611,9 @@
 
         if (ev.eventRecordId) {
           // Update existing EVENTS record
-          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
+          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ typecast: true, fields })
           });
           if (!res.ok) {
@@ -2619,9 +2623,9 @@
           }
         } else {
           // Create new EVENTS record for this RSVP field
-          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
+          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ typecast: true, fields })
           });
           if (!res.ok) {
@@ -2707,9 +2711,9 @@
         // Step 1: Create singleSelect RSVP field on Members table (Scheduled only)
         if (status === 'Scheduled') {
           if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating RSVP field...'; }
-          const fieldRes = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+          const fieldRes = await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name: rsvpFieldName,
               type: 'singleSelect',
@@ -2738,9 +2742,9 @@
             const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
             const guestFieldName = `GUESTS-${guestKey}`;
 
-            await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
+            await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
               body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
             });
           }
@@ -2762,9 +2766,9 @@
         if (room) eventFields['ROOM'] = room;
         if (notes) eventFields['NOTES'] = notes;
         if (photoUrl) eventFields['SPEAKER PHOTO'] = [{ url: photoUrl }];
-        await fetch(`https://api.airtable.com/v0/${BASE_ID}/${EVENTS_TABLE}`, {
+        await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ typecast: true, fields: eventFields })
         });
 
@@ -2956,9 +2960,9 @@
         // Batch creates (Airtable max 10 per request)
         for (let j = 0; j < toCreate.length; j += 10) {
           const batch = toCreate.slice(j, j + 10);
-          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
+          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ records: batch })
           });
           if (!res.ok) throw new Error(`Create failed: ${res.status}`);
@@ -2979,9 +2983,9 @@
         // Batch updates (Airtable max 10 per request)
         for (let j = 0; j < toUpdate.length; j += 10) {
           const batch = toUpdate.slice(j, j + 10);
-          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
+          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ records: batch })
           });
           if (!res.ok) throw new Error(`Update failed: ${res.status}`);
@@ -3154,9 +3158,9 @@
         if (value === null) {
           // DELETE existing vote
           if (existing && existing.recordId) {
-            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
               method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+              headers: { 'X-Harumphers-Key': API_KEY },
             });
             if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
           }
@@ -3166,9 +3170,9 @@
           }
         } else if (existing && existing.recordId) {
           // PATCH existing vote record
-          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields: { 'VOTE': value } })
           });
           if (!res.ok) {
@@ -3181,13 +3185,13 @@
         } else {
           // No local record — query Airtable for deduplication
           const formula = encodeURIComponent(`AND({MEMBER RECORD ID}="${myInfo.recordId}",{EVENT RECORD ID}="${ev.eventRecordId}")`);
-          const checkRes = await apiFetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
+          const checkRes = await apiFetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
           if (checkRes.records && checkRes.records.length > 0) {
             // Found existing — PATCH
             const existingId = checkRes.records[0].id;
-            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
+            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
               method: 'PATCH',
-              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
               body: JSON.stringify({ fields: { 'VOTE': value } })
             });
             if (!res.ok) {
@@ -3198,9 +3202,9 @@
             votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: existingId };
           } else {
             // No existing record — POST new
-            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`, {
+            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 fields: {
                   'MEMBER RECORD ID': myInfo.recordId,
@@ -3266,17 +3270,17 @@
 
         if (value === null) {
           if (existing && existing.recordId) {
-            const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
               method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+              headers: { 'X-Harumphers-Key': API_KEY },
             });
             if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
           }
           delete evVotes[memberId];
         } else if (existing && existing.recordId) {
-          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
+          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields: { 'VOTE': value } })
           });
           if (!res.ok) {
@@ -3287,9 +3291,9 @@
         } else {
           // No existing record — POST new (skip the dedup-query optimization
           // since admin edits are rare and the local cache should be fresh enough).
-          const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${VOTES_TABLE}`, {
+          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               fields: {
                 'MEMBER RECORD ID': memberId,

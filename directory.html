@@ -717,7 +717,11 @@
     const authMode = getAuthMode();
     const myInfo = getMemberInfo();
 
-    const API_TOKEN = 'patUyXb57QcsCO19p.0087dc0d916011881f3d3116ec8f314b422dcd0c05f37c4a5cfd8cd65350a76c';
+    // Airtable calls go through our Cloudflare Worker proxy.
+    // The Worker injects the real Airtable PAT server-side (no longer in client JS),
+    // and caches GET responses so all members share one upstream fetch per ~5min.
+    const API_BASE = 'https://harumphers-api.adamsfeuer.workers.dev';
+    const API_KEY = 'QtS8Oq-sU1SwjalDXjY4atSmwIW8fYs9gQ9w0KfvDJw';
     const BASE_ID = 'appW7Df1qJlznxxtf';
     const TABLE_ID = 'tbltzPyERz9wGE0zd';
     const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
@@ -730,8 +734,8 @@
     async function applyApprovedChanges() {
       try {
         const res = await fetch(
-          `https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`,
-          { headers: { 'Authorization': `Bearer ${API_TOKEN}` } }
+          `${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`,
+          { headers: { 'X-Harumphers-Key': API_KEY } }
         );
         if (!res.ok) return;
         const data = await res.json();
@@ -753,16 +757,16 @@
           }
 
           if (Object.keys(updates).length > 0) {
-            await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${memberId}`, {
+            await fetch(`${API_BASE}/v0/${BASE_ID}/${TABLE_ID}/${memberId}`, {
               method: 'PATCH',
-              headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
               body: JSON.stringify({ fields: updates })
             });
           }
 
-          await fetch(`https://api.airtable.com/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
+          await fetch(`${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${API_TOKEN}`, 'Content-Type': 'application/json' },
+            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields: { 'APPLIED AT': new Date().toISOString() } })
           });
         }
@@ -776,7 +780,7 @@
       let fetchUrl = url;
       while (true) {
         const res = await fetch(fetchUrl, {
-          headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+          headers: { 'X-Harumphers-Key': API_KEY }
         });
         if (!res.ok) throw new Error(`API error ${res.status}`);
         const data = await res.json();
@@ -798,7 +802,7 @@
         params.append('fields[]', f);
       });
 
-      const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`;
+      const url = `${API_BASE}/v0/${BASE_ID}/${TABLE_ID}?${params}`;
 
       const data = await apiFetchAll(url);
       allRecords = data.records;
@@ -1069,10 +1073,10 @@
       msgEl.textContent = 'Saving...';
 
       try {
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${m.recordId}`, {
+        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${TABLE_ID}/${m.recordId}`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${API_TOKEN}`,
+            'X-Harumphers-Key': API_KEY,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ fields: updates })
@@ -1272,10 +1276,10 @@
       const next = !m.isAdmin;
       if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
       try {
-        const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${m.recordId}`, {
+        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${TABLE_ID}/${m.recordId}`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${API_TOKEN}`,
+            'X-Harumphers-Key': API_KEY,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ fields: { 'IS ADMIN': next } })
