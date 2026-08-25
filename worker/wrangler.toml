@@ -1,0 +1,16 @@
+name = "harumphers-api"
+main = "src/index.js"
+compatibility_date = "2026-08-25"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://asf58.github.io"
+AIRTABLE_BASE_ID = "appW7Df1qJlznxxtf"
+AIRTABLE_MEMBERS_TABLE_ID = "tbltzPyERz9wGE0zd"
+AIRTABLE_EVENTS_TABLE_ID = "tblzPscL5Q2a2SZk1"
+AIRTABLE_PHOTOS_TABLE_ID = "tblTQM3DY7BAqs9BL"
+AIRTABLE_ATTENDANCE_TABLE_ID = "tbloa1qulpNHKkFNk"
+AIRTABLE_VOTES_TABLE_ID = "tblnpBxZ7N6X7004t"
+
+# Configure these only with `wrangler secret put`; never store their values here:
+# AIRTABLE_TOKEN, SESSION_SECRET, GUEST_LOGIN, ADMIN_LOGIN

@@ -5,6 +5,7 @@
   "scripts": {
     "test:unit": "node --test tests/unit/*.test.mjs tests/worker/*.test.mjs",
     "test:security": "node --test tests/unit/public-client-contract.test.mjs",
+    "test:worker": "node --test tests/worker/*.test.mjs",
     "test:browser": "playwright test",
     "test": "npm run test:unit && npm run test:browser"
   },
