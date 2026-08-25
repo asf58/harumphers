@@ -1187,6 +1187,7 @@
     </div>
   </div>
 
+  <script src="assets/harumphers-client.js" data-api-origin="https://harumphers-api.adamsfeuer.workers.dev"></script>
   <script>
     // Airtable calls go through our Cloudflare Worker proxy.
     // The Worker injects the real Airtable PAT server-side (no longer in client JS),
@@ -1210,30 +1211,31 @@
       return 'Upcoming';
     }
 
-    // --- Auth Helpers (duplicated in each page) ---
+    // --- Auth Helpers ---
+    let currentAuthMode = null;
+    let currentMemberInfo = null;
+
     function getAuthMode() {
-      const auth = localStorage.getItem('harumphers_auth');
-      if (auth === 'admin') return 'admin';
-      if (auth === 'member') return 'member';
-      if (auth === 'guest' || auth === '1') return 'guest';
-      return null;
+      return currentAuthMode;
     }
 
     function getMemberInfo() {
-      const recordId = localStorage.getItem('harumphers_member_id');
-      const name = localStorage.getItem('harumphers_member_name');
-      const duqId = localStorage.getItem('harumphers_duq_id');
-      if (!recordId) return null;
-      return { recordId, name, duqId };
+      return currentMemberInfo;
     }
 
     function logout() {
-      localStorage.removeItem('harumphers_auth');
-      localStorage.removeItem('harumphers_member_id');
-      localStorage.removeItem('harumphers_member_name');
-      localStorage.removeItem('harumphers_duq_id');
-      localStorage.removeItem('harumphers_myname');
+      Harumphers.logout();
       window.location.href = 'index.html';
+    }
+
+    async function loadMemberIdentity() {
+      const record = await Harumphers.api('/api/me');
+      currentMemberInfo = {
+        recordId: record.id,
+        name: record.fields?.['FULL NAME'] || '',
+        duqId: record.fields?.['MEMBER #'] || ''
+      };
+      return record;
     }
 
     // --- Platform detection ---
@@ -1318,20 +1320,6 @@
 
       if (!raw) return;
 
-      // Check for admin password (case-sensitive)
-      if (raw === 'Hrumphr904') {
-        localStorage.setItem('harumphers_auth', 'admin');
-        showMemberHome();
-        return;
-      }
-
-      // Check for guest password (case-insensitive)
-      if (raw.toLowerCase() === 'cigar') {
-        localStorage.setItem('harumphers_auth', 'guest');
-        showGuestHome();
-        return;
-      }
-
       // Check for Duquesne member # (all digits)
       if (/^\d+$/.test(raw)) {
         // Reject all-zeros input. In Airtable, a blank number field is treated
@@ -1351,48 +1339,47 @@
         errorEl.style.color = '#FFD700';
 
         try {
-          // The {MEMBER #}>0 clause excludes records with blank MEMBER #
-          // (which Airtable would otherwise coerce to 0 for the = comparison).
-          const formula = encodeURIComponent(`AND({MEMBER #}=${raw}, {MEMBER #}>0)`);
-          const url = `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}?filterByFormula=${formula}`;
-          const data = await apiFetch(url);
-
-          if (data.records && data.records.length > 0) {
-            const rec = data.records[0];
-            // Defense in depth: verify the returned record's MEMBER # exactly
-            // equals the input. Guards against any future formula coercion.
-            const actualNum = rec.fields['MEMBER #'];
-            if (actualNum == null || parseInt(actualNum, 10) !== parseInt(raw, 10)) {
-              errorEl.style.color = '#ff6b6b';
-              errorEl.textContent = 'Incorrect password or member #';
-              document.getElementById('pw').value = '';
-              document.getElementById('pw').focus();
-              return;
-            }
-            const role = rec.fields['IS ADMIN'] === true ? 'admin' : 'member';
-            localStorage.setItem('harumphers_auth', role);
-            localStorage.setItem('harumphers_member_id', rec.id);
-            localStorage.setItem('harumphers_member_name', rec.fields['FULL NAME'] || '');
-            localStorage.setItem('harumphers_duq_id', raw);
-            localStorage.setItem('harumphers_myname', rec.fields['FULL NAME'] || '');
-            showMemberHome();
-            return;
-          } else {
+          await Harumphers.loginMember(Number(raw));
+          currentAuthMode = 'member';
+          memberRecord = await loadMemberIdentity();
+          showMemberHome();
+          return;
+        } catch (err) {
+          if (err.code === 'LOGIN_FAILED') {
             showSubmissionForm(raw);
             return;
           }
-        } catch (err) {
           errorEl.style.color = '#ff6b6b';
           errorEl.textContent = 'Network error. Try again.';
           return;
         }
       }
 
-      // Nothing matched
-      errorEl.style.color = '#ff6b6b';
-      errorEl.textContent = 'Incorrect password or member #';
-      document.getElementById('pw').value = '';
-      document.getElementById('pw').focus();
+      try {
+        await Harumphers.loginGuest(raw);
+        currentAuthMode = 'guest';
+        showGuestHome();
+        return;
+      } catch (err) {
+        if (err.code !== 'LOGIN_FAILED') {
+          errorEl.style.color = '#ff6b6b';
+          errorEl.textContent = 'Network error. Try again.';
+          return;
+        }
+      }
+
+      try {
+        await Harumphers.loginAdmin(raw);
+        currentAuthMode = 'admin';
+        showMemberHome();
+      } catch (err) {
+        errorEl.style.color = '#ff6b6b';
+        errorEl.textContent = err.code === 'LOGIN_FAILED'
+          ? 'Incorrect password or member #'
+          : 'Network error. Try again.';
+        document.getElementById('pw').value = '';
+        document.getElementById('pw').focus();
+      }
     }
 
     document.getElementById('pw').addEventListener('keydown', e => {
@@ -1418,12 +1405,13 @@
         return;
       }
 
+      if (memberRecord) {
+        renderProfile();
+        return;
+      }
+
       try {
-        // Fetch full record (no fields[] filter - avoids URL encoding issues)
-        const data = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`
-        );
-        memberRecord = data;
+        memberRecord = await loadMemberIdentity();
         renderProfile();
       } catch (err) {
         if (strip) strip.innerHTML = `
@@ -1535,8 +1523,7 @@
         memberRecord = updated;
 
         if (updates['FULL NAME']) {
-          localStorage.setItem('harumphers_member_name', updates['FULL NAME']);
-          localStorage.setItem('harumphers_myname', updates['FULL NAME']);
+          currentMemberInfo.name = updates['FULL NAME'];
         }
 
         editFormVisible = false;
@@ -2507,12 +2494,26 @@
     }
 
     // --- Init ---
-    const authMode = getAuthMode();
-    if (authMode === 'member' || authMode === 'admin') {
-      showMemberHome();
-    } else if (authMode === 'guest') {
-      showGuestHome();
+    async function restoreSession() {
+      try {
+        const session = await Harumphers.getSession();
+        currentAuthMode = session.role;
+        if (session.role === 'member') {
+          memberRecord = await loadMemberIdentity();
+          showMemberHome();
+        } else if (session.role === 'admin') {
+          showMemberHome();
+        } else if (session.role === 'guest') {
+          showGuestHome();
+        }
+      } catch {
+        Harumphers.logout();
+        currentAuthMode = null;
+        currentMemberInfo = null;
+      }
     }
+
+    restoreSession();
   </script>
 
   <!-- Fixed bottom tab bar (shown when logged in) -->

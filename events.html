@@ -946,45 +946,16 @@
     </div>
   </div>
 
+  <script src="assets/harumphers-client.js" data-api-origin="https://harumphers-api.adamsfeuer.workers.dev"></script>
   <script>
     // --- Auth Helpers ---
-    function getAuthMode() {
-      const auth = localStorage.getItem('harumphers_auth');
-      if (auth === 'admin') return 'admin';
-      if (auth === 'member') return 'member';
-      if (auth === 'guest' || auth === '1') return 'guest';
-      return null;
-    }
-
-    function getMemberInfo() {
-      const recordId = localStorage.getItem('harumphers_member_id');
-      const name = localStorage.getItem('harumphers_member_name');
-      const duqId = localStorage.getItem('harumphers_duq_id');
-      if (!recordId) return null;
-      return { recordId, name, duqId };
-    }
+    let authMode = null;
+    let myInfo = null;
 
     function logout() {
-      localStorage.removeItem('harumphers_auth');
-      localStorage.removeItem('harumphers_member_id');
-      localStorage.removeItem('harumphers_member_name');
-      localStorage.removeItem('harumphers_duq_id');
-      localStorage.removeItem('harumphers_myname');
+      Harumphers.logout();
       window.location.href = 'index.html';
     }
-
-    function requireAuth() {
-      if (!getAuthMode()) {
-        window.location.href = 'index.html';
-        return false;
-      }
-      return true;
-    }
-
-    if (!requireAuth()) throw new Error('Not authenticated');
-
-    const authMode = getAuthMode();
-    const myInfo = getMemberInfo();
 
     // Airtable calls go through our Cloudflare Worker proxy.
     // The Worker injects the real Airtable PAT server-side (no longer in client JS),
@@ -3340,14 +3311,35 @@
       }
     }
 
-    applyApprovedChanges().then(() => loadEvents()).catch(err => {
-      document.getElementById('content').innerHTML = `
-        <div class="error">
-          <p>Could not load events</p>
-          <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
-          <a href="index.html">&larr; Back to Home</a>
-        </div>`;
-    });
+    async function initializeEvents() {
+      try {
+        const session = await Harumphers.getSession();
+        authMode = session.role;
+        if (session.role === 'member') {
+          const member = await Harumphers.api('/api/me');
+          myInfo = {
+            recordId: member.id,
+            name: member.fields?.['FULL NAME'] || '',
+            duqId: member.fields?.['MEMBER #'] || ''
+          };
+        }
+        await loadEvents();
+      } catch (err) {
+        if (['SESSION_REQUIRED', 'SESSION_INVALID', 'SESSION_EXPIRED'].includes(err.code)) {
+          Harumphers.logout();
+          window.location.href = 'index.html';
+          return;
+        }
+        document.getElementById('content').innerHTML = `
+          <div class="error">
+            <p>Could not load events</p>
+            <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
+            <a href="index.html">&larr; Back to Home</a>
+          </div>`;
+      }
+    }
+
+    initializeEvents();
   </script>
 </body>
 </html>

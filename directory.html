@@ -677,45 +677,16 @@
     <div class="detail" id="detail"></div>
   </div>
 
+  <script src="assets/harumphers-client.js" data-api-origin="https://harumphers-api.adamsfeuer.workers.dev"></script>
   <script>
     // --- Auth Helpers ---
-    function getAuthMode() {
-      const auth = localStorage.getItem('harumphers_auth');
-      if (auth === 'admin') return 'admin';
-      if (auth === 'member') return 'member';
-      if (auth === 'guest' || auth === '1') return 'guest';
-      return null;
-    }
-
-    function getMemberInfo() {
-      const recordId = localStorage.getItem('harumphers_member_id');
-      const name = localStorage.getItem('harumphers_member_name');
-      const duqId = localStorage.getItem('harumphers_duq_id');
-      if (!recordId) return null;
-      return { recordId, name, duqId };
-    }
+    let authMode = null;
+    let myInfo = null;
 
     function logout() {
-      localStorage.removeItem('harumphers_auth');
-      localStorage.removeItem('harumphers_member_id');
-      localStorage.removeItem('harumphers_member_name');
-      localStorage.removeItem('harumphers_duq_id');
-      localStorage.removeItem('harumphers_myname');
+      Harumphers.logout();
       window.location.href = 'index.html';
     }
-
-    function requireAuth() {
-      if (!getAuthMode()) {
-        window.location.href = 'index.html';
-        return false;
-      }
-      return true;
-    }
-
-    if (!requireAuth()) throw new Error('Not authenticated');
-
-    const authMode = getAuthMode();
-    const myInfo = getMemberInfo();
 
     // Airtable calls go through our Cloudflare Worker proxy.
     // The Worker injects the real Airtable PAT server-side (no longer in client JS),
@@ -1264,8 +1235,7 @@
       if (newTa) newTa.addEventListener('focus', () => { newTa.select(); newTa.setSelectionRange(0, newTa.value.length); });
     }
 
-    // Show the Export trigger for admins
-    if (authMode === 'admin') {
+    function showAdminControls() {
       const bar = document.getElementById('admin-bar');
       if (bar) bar.style.display = '';
     }
@@ -1310,15 +1280,37 @@
       if (e.key === 'Escape') closeDetail();
     });
 
-    applyApprovedChanges().then(() => loadDirectory()).catch(err => {
-      document.getElementById('content').innerHTML = `
-        <div class="error">
-          <p>Could not load directory</p>
-          <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
-          <a href="https://airtable.com/appW7Df1qJlznxxtf/shrMlfdxvWotFV2lG">Open in Airtable instead &rarr;</a>
-        </div>`;
-      document.getElementById('count').textContent = '';
-    });
+    async function initializeDirectory() {
+      try {
+        const session = await Harumphers.getSession();
+        authMode = session.role;
+        if (session.role === 'member') {
+          const member = await Harumphers.api('/api/me');
+          myInfo = {
+            recordId: member.id,
+            name: member.fields?.['FULL NAME'] || '',
+            duqId: member.fields?.['MEMBER #'] || ''
+          };
+        }
+        if (session.role === 'admin') showAdminControls();
+        await loadDirectory();
+      } catch (err) {
+        if (['SESSION_REQUIRED', 'SESSION_INVALID', 'SESSION_EXPIRED'].includes(err.code)) {
+          Harumphers.logout();
+          window.location.href = 'index.html';
+          return;
+        }
+        document.getElementById('content').innerHTML = `
+          <div class="error">
+            <p>Could not load directory</p>
+            <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
+            <a href="index.html">&larr; Back to Home</a>
+          </div>`;
+        document.getElementById('count').textContent = '';
+      }
+    }
+
+    initializeDirectory();
   </script>
 </body>
 </html>
