@@ -1,5 +1,5 @@
-const FRESH_MS = 24 * 60 * 60 * 1000;
-const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const FRESH_MS = 15 * 60 * 1000;
+const STALE_MS = 24 * 60 * 60 * 1000;
 const CACHE_ORIGIN = 'https://cache.harumphers.invalid';
 const ROLES = ['guest', 'member', 'admin'];
 const RESOURCES = ['directory', 'events'];
@@ -49,7 +49,7 @@ async function store(cache, request, value, now) {
   if (!cache) return;
   await cache.put(request, new Response(JSON.stringify(value), {
     headers: {
-      'Cache-Control': 'max-age=604800',
+      'Cache-Control': 'max-age=86400',
       'Content-Type': 'application/json; charset=utf-8',
       'X-Harumphers-Cached-At': String(now)
     }

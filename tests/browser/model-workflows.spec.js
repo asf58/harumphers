@@ -38,6 +38,14 @@ test('member profile, RSVP, and suggested-event vote persist in the working mode
   const suggested = page.locator('.qe-card').filter({ hasText: 'Suggested Fixture Speaker' });
   await suggested.getByRole('button', { name: 'Interested', exact: true }).click();
   await expect(suggested.locator('.rsvp-pill')).toHaveText('INTERESTED');
+
+  await page.reload();
+  const persistedSuggested = page.locator('.qe-card').filter({ hasText: 'Suggested Fixture Speaker' });
+  await expect(persistedSuggested.locator('.rsvp-pill')).toHaveText('INTERESTED');
+
+  await page.evaluate(async () => window.Harumphers.loginGuest('fixture-guest-phrase'));
+  await page.goto('/index.html');
+  await expect(page.locator('.qe-card').filter({ hasText: 'Suggested Fixture Speaker' })).toContainText('1 up / 0 down');
 });
 
 test('administrator can create, promote, complete, record attendance, and add a photo', async ({ page }) => {
@@ -82,6 +90,12 @@ test('administrator can create, promote, complete, record attendance, and add a 
   const galleryUpload = dinnerCard.locator('.gallery-upload input[type="file"]');
   await galleryUpload.setInputFiles(path.resolve('icons/icon-192.png'));
   await expect(dinnerCard).toContainText('Photo Gallery (1)');
+
+  await page.evaluate(async () => window.Harumphers.loginMember(42001));
+  await page.goto('/events.html');
+  dinnerCard = page.locator('.event-card').filter({ hasText: 'Working Model Dinner' });
+  await dinnerCard.getByRole('button', { name: /Working Model Dinner/ }).click();
+  await expect(dinnerCard).toContainText('1 attended');
 });
 
 test('missing member number request can be submitted and explicitly approved by an administrator', async ({ page }) => {

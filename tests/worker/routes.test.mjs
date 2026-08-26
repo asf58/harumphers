@@ -7,7 +7,9 @@ import { handleRequest } from '../../worker/src/index.js';
 const ENV = {
   ADMIN_LOGIN: 'fixture-admin-password',
   ALLOWED_ORIGINS: 'https://app.example.test,https://preview.example.test',
+  AUTH_RATE_LIMITER: { async limit() { return { success: true }; } },
   GUEST_LOGIN: 'fixture-guest-phrase',
+  MEMBER_REQUEST_RATE_LIMITER: { async limit() { return { success: true }; } },
   SESSION_SECRET: 'fixture-session-secret-32-characters'
 };
 
@@ -27,6 +29,10 @@ function makeAirtable() {
     async getEventsBootstrap(role) {
       calls.push(['getEventsBootstrap', role]);
       return { events: [{ id: 'rec_event', fields: { NAME: 'Event Fixture' } }], members: [] };
+    },
+    async getMemberVotes(recordId) {
+      calls.push(['getMemberVotes', recordId]);
+      return { votes: [{ eventId: 'recFixtureEvent02', vote: 'UP' }] };
     },
     async getMember(recordId) {
       calls.push(['getMember', recordId]);
@@ -52,7 +58,7 @@ function makeAirtable() {
 }
 
 function request(path, { method = 'GET', token, body, origin = 'https://app.example.test' } = {}) {
-  const headers = new Headers({ Origin: origin });
+  const headers = new Headers({ 'CF-Connecting-IP': '192.0.2.1', Origin: origin });
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (body !== undefined) headers.set('Content-Type', 'application/json');
 
@@ -141,6 +147,21 @@ test('the me route derives the member record from the signed subject', async () 
   assert.deepEqual(airtable.calls, [['getMember', 'rec_member']]);
 });
 
+test('member vote history exposes only the signed member own event choices', async () => {
+  const memberToken = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
+  const guestToken = await issueSession({ sub: 'guest', role: 'guest' }, ENV.SESSION_SECRET, 1000);
+  const airtable = makeAirtable();
+
+  const denied = await call(request('/api/me/votes', { token: guestToken }), airtable);
+  assert.equal(denied.response.status, 403);
+  assert.deepEqual(airtable.calls, []);
+
+  const allowed = await call(request('/api/me/votes', { token: memberToken }), airtable);
+  assert.equal(allowed.response.status, 200);
+  assert.deepEqual(allowed.body, { votes: [{ eventId: 'recFixtureEvent02', vote: 'UP' }] });
+  assert.deepEqual(airtable.calls, [['getMemberVotes', 'recFixtureMember1']]);
+});
+
 test('member profile writes are limited to the signed subject and allowlisted fields', async () => {
   const token = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
   const airtable = makeAirtable();
@@ -173,7 +194,7 @@ test('administrator member writes require an administrator session', async () =>
   const adminToken = await issueSession({ sub: 'admin', role: 'admin' }, ENV.SESSION_SECRET, 1000);
   const targetId = 'recFixtureMember2';
   const airtable = makeAirtable();
-  const value = { name: 'Admin Updated Fixture', phone: '', email: '', memberNumber: 42002, isAdmin: false };
+  const value = { name: 'Admin Updated Fixture', phone: '', email: '', memberNumber: 42002 };
 
   const denied = await call(request(`/api/admin/members/${targetId}`, {
     method: 'PATCH', token: memberToken, body: value
@@ -186,6 +207,12 @@ test('administrator member writes require an administrator session', async () =>
   }), airtable);
   assert.equal(allowed.response.status, 200);
   assert.deepEqual(airtable.calls, [['updateMember', targetId, value]]);
+
+  const misleadingRoleWrite = await call(request(`/api/admin/members/${targetId}`, {
+    method: 'PATCH', token: adminToken, body: { ...value, isAdmin: true }
+  }), airtable);
+  assert.equal(misleadingRoleWrite.response.status, 400);
+  assert.equal(airtable.calls.length, 1);
 });
 
 test('RSVP writes derive the member target from the signed session', async () => {
@@ -309,6 +336,27 @@ test('guest login issues a guest session without echoing the phrase', async () =
   });
   assert.equal(JSON.stringify(accepted.body).includes(ENV.GUEST_LOGIN), false);
   assert.equal(accepted.response.headers.get('Access-Control-Allow-Origin'), 'https://app.example.test');
+});
+
+test('public login and member-request routes are rate limited before Airtable writes', async () => {
+  const airtable = makeAirtable();
+  const limited = { async limit() { return { success: false }; } };
+  const env = { ...ENV, AUTH_RATE_LIMITER: limited, MEMBER_REQUEST_RATE_LIMITER: limited };
+
+  for (const [path, body] of [
+    ['/api/login/member', { memberNumber: 42 }],
+    ['/api/member-requests', { name: 'Fixture Request', memberNumber: 42999 }]
+  ]) {
+    const response = await handleRequest(request(path, { method: 'POST', body }), env, {}, {
+      airtable,
+      nowSeconds: () => 1000,
+      randomUUID: () => '00000000-0000-4000-8000-000000000001'
+    });
+    const responseBody = await response.json();
+    assert.equal(response.status, 429, path);
+    assert.equal(responseBody.error.code, 'RATE_LIMITED', path);
+  }
+  assert.deepEqual(airtable.calls, []);
 });
 
 test('the session route returns the verified role without exposing its subject', async () => {

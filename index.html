@@ -1212,6 +1212,7 @@
   <script src="assets/harumphers-client.js" data-api-origin="https://harumphers-api.adamsfeuer.workers.dev"></script>
   <script>
     let votesData = {}; // eventRecordId -> { memberRecordId: { vote, recordId } }
+    let voteTalliesData = {}; // eventRecordId -> { up, down }
     let votingInFlight = new Set();
 
     function normalizeStatus(raw) {
@@ -1564,7 +1565,9 @@
 
         const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
 
-        // Load votes data
+        voteTalliesData = bootstrap.voteTallies || {};
+
+        // Only administrators receive identity-bearing vote rows.
         votesData = {};
         try {
           bootstrap.votes.forEach(r => {
@@ -1584,6 +1587,11 @@
         const memberData = await Harumphers.api('/api/me');
         myMemberRecord = memberData;
         const myFields = memberData.fields || {};
+        const memberVotes = await Harumphers.api('/api/me/votes');
+        memberVotes.votes.forEach(item => {
+          if (!votesData[item.eventId]) votesData[item.eventId] = {};
+          votesData[item.eventId][memberData.id] = { vote: item.vote };
+        });
 
         // Build quick event list from RSVP fields (Scheduled events have RSVP columns)
         const rsvpEvents = rsvpFields.map(field => {
@@ -1686,6 +1694,8 @@
       try {
         const bootstrap = await Harumphers.api('/api/events');
         const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
+
+        voteTalliesData = bootstrap.voteTallies || {};
 
         // Load votes data for tallies
         votesData = {};
@@ -1898,10 +1908,13 @@
 
       // Vote tally
       const evVotes = ev._recordId ? (votesData[ev._recordId] || {}) : {};
-      let upCount = 0, downCount = 0;
-      for (const memberId in evVotes) {
-        if (evVotes[memberId].vote === 'UP') upCount++;
-        else if (evVotes[memberId].vote === 'DOWN') downCount++;
+      let upCount = voteTalliesData[ev._recordId]?.up || 0;
+      let downCount = voteTalliesData[ev._recordId]?.down || 0;
+      if (!voteTalliesData[ev._recordId]) {
+        for (const memberId in evVotes) {
+          if (evVotes[memberId].vote === 'UP') upCount++;
+          else if (evVotes[memberId].vote === 'DOWN') downCount++;
+        }
       }
       const tallyHtml = (upCount > 0 || downCount > 0)
         ? `<div class="qe-vote-tally">${upCount} up / ${downCount} down</div>`
@@ -1979,6 +1992,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ vote: newValue })
         });
+        const tally = voteTalliesData[ev._recordId] ??= { up: 0, down: 0 };
+        if (currentVote === 'UP') tally.up = Math.max(0, tally.up - 1);
+        if (currentVote === 'DOWN') tally.down = Math.max(0, tally.down - 1);
+        if (newValue === 'UP') tally.up += 1;
+        if (newValue === 'DOWN') tally.down += 1;
         if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
         if (newValue === null) delete votesData[ev._recordId][info.recordId];
         else votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: result.id };

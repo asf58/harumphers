@@ -42,35 +42,42 @@ function fakeAirtable() {
   };
 }
 
-test('named role-aware reads stay fresh for twenty-four hours', async () => {
+test('named role-aware reads bound cross-location freshness to fifteen minutes', async () => {
   const cache = memoryCache();
   const airtable = fakeAirtable();
   let now = 1_000_000;
   const cached = createCachedAirtable(airtable, cache, () => now);
 
   const first = await cached.getDirectory('guest');
-  now += (24 * 60 * 60 * 1000) - 1;
+  now += (15 * 60 * 1000) - 1;
   const second = await cached.getDirectory('guest');
+  now += 2;
+  const refreshed = await cached.getDirectory('guest');
   const admin = await cached.getDirectory('admin');
 
   assert.deepEqual(second, first);
+  assert.notDeepEqual(refreshed, first);
   assert.equal(admin.records[0].role, 'admin');
-  assert.deepEqual(airtable.calls, [['getDirectory', 'guest'], ['getDirectory', 'admin']]);
+  assert.deepEqual(airtable.calls, [
+    ['getDirectory', 'guest'],
+    ['getDirectory', 'guest'],
+    ['getDirectory', 'admin']
+  ]);
   assert.equal(cache.values.size, 2);
 });
 
-test('a stale read is used only when refresh fails and expires after seven days', async () => {
+test('a stale read is used only when refresh fails and expires after twenty-four hours', async () => {
   const cache = memoryCache();
   const airtable = fakeAirtable();
   let now = 1_000_000;
   const cached = createCachedAirtable(airtable, cache, () => now);
   const first = await cached.getEventsBootstrap('member');
 
-  now += (24 * 60 * 60 * 1000) + 1;
+  now += (15 * 60 * 1000) + 1;
   airtable.failReads = true;
   assert.deepEqual(await cached.getEventsBootstrap('member'), first);
 
-  now += 6 * 24 * 60 * 60 * 1000;
+  now += (24 * 60 * 60 * 1000) - (15 * 60 * 1000);
   await assert.rejects(() => cached.getEventsBootstrap('member'), /fixture upstream failure/);
 });
 

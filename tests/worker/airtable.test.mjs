@@ -224,9 +224,9 @@ test('events bootstrap uses only the configured named resources', async () => {
   ]);
   assert.equal(result.events[0].id, 'rec_tblFixtureEvents');
   assert.equal(result.members[0].id, 'rec_tblFixtureMembers');
-  assert.equal(result.photos[0].id, 'rec_tblFixturePhotos');
-  assert.equal(result.attendance[0].id, 'rec_tblFixtureAttendance');
-  assert.equal(result.votes[0].id, 'rec_tblFixtureVotes');
+  assert.equal(result.photos[0].id, undefined);
+  assert.deepEqual(result.attendance, []);
+  assert.deepEqual(result.votes, []);
   assert.deepEqual(requests.map(value => value.pathname).sort(), [
     '/v0/appFixtureBase/tblFixtureAttendance',
     '/v0/appFixtureBase/tblFixtureEvents',
@@ -241,6 +241,71 @@ test('events bootstrap uses only the configured named resources', async () => {
   assert.equal(memberRequest.searchParams.getAll('fields[]').includes('GUESTS-DINNER'), true);
   assert.equal(memberRequest.searchParams.getAll('fields[]').includes('REQUESTED CHANGES'), false);
   assert.equal(memberRequest.searchParams.getAll('fields[]').includes('MEMBER #'), false);
+});
+
+test('non-admin event bootstrap aggregates identity-bearing rows and member vote history stays private', async () => {
+  const airtable = createAirtable(ENV, async url => {
+    const pathname = new URL(url).pathname;
+    if (pathname === '/v0/meta/bases/appFixtureBase/tables') {
+      return jsonResponse({ tables: [{ id: 'tblFixtureMembers', fields: [] }] });
+    }
+    if (pathname.endsWith('/tblFixtureMembers')) {
+      return jsonResponse({ records: [{
+        id: 'recFixtureMember1',
+        fields: { 'FULL NAME': 'Fixture Member', 'IN DIRECTORY': true }
+      }] });
+    }
+    if (pathname.endsWith('/tblFixtureAttendance')) {
+      return jsonResponse({ records: [{
+        id: 'recAttendance0001',
+        fields: {
+          'EVENT RECORD ID': 'recFixtureEvent02',
+          'MEMBER RECORD ID': 'recFixtureMember1',
+          ATTENDED: true,
+          'ACTUAL GUESTS': 1
+        }
+      }] });
+    }
+    if (pathname.endsWith('/tblFixtureVotes')) {
+      return jsonResponse({ records: [{
+        id: 'recFixtureVote001',
+        fields: {
+          'EVENT RECORD ID': 'recFixtureEvent02',
+          'MEMBER RECORD ID': 'recFixtureMember1',
+          VOTE: 'UP'
+        }
+      }] });
+    }
+    if (pathname.endsWith('/tblFixturePhotos')) {
+      return jsonResponse({ records: [{
+        id: 'recFixturePhoto01',
+        fields: {
+          'EVENT RECORD ID': 'recFixtureEvent02',
+          'MEMBER RECORD ID': 'recFixtureMember1',
+          'MEMBER NAME': 'Fixture Member',
+          PHOTO: []
+        }
+      }] });
+    }
+    return jsonResponse({ records: [{ id: 'recFixtureEvent02', fields: { Status: 'Suggested' } }] });
+  });
+
+  const guest = await airtable.getEventsBootstrap('guest');
+  assert.deepEqual(guest.votes, []);
+  assert.deepEqual(guest.voteTallies, { recFixtureEvent02: { up: 1, down: 0 } });
+  assert.deepEqual(guest.attendance, []);
+  assert.deepEqual(guest.attendanceSummary, [{
+    eventId: 'recFixtureEvent02',
+    memberName: 'Fixture Member',
+    attended: true,
+    actualGuests: 1
+  }]);
+  assert.equal(guest.photos[0].id, undefined);
+  assert.equal('MEMBER RECORD ID' in guest.photos[0].fields, false);
+
+  assert.deepEqual(await airtable.getMemberVotes('recFixtureMember1'), {
+    votes: [{ eventId: 'recFixtureEvent02', vote: 'UP' }]
+  });
 });
 
 test('upstream failures return a bounded error without exposing the response body', async () => {
@@ -286,7 +351,16 @@ test('attendance saves update existing rows and create missing rows without dupl
   const airtable = createAirtable(ENV, async (url, init = {}) => {
     const request = { url: new URL(url), init };
     requests.push(request);
-    if (init.method === undefined) {
+    if (request.url.pathname.endsWith('/recFixtureEvent01')) {
+      return jsonResponse({ id: 'recFixtureEvent01', fields: { Status: 'Completed' } });
+    }
+    if (request.url.pathname.endsWith('/tblFixtureMembers')) {
+      return jsonResponse({ records: [
+        { id: 'recFixtureMember1', fields: { 'IN DIRECTORY': true } },
+        { id: 'recFixtureMember2', fields: { 'IN DIRECTORY': true } }
+      ] });
+    }
+    if (request.url.pathname.endsWith('/tblFixtureAttendance') && init.method === undefined) {
       return jsonResponse({
         records: [{
           id: 'recAttendance0001',
@@ -312,9 +386,11 @@ test('attendance saves update existing rows and create missing rows without dupl
   ]);
 
   assert.deepEqual(result, { saved: 2 });
-  assert.equal(requests[0].url.searchParams.get('filterByFormula'), "{EVENT RECORD ID}='recFixtureEvent01'");
-  assert.equal(requests[1].init.method, 'PATCH');
-  assert.deepEqual(JSON.parse(requests[1].init.body), {
+  assert.equal(requests[0].url.pathname.endsWith('/recFixtureEvent01'), true);
+  assert.equal(requests[1].url.pathname.endsWith('/tblFixtureMembers'), true);
+  assert.equal(requests[2].url.searchParams.get('filterByFormula'), "{EVENT RECORD ID}='recFixtureEvent01'");
+  assert.equal(requests[3].init.method, 'PATCH');
+  assert.deepEqual(JSON.parse(requests[3].init.body), {
     records: [{
       id: 'recAttendance0001',
       fields: {
@@ -325,8 +401,8 @@ test('attendance saves update existing rows and create missing rows without dupl
       }
     }]
   });
-  assert.equal(requests[2].init.method, 'POST');
-  assert.deepEqual(JSON.parse(requests[2].init.body), {
+  assert.equal(requests[4].init.method, 'POST');
+  assert.deepEqual(JSON.parse(requests[4].init.body), {
     records: [{
       fields: {
         'EVENT RECORD ID': 'recFixtureEvent01',
@@ -340,8 +416,15 @@ test('attendance saves update existing rows and create missing rows without dupl
 
 test('attendance saves fail closed when existing rows contain a duplicate member', async () => {
   let requestCount = 0;
-  const airtable = createAirtable(ENV, async () => {
+  const airtable = createAirtable(ENV, async url => {
     requestCount += 1;
+    const pathname = new URL(url).pathname;
+    if (pathname.endsWith('/recFixtureEvent01')) {
+      return jsonResponse({ id: 'recFixtureEvent01', fields: { Status: 'Completed' } });
+    }
+    if (pathname.endsWith('/tblFixtureMembers')) {
+      return jsonResponse({ records: [{ id: 'recFixtureMember1', fields: { 'IN DIRECTORY': true } }] });
+    }
     return jsonResponse({
       records: [
         { id: 'recAttendance0001', fields: { 'MEMBER RECORD ID': 'recFixtureMember1' } },
@@ -356,7 +439,57 @@ test('attendance saves fail closed when existing rows contain a duplicate member
     ]),
     error => error.code === 'UPSTREAM_FAILED'
   );
-  assert.equal(requestCount, 1);
+  assert.equal(requestCount, 3);
+});
+
+test('attendance rejects duplicate submitted members before reaching Airtable', async () => {
+  let requestCount = 0;
+  const airtable = createAirtable(ENV, async () => {
+    requestCount += 1;
+    return jsonResponse({});
+  });
+
+  await assert.rejects(
+    () => airtable.saveAttendance('recFixtureEvent01', [
+      { memberId: 'recFixtureMember1', attended: true, actualGuests: 0 },
+      { memberId: 'recFixtureMember1', attended: false, actualGuests: 0 }
+    ]),
+    error => error.code === 'VALIDATION_FAILED' && error.status === 400
+  );
+  assert.equal(requestCount, 0);
+});
+
+test('attendance accepts only completed events and current directory members', async () => {
+  let eventStatus = 'Scheduled';
+  const requests = [];
+  const airtable = createAirtable(ENV, async url => {
+    const pathname = new URL(url).pathname;
+    requests.push(pathname);
+    if (pathname.endsWith('/recFixtureEvent01')) {
+      return jsonResponse({ id: 'recFixtureEvent01', fields: { Status: eventStatus } });
+    }
+    if (pathname.endsWith('/tblFixtureMembers')) {
+      return jsonResponse({ records: [{ id: 'recFixtureMember2', fields: { 'IN DIRECTORY': true } }] });
+    }
+    return jsonResponse({ records: [] });
+  });
+
+  await assert.rejects(
+    () => airtable.saveAttendance('recFixtureEvent01', [
+      { memberId: 'recFixtureMember1', attended: true, actualGuests: 0 }
+    ]),
+    error => error.code === 'EVENT_NOT_COMPLETED' && error.status === 409
+  );
+  assert.equal(requests.length, 1);
+
+  eventStatus = 'Completed';
+  await assert.rejects(
+    () => airtable.saveAttendance('recFixtureEvent01', [
+      { memberId: 'recFixtureMember1', attended: true, actualGuests: 0 }
+    ]),
+    error => error.code === 'VALIDATION_FAILED' && error.status === 400
+  );
+  assert.equal(requests.some(pathname => pathname.endsWith('/tblFixtureAttendance')), false);
 });
 
 test('promoting a suggested event creates exact RSVP mappings before marking it ready', async () => {

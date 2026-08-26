@@ -1013,6 +1013,7 @@
     let galleryPhotos = {}; // eventRecordId -> [{url, thumb, memberName, caption}]
     let attendanceData = {}; // eventRecordId -> { memberRecordId: { attended, actualGuests, recordId } }
     let votesData = {}; // eventRecordId -> { memberRecordId: { vote, recordId } }
+    let voteTalliesData = {}; // eventRecordId -> { up, down }
     let votingInFlight = new Set(); // per-event lock
     let showingAttendance = null; // eventIdx or null
 
@@ -1122,6 +1123,7 @@
 
     async function loadEvents() {
       const bootstrap = await Harumphers.api('/api/events');
+      voteTalliesData = bootstrap.voteTallies || {};
       const rsvpFields = bootstrap.memberFields.filter(f =>
         f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
       );
@@ -1277,18 +1279,30 @@
       // Load attendance records
       attendanceData = {};
       try {
-        bootstrap.attendance.forEach(r => {
-          const f = r.fields;
-          const eventId = f['EVENT RECORD ID'];
-          const memberId = f['MEMBER RECORD ID'];
-          if (!eventId || !memberId) return;
-          if (!attendanceData[eventId]) attendanceData[eventId] = {};
-          attendanceData[eventId][memberId] = {
-            attended: !!f['ATTENDED'],
-            actualGuests: f['ACTUAL GUESTS'] || 0,
-            recordId: r.id,
-          };
-        });
+        if (authMode === 'admin') {
+          bootstrap.attendance.forEach(r => {
+            const f = r.fields;
+            const eventId = f['EVENT RECORD ID'];
+            const memberId = f['MEMBER RECORD ID'];
+            if (!eventId || !memberId) return;
+            if (!attendanceData[eventId]) attendanceData[eventId] = {};
+            attendanceData[eventId][memberId] = {
+              attended: !!f['ATTENDED'],
+              actualGuests: f['ACTUAL GUESTS'] || 0,
+              recordId: r.id,
+            };
+          });
+        } else {
+          (bootstrap.attendanceSummary || []).forEach((entry, index) => {
+            if (!entry.eventId) return;
+            if (!attendanceData[entry.eventId]) attendanceData[entry.eventId] = {};
+            attendanceData[entry.eventId][`summary-${index}`] = {
+              attended: entry.attended === true,
+              actualGuests: entry.actualGuests || 0,
+              name: entry.memberName || 'Member'
+            };
+          });
+        }
       } catch (e) { /* attendance load failure is non-fatal */ }
 
       // Load votes for suggested events
@@ -1305,6 +1319,13 @@
             recordId: r.id,
           };
         });
+        if (authMode === 'member' && myInfo) {
+          const memberVotes = await Harumphers.api('/api/me/votes');
+          memberVotes.votes.forEach(item => {
+            if (!votesData[item.eventId]) votesData[item.eventId] = {};
+            votesData[item.eventId][myInfo.recordId] = { vote: item.vote };
+          });
+        }
       } catch (e) { /* votes load failure is non-fatal */ }
 
       render();
@@ -2604,6 +2625,17 @@
     }
 
     function buildAttendanceSummary(ev, evAttendance) {
+      if (authMode !== 'admin') {
+        const attended = Object.values(evAttendance).filter(entry => entry.attended);
+        if (attended.length === 0) return '';
+        const totalGuests = attended.reduce((sum, entry) => sum + (entry.actualGuests || 0), 0);
+        return `<div class="attendance-summary">
+          <div class="attendance-summary-title">Attendance</div>
+          <div class="attendance-summary-stats">${attended.length} attended${totalGuests > 0 ? ` + ${totalGuests} guest${totalGuests !== 1 ? 's' : ''}` : ''}</div>
+          <div>${attended.map(entry => `<span class="attendance-chip attended">${Harumphers.escapeHtml(entry.name)}${entry.actualGuests > 0 ? ` (+${entry.actualGuests})` : ''}</span>`).join('')}</div>
+        </div>`;
+      }
+
       const allEntries = [...ev.yes, ...ev.maybe, ...ev.no, ...ev.pending];
       const attended = [];
       const noShows = []; // RSVP'd YES but didn't attend
@@ -2718,20 +2750,25 @@
       if (!ev.eventRecordId) return '';
 
       const evVotes = votesData[ev.eventRecordId] || {};
-      let upCount = 0, downCount = 0;
+      let upCount = voteTalliesData[ev.eventRecordId]?.up || 0;
+      let downCount = voteTalliesData[ev.eventRecordId]?.down || 0;
       const upVoters = [], downVoters = [];
 
-      for (const memberId in evVotes) {
-        const v = evVotes[memberId];
-        const member = allMembers.find(m => m.id === memberId);
-        if (!member) continue;
-        const name = member.fields['FULL NAME'] || 'Unknown';
-        if (v.vote === 'UP') {
-          upCount++;
-          upVoters.push({ memberId, name });
-        } else if (v.vote === 'DOWN') {
-          downCount++;
-          downVoters.push({ memberId, name });
+      if (authMode === 'admin' || !voteTalliesData[ev.eventRecordId]) {
+        upCount = 0;
+        downCount = 0;
+        for (const memberId in evVotes) {
+          const v = evVotes[memberId];
+          const member = allMembers.find(m => m.id === memberId);
+          if (!member) continue;
+          const name = member.fields['FULL NAME'] || 'Unknown';
+          if (v.vote === 'UP') {
+            upCount++;
+            upVoters.push({ memberId, name });
+          } else if (v.vote === 'DOWN') {
+            downCount++;
+            downVoters.push({ memberId, name });
+          }
         }
       }
 
@@ -2845,6 +2882,12 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ vote: value })
         });
+        const currentVote = votesData[ev.eventRecordId]?.[myInfo.recordId]?.vote || null;
+        const tally = voteTalliesData[ev.eventRecordId] ??= { up: 0, down: 0 };
+        if (currentVote === 'UP') tally.up = Math.max(0, tally.up - 1);
+        if (currentVote === 'DOWN') tally.down = Math.max(0, tally.down - 1);
+        if (value === 'UP') tally.up += 1;
+        if (value === 'DOWN') tally.down += 1;
         if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
         if (value === null) delete votesData[ev.eventRecordId][myInfo.recordId];
         else votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: result.id };

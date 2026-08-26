@@ -610,20 +610,6 @@
       vertical-align: middle;
     }
 
-    .detail-btn.admin-toggle {
-      background: rgba(139,0,0,0.25);
-      color: #FFD700;
-      border: 1px solid rgba(255,215,0,0.4);
-      cursor: pointer;
-      font-family: inherit;
-    }
-
-    .detail-btn.admin-toggle.remove {
-      background: rgba(255,107,107,0.15);
-      color: #ff6b6b;
-      border: 1px solid rgba(255,107,107,0.4);
-    }
-
     /* Export feature (admin only) */
     .export-trigger {
       background: #444;
@@ -778,7 +764,6 @@
           phone: f['CELL #'] || '',
           email: f['E-MAIL ADDRESS'] || '',
           memberNum: f['MEMBER #'] || '',
-          isAdmin: f['IS ADMIN'] === true,
           photoUrl: photo && photo.thumbnails && photo.thumbnails.large
             ? photo.thumbnails.large.url : null,
         };
@@ -829,7 +814,7 @@
       }
       const isMe = myInfo && m.recordId === myInfo.recordId;
       const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
-      const adminBadge = (authMode === 'admin' && m.isAdmin) ? '<span class="admin-badge">ADMIN</span>' : '';
+      const adminBadge = '';
       return `<div class="card" role="button" tabindex="0" onclick="showDetail(${idx})" onkeydown="activateDetailFromKeyboard(event, ${idx})">
         ${avatarHtml}
         <div class="info">
@@ -848,7 +833,7 @@
         : `<div class="grid-initials">${escapeHtml(initials)}</div>`;
       const isMe = myInfo && m.recordId === myInfo.recordId;
       const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
-      const adminBadge = (authMode === 'admin' && m.isAdmin) ? '<span class="admin-badge">ADMIN</span>' : '';
+      const adminBadge = '';
       const badges = (youBadge || adminBadge) ? `<div class="grid-badges">${youBadge}${adminBadge}</div>` : '';
       return `<div class="grid-card" role="button" tabindex="0" onclick="showDetail(${idx})" onkeydown="activateDetailFromKeyboard(event, ${idx})">
         ${avatarHtml}
@@ -963,12 +948,6 @@
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
           <span class="detail-btn-label">Edit Member</span></button>`;
 
-        // Admin: promote/demote toggle
-        const toggleLabel = m.isAdmin ? 'Remove Admin' : 'Make Admin';
-        const toggleCls = m.isAdmin ? 'admin-toggle remove' : 'admin-toggle';
-        actionsHtml += `<button class="detail-btn ${toggleCls}" id="admin-toggle-btn-${idx}" onclick="toggleAdmin(${idx})">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-          <span class="detail-btn-label">${toggleLabel}</span></button>`;
       }
       // Guest and Member: no edit button (members edit via profile on home screen)
 
@@ -999,8 +978,7 @@
           </div>`;
       }
 
-      const detailAdminBadge = (authMode === 'admin' && m.isAdmin)
-        ? '<span class="admin-badge">ADMIN</span>' : '';
+      const detailAdminBadge = '';
 
       document.getElementById('detail').innerHTML = `
         <button class="detail-close" aria-label="Close member details" onclick="closeDetail()">&times;</button>
@@ -1050,8 +1028,7 @@
             name: newName,
             phone: newPhone,
             email: newEmail,
-            memberNumber,
-            isAdmin: m.isAdmin
+            memberNumber
           })
         });
 
@@ -1239,37 +1216,6 @@
     function showAdminControls() {
       const bar = document.getElementById('admin-bar');
       if (bar) bar.style.display = '';
-    }
-
-    async function toggleAdmin(idx) {
-      const m = allMembers[idx];
-      const btn = document.getElementById(`admin-toggle-btn-${idx}`);
-      const next = !m.isAdmin;
-      if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
-      try {
-        await Harumphers.api(`/api/admin/members/${m.recordId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: m.name,
-            phone: m.phone,
-            email: m.email,
-            memberNumber: Number(m.memberNum),
-            isAdmin: next
-          })
-        });
-        m.isAdmin = next;
-        renderDetail(idx);
-        render(allMembers);
-      } catch (err) {
-        if (btn) {
-          btn.disabled = false;
-          btn.style.opacity = '1';
-          btn.textContent = 'Failed — tap to retry';
-        }
-      }
     }
 
     function closeDetail() {

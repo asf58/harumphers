@@ -277,8 +277,7 @@ export function createAirtable(env, fetchImpl = fetch) {
         'FULL NAME': value.name,
         'CELL #': value.phone,
         'E-MAIL ADDRESS': value.email,
-        'MEMBER #': value.memberNumber,
-        'IS ADMIN': value.isAdmin
+        'MEMBER #': value.memberNumber
       });
     },
 
@@ -331,6 +330,22 @@ export function createAirtable(env, fetchImpl = fetch) {
         'EVENT RECORD ID': eventId,
         VOTE: vote
       });
+    },
+
+    async getMemberVotes(recordId) {
+      requireRecordId(recordId);
+      const votes = await listAll(env.AIRTABLE_VOTES_TABLE_ID, paramsWithFields(VOTE_FIELDS, {
+        filterByFormula: `{MEMBER RECORD ID}='${recordId}'`
+      }));
+      return {
+        votes: votes.flatMap(record => {
+          const eventId = record.fields?.['EVENT RECORD ID'];
+          const vote = record.fields?.VOTE;
+          return /^rec[A-Za-z0-9]{14}$/.test(eventId) && (vote === 'UP' || vote === 'DOWN')
+            ? [{ eventId, vote }]
+            : [];
+        })
+      };
     },
 
     async submitMemberRequest(value) {
@@ -458,6 +473,28 @@ export function createAirtable(env, fetchImpl = fetch) {
 
     async saveAttendance(eventId, entries) {
       requireRecordId(eventId);
+      const submittedMemberIds = new Set();
+      for (const entry of entries) {
+        requireRecordId(entry.memberId);
+        if (submittedMemberIds.has(entry.memberId)) {
+          throw new ApiError(400, 'VALIDATION_FAILED', 'Each member may appear only once in attendance.');
+        }
+        submittedMemberIds.add(entry.memberId);
+      }
+
+      const event = await getRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId);
+      if (String(event.fields?.Status ?? '').trim().toLowerCase() !== 'completed') {
+        throw new ApiError(409, 'EVENT_NOT_COMPLETED', 'Attendance can be recorded only for a completed event.');
+      }
+
+      const directoryMembers = await listAll(env.AIRTABLE_MEMBERS_TABLE_ID, paramsWithFields(['IN DIRECTORY'], {
+        filterByFormula: '{IN DIRECTORY}=TRUE()'
+      }));
+      const validMemberIds = new Set(directoryMembers.map(record => requireRecordId(record.id)));
+      if ([...submittedMemberIds].some(memberId => !validMemberIds.has(memberId))) {
+        throw new ApiError(400, 'VALIDATION_FAILED', 'Attendance includes a member who is not in the directory.');
+      }
+
       const params = paramsWithFields(ATTENDANCE_FIELDS, {
         filterByFormula: `{EVENT RECORD ID}='${eventId}'`
       });
@@ -472,7 +509,6 @@ export function createAirtable(env, fetchImpl = fetch) {
       const updates = [];
       const creates = [];
       for (const entry of entries) {
-        requireRecordId(entry.memberId);
         const fields = {
           'EVENT RECORD ID': eventId,
           'MEMBER RECORD ID': entry.memberId,
@@ -543,7 +579,7 @@ export function createAirtable(env, fetchImpl = fetch) {
 
     async getDirectory(role) {
       const fields = role === 'admin'
-        ? [...DIRECTORY_FIELDS, 'IS ADMIN', 'MEMBER #']
+        ? [...DIRECTORY_FIELDS, 'MEMBER #']
         : DIRECTORY_FIELDS;
       const params = paramsWithFields(fields, { filterByFormula: '{IN DIRECTORY}=TRUE()' });
       return { records: await listAll(env.AIRTABLE_MEMBERS_TABLE_ID, params) };
@@ -571,7 +607,44 @@ export function createAirtable(env, fetchImpl = fetch) {
         listAll(env.AIRTABLE_VOTES_TABLE_ID, paramsWithFields(VOTE_FIELDS))
       ]);
 
-      return { events, members, memberFields, photos, attendance, votes };
+      const memberNames = new Map(members.map(record => [
+        record.id,
+        String(record.fields?.['FULL NAME'] ?? '').slice(0, 160)
+      ]));
+      const attendanceSummary = attendance.flatMap(record => {
+        const fields = record.fields ?? {};
+        const eventId = fields['EVENT RECORD ID'];
+        const memberName = memberNames.get(fields['MEMBER RECORD ID']);
+        if (!/^rec[A-Za-z0-9]{14}$/.test(eventId) || !memberName) return [];
+        return [{
+          eventId,
+          memberName,
+          attended: fields.ATTENDED === true,
+          actualGuests: Number.isSafeInteger(fields['ACTUAL GUESTS']) ? fields['ACTUAL GUESTS'] : 0
+        }];
+      });
+      const voteTallies = {};
+      for (const record of votes) {
+        const eventId = record.fields?.['EVENT RECORD ID'];
+        const vote = record.fields?.VOTE;
+        if (!/^rec[A-Za-z0-9]{14}$/.test(eventId) || (vote !== 'UP' && vote !== 'DOWN')) continue;
+        voteTallies[eventId] ??= { up: 0, down: 0 };
+        voteTallies[eventId][vote === 'UP' ? 'up' : 'down'] += 1;
+      }
+      const publicPhotos = photos.map(record => ({
+        fields: Object.fromEntries(Object.entries(record.fields ?? {}).filter(([name]) => name !== 'MEMBER RECORD ID'))
+      }));
+
+      return {
+        events,
+        members,
+        memberFields,
+        photos: role === 'admin' ? photos : publicPhotos,
+        attendance: role === 'admin' ? attendance : [],
+        attendanceSummary,
+        votes: role === 'admin' ? votes : [],
+        voteTallies
+      };
     }
   };
 }

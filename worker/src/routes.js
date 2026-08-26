@@ -15,6 +15,7 @@ const ROUTE_METHODS = new Map([
   ['/api/directory', new Set(['GET'])],
   ['/api/events', new Set(['GET'])],
   ['/api/me', new Set(['GET', 'PATCH'])],
+  ['/api/me/votes', new Set(['GET'])],
   ['/api/me/photo', new Set(['POST'])],
   ['/api/admin/events', new Set(['POST'])],
   ['/api/admin/member-requests', new Set(['GET'])],
@@ -138,7 +139,7 @@ function requireText(value, { allowEmpty = true, maxLength = 500 } = {}) {
 
 function validateProfile(body, isAdmin) {
   const keys = isAdmin
-    ? ['name', 'phone', 'email', 'memberNumber', 'isAdmin']
+    ? ['name', 'phone', 'email', 'memberNumber']
     : ['name', 'phone', 'email'];
   requireExactKeys(body, keys);
   const value = {
@@ -150,11 +151,7 @@ function validateProfile(body, isAdmin) {
     if (!Number.isSafeInteger(body.memberNumber) || body.memberNumber <= 0 || body.memberNumber > 999999999) {
       throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted request is not valid.');
     }
-    if (typeof body.isAdmin !== 'boolean') {
-      throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted request is not valid.');
-    }
     value.memberNumber = body.memberNumber;
-    value.isAdmin = body.isAdmin;
   }
   return value;
 }
@@ -340,6 +337,25 @@ function loginFailed() {
   return new ApiError(401, 'LOGIN_FAILED', 'The login was not recognized.');
 }
 
+async function enforceRateLimit(binding, key) {
+  if (!binding || typeof binding.limit !== 'function') {
+    throw new ApiError(500, 'CONFIGURATION_ERROR', 'The app abuse protection is not configured.');
+  }
+  let result;
+  try {
+    result = await binding.limit({ key });
+  } catch {
+    throw new ApiError(503, 'RATE_LIMIT_UNAVAILABLE', 'The app abuse protection is temporarily unavailable.');
+  }
+  if (result?.success !== true) {
+    throw new ApiError(429, 'RATE_LIMITED', 'Too many attempts. Please wait one minute and try again.');
+  }
+}
+
+function requesterKey(request, pathname) {
+  return `${pathname}:${request.headers.get('CF-Connecting-IP') || 'unknown'}`;
+}
+
 export async function routeRequest(request, env, airtable, nowSeconds) {
   const { pathname } = new URL(request.url);
   const matchedRoute = matchRoute(pathname);
@@ -355,6 +371,7 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   }
 
   if (pathname === '/api/login/guest') {
+    await enforceRateLimit(env.AUTH_RATE_LIMITER, requesterKey(request, pathname));
     const body = await readJsonBody(request);
     requireExactKeys(body, ['phrase'], 'The submitted login is not valid.');
     if (!await credentialsMatch(body.phrase, env.GUEST_LOGIN, env.SESSION_SECRET)) throw loginFailed();
@@ -362,6 +379,7 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   }
 
   if (pathname === '/api/login/member') {
+    await enforceRateLimit(env.AUTH_RATE_LIMITER, requesterKey(request, pathname));
     const body = await readJsonBody(request);
     requireExactKeys(body, ['memberNumber'], 'The submitted login is not valid.');
     if (!Number.isSafeInteger(body.memberNumber) || body.memberNumber <= 0 || body.memberNumber > 999999999) {
@@ -373,6 +391,7 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   }
 
   if (pathname === '/api/login/admin') {
+    await enforceRateLimit(env.AUTH_RATE_LIMITER, requesterKey(request, pathname));
     const body = await readJsonBody(request);
     requireExactKeys(body, ['password'], 'The submitted login is not valid.');
     if (!await credentialsMatch(body.password, env.ADMIN_LOGIN, env.SESSION_SECRET)) throw loginFailed();
@@ -380,7 +399,10 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   }
 
   if (pathname === '/api/member-requests') {
-    return json(await airtable.submitMemberRequest(validateMemberRequest(await readJsonBody(request))), 201);
+    const value = validateMemberRequest(await readJsonBody(request));
+    await enforceRateLimit(env.MEMBER_REQUEST_RATE_LIMITER, requesterKey(request, pathname));
+    await enforceRateLimit(env.MEMBER_REQUEST_RATE_LIMITER, `member-number:${value.memberNumber}`);
+    return json(await airtable.submitMemberRequest(value), 201);
   }
 
   const session = await requireSession(request, env, nowSeconds);
@@ -401,6 +423,11 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     requireRole(session, ['member']);
     if (request.method === 'GET') return json(await airtable.getMember(session.sub));
     return json(await airtable.updateMemberProfile(session.sub, validateProfile(await readJsonBody(request), false)));
+  }
+
+  if (pathname === '/api/me/votes') {
+    requireRole(session, ['member']);
+    return json(await airtable.getMemberVotes(session.sub));
   }
 
   if (pathname === '/api/me/photo') {

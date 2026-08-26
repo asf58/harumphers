@@ -29,3 +29,11 @@ test('the login page delegates all three visible login flows to the signed-sessi
     assert.equal(source.includes(`Harumphers.${method}(`), true, `index.html does not use ${method}`);
   }
 });
+
+test('directory administration cannot advertise a role change that member login does not honor', async () => {
+  const source = await readSource('directory.html');
+  assert.equal(source.includes('Make Admin'), false);
+  assert.equal(source.includes('Remove Admin'), false);
+  assert.equal(source.includes('toggleAdmin('), false);
+  assert.equal(source.includes("f['IS ADMIN']"), false);
+});

@@ -30,7 +30,9 @@ function fixtureEnv(origin) {
   return {
     ADMIN_LOGIN: FIXTURE_LOGIN.adminPassword,
     ALLOWED_ORIGINS: origin,
+    AUTH_RATE_LIMITER: { async limit() { return { success: true }; } },
     GUEST_LOGIN: FIXTURE_LOGIN.guestPhrase,
+    MEMBER_REQUEST_RATE_LIMITER: { async limit() { return { success: true }; } },
     SESSION_SECRET: 'fixture-session-secret-for-local-model-only',
     DATA_MODE: 'fixtures'
   };

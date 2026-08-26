@@ -128,7 +128,6 @@ export function createFixtureAirtable() {
           PHOTO: []
         };
         if (role === 'admin') {
-          fields['IS ADMIN'] = record.fields['IS ADMIN'];
           fields['MEMBER #'] = record.fields['MEMBER #'];
         }
         return { id: record.id, fields };
@@ -145,13 +144,41 @@ export function createFixtureAirtable() {
         }
         return { id: record.id, fields };
       });
+      const memberNames = new Map(members.map(record => [record.id, record.fields['FULL NAME']]));
+      const attendanceSummary = attendance.map(record => ({
+        eventId: record.fields['EVENT RECORD ID'],
+        memberName: memberNames.get(record.fields['MEMBER RECORD ID']) || 'Member',
+        attended: record.fields.ATTENDED === true,
+        actualGuests: record.fields['ACTUAL GUESTS'] || 0
+      }));
+      const voteTallies = {};
+      for (const record of votes) {
+        const eventId = record.fields['EVENT RECORD ID'];
+        voteTallies[eventId] ??= { up: 0, down: 0 };
+        voteTallies[eventId][record.fields.VOTE === 'UP' ? 'up' : 'down'] += 1;
+      }
       return {
         events: clone(events),
         members,
         memberFields: clone(memberFields),
-        photos: clone(photos),
-        attendance: clone(attendance),
+        photos: role === 'admin' ? clone(photos) : clone(photos).map(record => ({
+          fields: Object.fromEntries(Object.entries(record.fields).filter(([name]) => name !== 'MEMBER RECORD ID'))
+        })),
+        attendance: role === 'admin' ? clone(attendance) : [],
+        attendanceSummary: clone(attendanceSummary),
+        votes: role === 'admin' ? clone(votes) : [],
+        voteTallies: clone(voteTallies)
+      };
+    },
+
+    async getMemberVotes(recordId) {
+      return {
         votes: clone(votes)
+          .filter(record => record.fields['MEMBER RECORD ID'] === recordId)
+          .map(record => ({
+            eventId: record.fields['EVENT RECORD ID'],
+            vote: record.fields.VOTE
+          }))
       };
     },
 
@@ -176,7 +203,6 @@ export function createFixtureAirtable() {
       record.fields['CELL #'] = value.phone;
       record.fields['E-MAIL ADDRESS'] = value.email;
       record.fields['MEMBER #'] = value.memberNumber;
-      record.fields['IS ADMIN'] = value.isAdmin;
       return clone(record);
     },
 
