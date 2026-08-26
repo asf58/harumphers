@@ -15,3 +15,48 @@ AIRTABLE_MEMBER_REQUESTS_TABLE_ID = "tblz8NLFYE7XsOhrR"
 
 # Configure these only with `wrangler secret put`; never store their values here:
 # AIRTABLE_TOKEN, SESSION_SECRET, GUEST_LOGIN, ADMIN_LOGIN
+
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "2026082601"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "MEMBER_REQUEST_RATE_LIMITER"
+namespace_id = "2026082602"
+
+  [ratelimits.simple]
+  limit = 3
+  period = 60
+
+[env.staging]
+name = "harumphers-api-staging"
+
+[env.staging.vars]
+ALLOWED_ORIGINS = "http://127.0.0.1:4174,http://localhost:4174"
+AIRTABLE_BASE_ID = "STAGING_BASE_ID_REQUIRED"
+AIRTABLE_MEMBERS_TABLE_ID = "STAGING_MEMBERS_TABLE_ID_REQUIRED"
+AIRTABLE_EVENTS_TABLE_ID = "STAGING_EVENTS_TABLE_ID_REQUIRED"
+AIRTABLE_PHOTOS_TABLE_ID = "STAGING_PHOTOS_TABLE_ID_REQUIRED"
+AIRTABLE_ATTENDANCE_TABLE_ID = "STAGING_ATTENDANCE_TABLE_ID_REQUIRED"
+AIRTABLE_VOTES_TABLE_ID = "STAGING_VOTES_TABLE_ID_REQUIRED"
+AIRTABLE_MEMBER_REQUESTS_TABLE_ID = "STAGING_MEMBER_REQUESTS_TABLE_ID_REQUIRED"
+
+[[env.staging.ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "2026082611"
+
+  [env.staging.ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[env.staging.ratelimits]]
+name = "MEMBER_REQUEST_RATE_LIMITER"
+namespace_id = "2026082612"
+
+  [env.staging.ratelimits.simple]
+  limit = 3
+  period = 60

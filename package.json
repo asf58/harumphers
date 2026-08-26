@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:staging": "node scripts/build-static.mjs --api-origin=https://harumphers-api-staging.adamsfeuer.workers.dev --out-dir=dist-staging",
     "dev": "node tests/fixtures/app-server.mjs --port=4173",
+    "preview:staging": "python3 -m http.server 4174 --directory dist-staging --bind 127.0.0.1",
     "test:unit": "node --test tests/unit/*.test.mjs tests/worker/*.test.mjs",
     "test:security": "node --test tests/unit/public-client-contract.test.mjs",
     "test:worker": "node --test tests/worker/*.test.mjs",
