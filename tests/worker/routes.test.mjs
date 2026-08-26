@@ -90,6 +90,16 @@ test('unknown routes and unsupported methods cannot reach Airtable', async () =>
   }
 });
 
+test('health reports readiness without authentication, Airtable access, or configuration values', async () => {
+  const airtable = makeAirtable();
+  const { body, response } = await call(request('/api/health'), airtable);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body, { ok: true, service: 'harumphers-api' });
+  assert.deepEqual(airtable.calls, []);
+  assert.equal(JSON.stringify(body).includes(ENV.SESSION_SECRET), false);
+});
+
 test('directory and events reads require a signed session', async () => {
   for (const path of ['/api/directory', '/api/events']) {
     const airtable = makeAirtable();

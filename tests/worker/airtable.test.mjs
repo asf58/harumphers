@@ -256,6 +256,20 @@ test('upstream failures return a bounded error without exposing the response bod
   );
 });
 
+test('rate-limited Airtable reads retry within a bounded attempt count', async () => {
+  let fetchCalls = 0;
+  const airtable = createAirtable(ENV, async () => {
+    fetchCalls += 1;
+    if (fetchCalls === 1) {
+      return new Response('rate limited fixture', { status: 429, headers: { 'Retry-After': '0' } });
+    }
+    return jsonResponse({ records: [] });
+  });
+
+  assert.deepEqual(await airtable.getDirectory('guest'), { records: [] });
+  assert.equal(fetchCalls, 2);
+});
+
 test('pagination stops after ten pages instead of following an unbounded offset chain', async () => {
   let fetchCalls = 0;
   const airtable = createAirtable(ENV, async () => {

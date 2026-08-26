@@ -6,6 +6,7 @@ const MAX_LOGIN_BODY_LENGTH = 4096;
 const encoder = new TextEncoder();
 
 const ROUTE_METHODS = new Map([
+  ['/api/health', new Set(['GET'])],
   ['/api/login/guest', new Set(['POST'])],
   ['/api/login/member', new Set(['POST'])],
   ['/api/login/admin', new Set(['POST'])],
@@ -349,6 +350,10 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'That method is not allowed.');
   }
 
+  if (pathname === '/api/health') {
+    return json({ ok: true, service: 'harumphers-api' });
+  }
+
   if (pathname === '/api/login/guest') {
     const body = await readJsonBody(request);
     requireExactKeys(body, ['phrase'], 'The submitted login is not valid.');
@@ -502,7 +507,7 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   if (pathname === '/api/admin/cache/refresh') {
     requireRole(session, ['admin']);
     requireExactKeys(await readJsonBody(request), []);
-    return json({ refreshed: true });
+    return json(await airtable.refreshCaches());
   }
 
   throw new ApiError(404, 'NOT_FOUND', 'The requested resource was not found.');

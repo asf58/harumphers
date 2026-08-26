@@ -1,4 +1,5 @@
 import { createAirtable } from './airtable.js';
+import { createCachedAirtable } from './cache.js';
 import { ApiError } from './errors.js';
 import { routeRequest } from './routes.js';
 
@@ -82,7 +83,9 @@ export async function handleRequest(request, env, ctx, deps = {}) {
 
   try {
     requireAuthBindings(env);
-    const airtable = deps.airtable ?? createAirtable(env);
+    const rawAirtable = deps.airtable ?? createAirtable(env);
+    const cache = deps.cache === undefined ? globalThis.caches?.default : deps.cache;
+    const airtable = createCachedAirtable(rawAirtable, cache);
     const nowSeconds = (deps.nowSeconds ?? (() => Math.floor(Date.now() / 1000)))();
     const response = await routeRequest(request, env, airtable, nowSeconds);
     return withHeaders(response, corsHeaders(approvedOrigin));

@@ -4,6 +4,7 @@ import { buildEventFieldMapping, createEventWithAdapter } from './events.js';
 const AIRTABLE_API = 'https://api.airtable.com/v0';
 const AIRTABLE_CONTENT_API = 'https://content.airtable.com/v0';
 const MAX_PAGES = 10;
+const MAX_FETCH_ATTEMPTS = 3;
 
 const DIRECTORY_FIELDS = ['FULL NAME', 'CELL #', 'E-MAIL ADDRESS', 'PHOTO'];
 const SELF_FIELDS = [...DIRECTORY_FIELDS, 'IN DIRECTORY', 'MEMBER #'];
@@ -55,20 +56,32 @@ export function createAirtable(env, fetchImpl = fetch) {
 
   async function fetchJson(url, init = {}) {
     let response;
-    try {
-      response = await fetchImpl(url, {
-        ...init,
-        headers: {
-          Authorization: `Bearer ${env.AIRTABLE_TOKEN}`,
-          ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-          ...init.headers
-        }
-      });
-    } catch {
-      throw upstreamError();
-    }
+    const method = init.method ?? 'GET';
+    for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
+      try {
+        response = await fetchImpl(url, {
+          ...init,
+          headers: {
+            Authorization: `Bearer ${env.AIRTABLE_TOKEN}`,
+            ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+            ...init.headers
+          }
+        });
+      } catch {
+        if (method !== 'GET' || attempt === MAX_FETCH_ATTEMPTS - 1) throw upstreamError();
+        response = null;
+      }
 
-    if (!response.ok) throw upstreamError();
+      if (response?.ok) break;
+      const retryable = response?.status === 429
+        || (response?.status >= 500 && (method === 'GET' || method === 'PATCH'));
+      if (!retryable || attempt === MAX_FETCH_ATTEMPTS - 1) throw upstreamError();
+      const retryAfterSeconds = Number(response?.headers.get('Retry-After'));
+      const delayMs = Number.isFinite(retryAfterSeconds)
+        ? Math.min(1000, Math.max(0, retryAfterSeconds * 1000))
+        : 100 * (attempt + 1);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
 
     try {
       return await response.json();
