@@ -101,6 +101,72 @@ test('an invalid signed member subject fails before an Airtable request', async 
   assert.equal(fetchCalls, 0);
 });
 
+test('profile writes map only allowlisted client fields to Airtable fields', async () => {
+  const requests = [];
+  const airtable = createAirtable(ENV, async (url, init) => {
+    requests.push({ url: new URL(url), init });
+    return jsonResponse({
+      id: 'rec12345678901234',
+      fields: {
+        'FULL NAME': 'Updated Fixture',
+        'CELL #': '412-555-0100',
+        'E-MAIL ADDRESS': 'updated@example.test'
+      }
+    });
+  });
+
+  const result = await airtable.updateMemberProfile('rec12345678901234', {
+    name: 'Updated Fixture',
+    phone: '412-555-0100',
+    email: 'updated@example.test'
+  });
+
+  assert.equal(result.id, 'rec12345678901234');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].init.method, 'PATCH');
+  assert.deepEqual(JSON.parse(requests[0].init.body), {
+    fields: {
+      'FULL NAME': 'Updated Fixture',
+      'CELL #': '412-555-0100',
+      'E-MAIL ADDRESS': 'updated@example.test'
+    }
+  });
+});
+
+test('RSVP writes resolve exact event mappings before patching the signed member', async () => {
+  const requests = [];
+  const airtable = createAirtable(ENV, async (url, init) => {
+    requests.push({ url: new URL(url), init });
+    if (requests.length === 1) {
+      return jsonResponse({
+        id: 'recFixtureEvent01',
+        fields: {
+          Status: 'Scheduled',
+          'SETUP STATE': 'ready',
+          'RSVP FIELD': 'SEP12-FIXTURE-1A2B3C4D RSVP',
+          'GUEST FIELD': 'GUESTS-SEP12-FIXTURE-1A2B3C4D'
+        }
+      });
+    }
+    return jsonResponse({ id: 'rec12345678901234', fields: {} });
+  });
+
+  await airtable.setRsvp('rec12345678901234', 'recFixtureEvent01', {
+    response: 'YES', guests: 2
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url.pathname, '/v0/appFixtureBase/tblFixtureEvents/recFixtureEvent01');
+  assert.equal(requests[1].url.pathname, '/v0/appFixtureBase/tblFixtureMembers/rec12345678901234');
+  assert.equal(requests[1].init.method, 'PATCH');
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    fields: {
+      'SEP12-FIXTURE-1A2B3C4D RSVP': 'YES',
+      'GUESTS-SEP12-FIXTURE-1A2B3C4D': 2
+    }
+  });
+});
+
 test('directory reads combine bounded Airtable pages without losing the filter', async () => {
   const requests = [];
   const airtable = createAirtable(ENV, async url => {

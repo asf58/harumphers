@@ -31,6 +31,22 @@ function makeAirtable() {
     async getMember(recordId) {
       calls.push(['getMember', recordId]);
       return { id: recordId, fields: { 'FULL NAME': 'Fixture Member' } };
+    },
+    async updateMemberProfile(recordId, fields) {
+      calls.push(['updateMemberProfile', recordId, fields]);
+      return { id: recordId, fields };
+    },
+    async updateMember(recordId, fields) {
+      calls.push(['updateMember', recordId, fields]);
+      return { id: recordId, fields };
+    },
+    async setRsvp(recordId, eventId, value) {
+      calls.push(['setRsvp', recordId, eventId, value]);
+      return { ok: true };
+    },
+    async createEvent(value) {
+      calls.push(['createEvent', value]);
+      return { eventId: 'recFixtureEvent01', setupState: 'ready', resumed: false };
     }
   };
 }
@@ -113,6 +129,102 @@ test('the me route derives the member record from the signed subject', async () 
   assert.equal(response.status, 200);
   assert.equal(body.id, 'rec_member');
   assert.deepEqual(airtable.calls, [['getMember', 'rec_member']]);
+});
+
+test('member profile writes are limited to the signed subject and allowlisted fields', async () => {
+  const token = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
+  const airtable = makeAirtable();
+  const { body, response } = await call(request('/api/me', {
+    method: 'PATCH',
+    token,
+    body: { name: 'Updated Fixture', phone: '412-555-0100', email: 'updated@example.test' }
+  }), airtable);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.id, 'recFixtureMember1');
+  assert.deepEqual(airtable.calls, [[
+    'updateMemberProfile',
+    'recFixtureMember1',
+    { name: 'Updated Fixture', phone: '412-555-0100', email: 'updated@example.test' }
+  ]]);
+
+  const extraField = await call(request('/api/me', {
+    method: 'PATCH',
+    token,
+    body: { name: 'Updated Fixture', role: 'admin' }
+  }), airtable);
+  assert.equal(extraField.response.status, 400);
+  assert.equal(extraField.body.error.code, 'VALIDATION_FAILED');
+  assert.equal(airtable.calls.length, 1);
+});
+
+test('administrator member writes require an administrator session', async () => {
+  const memberToken = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
+  const adminToken = await issueSession({ sub: 'admin', role: 'admin' }, ENV.SESSION_SECRET, 1000);
+  const targetId = 'recFixtureMember2';
+  const airtable = makeAirtable();
+  const value = { name: 'Admin Updated Fixture', phone: '', email: '', memberNumber: 42002, isAdmin: false };
+
+  const denied = await call(request(`/api/admin/members/${targetId}`, {
+    method: 'PATCH', token: memberToken, body: value
+  }), airtable);
+  assert.equal(denied.response.status, 403);
+  assert.deepEqual(airtable.calls, []);
+
+  const allowed = await call(request(`/api/admin/members/${targetId}`, {
+    method: 'PATCH', token: adminToken, body: value
+  }), airtable);
+  assert.equal(allowed.response.status, 200);
+  assert.deepEqual(airtable.calls, [['updateMember', targetId, value]]);
+});
+
+test('RSVP writes derive the member target from the signed session', async () => {
+  const token = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
+  const airtable = makeAirtable();
+  const eventId = 'recFixtureEvent01';
+  const { response } = await call(request(`/api/events/${eventId}/rsvp`, {
+    method: 'PUT', token, body: { response: 'YES', guests: 2 }
+  }), airtable);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(airtable.calls, [[
+    'setRsvp', 'recFixtureMember1', eventId, { response: 'YES', guests: 2 }
+  ]]);
+});
+
+test('event creation is administrator-only and rejects unknown input before Airtable', async () => {
+  const adminToken = await issueSession({ sub: 'admin', role: 'admin' }, ENV.SESSION_SECRET, 1000);
+  const memberToken = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
+  const airtable = makeAirtable();
+  const event = {
+    idempotencyKey: '00000000-0000-4000-8000-000000000001',
+    name: 'Fixture Event',
+    date: '2026-09-12',
+    speaker: 'Fixture Speaker',
+    time: '6:00 PM',
+    room: 'Fixture Hall',
+    notes: '',
+    status: 'Scheduled',
+    enableGuests: true
+  };
+
+  const denied = await call(request('/api/admin/events', {
+    method: 'POST', token: memberToken, body: event
+  }), airtable);
+  assert.equal(denied.response.status, 403);
+  assert.deepEqual(airtable.calls, []);
+
+  const invalid = await call(request('/api/admin/events', {
+    method: 'POST', token: adminToken, body: { ...event, tableId: 'fixture' }
+  }), airtable);
+  assert.equal(invalid.response.status, 400);
+  assert.deepEqual(airtable.calls, []);
+
+  const allowed = await call(request('/api/admin/events', {
+    method: 'POST', token: adminToken, body: event
+  }), airtable);
+  assert.equal(allowed.response.status, 200);
+  assert.deepEqual(airtable.calls, [['createEvent', event]]);
 });
 
 test('member-number login always issues a member session for the matched record', async () => {

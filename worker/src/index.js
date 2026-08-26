@@ -30,7 +30,7 @@ function corsHeaders(origin) {
   if (!origin) return {};
   return {
     'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'DELETE, GET, PATCH, POST, PUT, OPTIONS',
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin'
