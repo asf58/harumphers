@@ -959,11 +959,6 @@
               <label>Member # (Duquesne ID)</label>
               <input type="number" id="edit-membernum" value="${escapeHtml(m.memberNum)}" placeholder="e.g. 9566">
             </div>
-            <div class="edit-field">
-              <label>Photo URL</label>
-              <input type="url" id="edit-photo-url" placeholder="https://... (public image URL)">
-              <div style="font-size:11px;color:#666;margin-top:4px;">Paste a publicly accessible image URL</div>
-            </div>
             <button class="edit-submit" id="edit-submit-btn" onclick="adminSaveEdit(${idx})">Save Changes</button>
             <div class="edit-msg" id="edit-msg"></div>
           </div>`;
@@ -985,7 +980,7 @@
       renderDetail(idx);
     }
 
-    // Admin: direct save to Airtable
+    // Administrator member edit through the role-checked Worker route.
     async function adminSaveEdit(idx) {
       const m = allMembers[idx];
       const msgEl = document.getElementById('edit-msg');
@@ -995,18 +990,14 @@
       const newPhone = document.getElementById('edit-phone').value.trim();
       const newEmail = document.getElementById('edit-email').value.trim();
       const newMemberNum = document.getElementById('edit-membernum').value.trim();
-      const newPhotoUrl = document.getElementById('edit-photo-url').value.trim();
-
-      const updates = {};
-      if (newName && newName !== m.name) updates['FULL NAME'] = newName;
-      if (newPhone !== m.phone) updates['CELL #'] = newPhone;
-      if (newEmail !== m.email) updates['E-MAIL ADDRESS'] = newEmail;
-      if (newMemberNum && newMemberNum !== String(m.memberNum)) updates['MEMBER #'] = parseInt(newMemberNum);
-      if (newPhotoUrl) updates['PHOTO'] = [{ url: newPhotoUrl }];
-
-      if (Object.keys(updates).length === 0) {
+      const memberNumber = Number(newMemberNum);
+      if (
+        !newName
+        || !Number.isSafeInteger(memberNumber)
+        || memberNumber <= 0
+      ) {
         msgEl.className = 'edit-msg error';
-        msgEl.textContent = 'No changes detected';
+        msgEl.textContent = 'Name and a valid Member # are required';
         return;
       }
 
@@ -1015,21 +1006,25 @@
       msgEl.textContent = 'Saving...';
 
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${TABLE_ID}/${m.recordId}`, {
+        await Harumphers.api(`/api/admin/members/${m.recordId}`, {
           method: 'PATCH',
           headers: {
-            'X-Harumphers-Key': API_KEY,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ fields: updates })
+          body: JSON.stringify({
+            name: newName,
+            phone: newPhone,
+            email: newEmail,
+            memberNumber,
+            isAdmin: m.isAdmin
+          })
         });
-        if (!res.ok) throw new Error(`API error ${res.status}`);
 
         // Update local data
-        if (updates['FULL NAME']) m.name = updates['FULL NAME'];
-        if ('CELL #' in updates) m.phone = updates['CELL #'];
-        if ('E-MAIL ADDRESS' in updates) m.email = updates['E-MAIL ADDRESS'];
-        if (updates['MEMBER #']) m.memberNum = updates['MEMBER #'];
+        m.name = newName;
+        m.phone = newPhone;
+        m.email = newEmail;
+        m.memberNum = memberNumber;
 
         msgEl.className = 'edit-msg success';
         msgEl.textContent = 'Saved!';
@@ -1217,15 +1212,19 @@
       const next = !m.isAdmin;
       if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${TABLE_ID}/${m.recordId}`, {
+        await Harumphers.api(`/api/admin/members/${m.recordId}`, {
           method: 'PATCH',
           headers: {
-            'X-Harumphers-Key': API_KEY,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ fields: { 'IS ADMIN': next } })
+          body: JSON.stringify({
+            name: m.name,
+            phone: m.phone,
+            email: m.email,
+            memberNumber: Number(m.memberNum),
+            isAdmin: next
+          })
         });
-        if (!res.ok) throw new Error(`API error ${res.status}`);
         m.isAdmin = next;
         renderDetail(idx);
         render(allMembers);

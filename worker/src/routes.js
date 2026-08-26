@@ -1,5 +1,6 @@
 import { issueSession, requireRole, verifySession } from './auth.js';
 import { ApiError } from './errors.js';
+import { validatePhotoPayload } from './photos.js';
 
 const MAX_LOGIN_BODY_LENGTH = 4096;
 const encoder = new TextEncoder();
@@ -8,11 +9,16 @@ const ROUTE_METHODS = new Map([
   ['/api/login/guest', new Set(['POST'])],
   ['/api/login/member', new Set(['POST'])],
   ['/api/login/admin', new Set(['POST'])],
+  ['/api/member-requests', new Set(['POST'])],
   ['/api/session', new Set(['GET'])],
   ['/api/directory', new Set(['GET'])],
   ['/api/events', new Set(['GET'])],
   ['/api/me', new Set(['GET', 'PATCH'])],
-  ['/api/admin/events', new Set(['POST'])]
+  ['/api/me/photo', new Set(['POST'])],
+  ['/api/admin/events', new Set(['POST'])],
+  ['/api/admin/member-requests', new Set(['GET'])],
+  ['/api/admin/diagnostics/member-numbers', new Set(['GET'])],
+  ['/api/admin/cache/refresh', new Set(['POST'])]
 ]);
 
 const DYNAMIC_ROUTES = [
@@ -25,6 +31,61 @@ const DYNAMIC_ROUTES = [
     name: 'member-rsvp',
     pattern: /^\/api\/events\/(rec[A-Za-z0-9]{14})\/rsvp$/,
     methods: new Set(['PUT'])
+  },
+  {
+    name: 'admin-rsvp',
+    pattern: /^\/api\/admin\/events\/(rec[A-Za-z0-9]{14})\/rsvps\/(rec[A-Za-z0-9]{14})$/,
+    methods: new Set(['PUT'])
+  },
+  {
+    name: 'admin-member-photo',
+    pattern: /^\/api\/admin\/members\/(rec[A-Za-z0-9]{14})\/photo$/,
+    methods: new Set(['POST'])
+  },
+  {
+    name: 'member-vote',
+    pattern: /^\/api\/events\/(rec[A-Za-z0-9]{14})\/vote$/,
+    methods: new Set(['PUT'])
+  },
+  {
+    name: 'admin-vote',
+    pattern: /^\/api\/admin\/events\/(rec[A-Za-z0-9]{14})\/votes\/(rec[A-Za-z0-9]{14})$/,
+    methods: new Set(['PUT'])
+  },
+  {
+    name: 'event-photos',
+    pattern: /^\/api\/events\/(rec[A-Za-z0-9]{14})\/photos$/,
+    methods: new Set(['POST'])
+  },
+  {
+    name: 'admin-photo',
+    pattern: /^\/api\/admin\/photos\/(rec[A-Za-z0-9]{14})$/,
+    methods: new Set(['DELETE', 'PATCH'])
+  },
+  {
+    name: 'admin-event',
+    pattern: /^\/api\/admin\/events\/(rec[A-Za-z0-9]{14})$/,
+    methods: new Set(['PATCH'])
+  },
+  {
+    name: 'admin-event-photo',
+    pattern: /^\/api\/admin\/events\/(rec[A-Za-z0-9]{14})\/speaker-photo$/,
+    methods: new Set(['POST', 'DELETE'])
+  },
+  {
+    name: 'admin-attendance',
+    pattern: /^\/api\/admin\/events\/(rec[A-Za-z0-9]{14})\/attendance$/,
+    methods: new Set(['PUT'])
+  },
+  {
+    name: 'admin-member-request-approve',
+    pattern: /^\/api\/admin\/member-requests\/(rec[A-Za-z0-9]{14})\/approve$/,
+    methods: new Set(['POST'])
+  },
+  {
+    name: 'admin-member-request-reject',
+    pattern: /^\/api\/admin\/member-requests\/(rec[A-Za-z0-9]{14})\/reject$/,
+    methods: new Set(['POST'])
   }
 ];
 
@@ -99,8 +160,10 @@ function validateProfile(body, isAdmin) {
 
 function validateRsvp(body) {
   requireExactKeys(body, ['response', 'guests']);
-  const response = requireText(body.response, { allowEmpty: false, maxLength: 10 }).toUpperCase();
-  if (!['YES', 'NO', 'MAYBE'].includes(response) || !Number.isSafeInteger(body.guests) || body.guests < 0 || body.guests > 9) {
+  const response = body.response === null
+    ? null
+    : requireText(body.response, { allowEmpty: false, maxLength: 10 }).toUpperCase();
+  if ((response !== null && !['YES', 'NO', 'MAYBE'].includes(response)) || !Number.isSafeInteger(body.guests) || body.guests < 0 || body.guests > 9) {
     throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted RSVP is not valid.');
   }
   return { response, guests: body.guests };
@@ -134,6 +197,100 @@ function validateEvent(body) {
     throw new ApiError(400, 'VALIDATION_FAILED', 'A date is required for a scheduled event.');
   }
   return value;
+}
+
+function validateMemberRequest(body) {
+  requireExactKeys(body, ['name', 'memberNumber']);
+  if (!Number.isSafeInteger(body.memberNumber) || body.memberNumber <= 0 || body.memberNumber > 999999999) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted member request is not valid.');
+  }
+  return {
+    name: requireText(body.name, { allowEmpty: false, maxLength: 160 }),
+    memberNumber: body.memberNumber
+  };
+}
+
+function validateVote(body) {
+  requireExactKeys(body, ['vote']);
+  if (body.vote !== null && body.vote !== 'UP' && body.vote !== 'DOWN') {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted vote is not valid.');
+  }
+  return body.vote;
+}
+
+function validateMemberLink(body) {
+  requireExactKeys(body, ['memberId']);
+  if (typeof body.memberId !== 'string' || !/^rec[A-Za-z0-9]{14}$/.test(body.memberId)) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The selected member is not valid.');
+  }
+  return body.memberId;
+}
+
+function validateEventUpdate(body) {
+  requireExactKeys(body, ['name', 'date', 'speaker', 'time', 'room', 'notes', 'status']);
+  const value = {
+    name: requireText(body.name, { allowEmpty: false, maxLength: 160 }),
+    date: requireText(body.date, { maxLength: 10 }),
+    speaker: requireText(body.speaker, { maxLength: 160 }),
+    time: requireText(body.time, { maxLength: 40 }),
+    room: requireText(body.room, { maxLength: 120 }),
+    notes: requireText(body.notes, { maxLength: 2000 }),
+    status: requireText(body.status, { allowEmpty: false, maxLength: 20 })
+  };
+  if (!['Suggested', 'Upcoming', 'Scheduled', 'Completed', 'Cancelled'].includes(value.status)) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted event is not valid.');
+  }
+  if (value.date && !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted event is not valid.');
+  }
+  if (value.status === 'Scheduled' && !value.date) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'A date is required for a scheduled event.');
+  }
+  return value;
+}
+
+function validateAttendance(body) {
+  requireExactKeys(body, ['entries']);
+  if (!Array.isArray(body.entries) || body.entries.length > 200) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted attendance is not valid.');
+  }
+  return body.entries.map(entry => {
+    requireExactKeys(entry, ['memberId', 'attended', 'actualGuests']);
+    if (
+      typeof entry.memberId !== 'string'
+      || !/^rec[A-Za-z0-9]{14}$/.test(entry.memberId)
+      || typeof entry.attended !== 'boolean'
+      || !Number.isSafeInteger(entry.actualGuests)
+      || entry.actualGuests < 0
+      || entry.actualGuests > 9
+    ) {
+      throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted attendance is not valid.');
+    }
+    return entry;
+  });
+}
+
+function validateCaption(body) {
+  requireExactKeys(body, ['caption']);
+  return requireText(body.caption, { maxLength: 500 });
+}
+
+function validatePhoto(body, withCaption = false) {
+  const expected = withCaption
+    ? ['filename', 'contentType', 'base64', 'caption']
+    : ['filename', 'contentType', 'base64'];
+  requireExactKeys(body, expected);
+  const validated = validatePhotoPayload({
+    filename: body.filename,
+    contentType: body.contentType,
+    base64: body.base64
+  });
+  return {
+    filename: validated.filename,
+    contentType: validated.contentType,
+    base64: body.base64,
+    ...(withCaption ? { caption: requireText(body.caption, { maxLength: 500 }) } : {})
+  };
 }
 
 function matchRoute(pathname) {
@@ -217,6 +374,10 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     return json({ token: await issueSession({ sub: 'admin', role: 'admin' }, env.SESSION_SECRET, nowSeconds) });
   }
 
+  if (pathname === '/api/member-requests') {
+    return json(await airtable.submitMemberRequest(validateMemberRequest(await readJsonBody(request))), 201);
+  }
+
   const session = await requireSession(request, env, nowSeconds);
 
   if (pathname === '/api/session') {
@@ -237,9 +398,22 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     return json(await airtable.updateMemberProfile(session.sub, validateProfile(await readJsonBody(request), false)));
   }
 
+  if (pathname === '/api/me/photo') {
+    requireRole(session, ['member']);
+    return json(await airtable.uploadMemberPhoto(session.sub, validatePhoto(await readJsonBody(request, 1_500_000))));
+  }
+
   if (matchedRoute.name === 'admin-member') {
     requireRole(session, ['admin']);
     return json(await airtable.updateMember(matchedRoute.params[0], validateProfile(await readJsonBody(request), true)));
+  }
+
+  if (matchedRoute.name === 'admin-member-photo') {
+    requireRole(session, ['admin']);
+    return json(await airtable.uploadMemberPhoto(
+      matchedRoute.params[0],
+      validatePhoto(await readJsonBody(request, 1_500_000))
+    ));
   }
 
   if (matchedRoute.name === 'member-rsvp') {
@@ -247,9 +421,88 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     return json(await airtable.setRsvp(session.sub, matchedRoute.params[0], validateRsvp(await readJsonBody(request))));
   }
 
+  if (matchedRoute.name === 'admin-rsvp') {
+    requireRole(session, ['admin']);
+    return json(await airtable.setRsvp(matchedRoute.params[1], matchedRoute.params[0], validateRsvp(await readJsonBody(request))));
+  }
+
+  if (matchedRoute.name === 'member-vote') {
+    requireRole(session, ['member']);
+    return json(await airtable.setVote(session.sub, matchedRoute.params[0], validateVote(await readJsonBody(request))));
+  }
+
+  if (matchedRoute.name === 'admin-vote') {
+    requireRole(session, ['admin']);
+    return json(await airtable.setVote(matchedRoute.params[1], matchedRoute.params[0], validateVote(await readJsonBody(request))));
+  }
+
+  if (matchedRoute.name === 'event-photos') {
+    requireRole(session, ['member', 'admin']);
+    return json(await airtable.addEventPhoto(
+      session,
+      matchedRoute.params[0],
+      validatePhoto(await readJsonBody(request, 1_500_000), true)
+    ), 201);
+  }
+
+  if (matchedRoute.name === 'admin-photo') {
+    requireRole(session, ['admin']);
+    if (request.method === 'DELETE') return json(await airtable.deletePhoto(matchedRoute.params[0]));
+    return json(await airtable.updatePhotoCaption(matchedRoute.params[0], validateCaption(await readJsonBody(request))));
+  }
+
+  if (matchedRoute.name === 'admin-event') {
+    requireRole(session, ['admin']);
+    return json(await airtable.updateEvent(matchedRoute.params[0], validateEventUpdate(await readJsonBody(request))));
+  }
+
+  if (matchedRoute.name === 'admin-event-photo') {
+    requireRole(session, ['admin']);
+    if (request.method === 'DELETE') return json(await airtable.clearEventPhoto(matchedRoute.params[0]));
+    return json(await airtable.uploadEventPhoto(
+      matchedRoute.params[0],
+      validatePhoto(await readJsonBody(request, 1_500_000))
+    ));
+  }
+
+  if (matchedRoute.name === 'admin-attendance') {
+    requireRole(session, ['admin']);
+    return json(await airtable.saveAttendance(matchedRoute.params[0], validateAttendance(await readJsonBody(request))));
+  }
+
+  if (matchedRoute.name === 'admin-member-request-approve') {
+    requireRole(session, ['admin']);
+    return json(await airtable.approveMemberRequest(
+      matchedRoute.params[0],
+      validateMemberLink(await readJsonBody(request))
+    ));
+  }
+
+  if (matchedRoute.name === 'admin-member-request-reject') {
+    requireRole(session, ['admin']);
+    requireExactKeys(await readJsonBody(request), []);
+    return json(await airtable.rejectMemberRequest(matchedRoute.params[0]));
+  }
+
   if (pathname === '/api/admin/events') {
     requireRole(session, ['admin']);
     return json(await airtable.createEvent(validateEvent(await readJsonBody(request))));
+  }
+
+  if (pathname === '/api/admin/member-requests') {
+    requireRole(session, ['admin']);
+    return json(await airtable.getMemberRequests());
+  }
+
+  if (pathname === '/api/admin/diagnostics/member-numbers') {
+    requireRole(session, ['admin']);
+    return json(await airtable.getMemberNumberDiagnostics());
+  }
+
+  if (pathname === '/api/admin/cache/refresh') {
+    requireRole(session, ['admin']);
+    requireExactKeys(await readJsonBody(request), []);
+    return json({ refreshed: true });
   }
 
   throw new ApiError(404, 'NOT_FOUND', 'The requested resource was not found.');

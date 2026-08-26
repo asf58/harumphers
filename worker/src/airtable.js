@@ -1,7 +1,8 @@
 import { ApiError } from './errors.js';
-import { createEventWithAdapter } from './events.js';
+import { buildEventFieldMapping, createEventWithAdapter } from './events.js';
 
 const AIRTABLE_API = 'https://api.airtable.com/v0';
+const AIRTABLE_CONTENT_API = 'https://content.airtable.com/v0';
 const MAX_PAGES = 10;
 
 const DIRECTORY_FIELDS = ['FULL NAME', 'CELL #', 'E-MAIL ADDRESS', 'PHOTO'];
@@ -13,6 +14,9 @@ const EVENT_FIELDS = [
 const PHOTO_FIELDS = ['EVENT RECORD ID', 'MEMBER RECORD ID', 'MEMBER NAME', 'PHOTO', 'CAPTION'];
 const ATTENDANCE_FIELDS = ['EVENT RECORD ID', 'MEMBER RECORD ID', 'ATTENDED', 'ACTUAL GUESTS'];
 const VOTE_FIELDS = ['EVENT RECORD ID', 'MEMBER RECORD ID', 'VOTE'];
+const MEMBER_REQUEST_FIELDS = [
+  'SUBMITTED NAME', 'SUBMITTED MEMBER #', 'STATUS', 'SUBMITTED DATE', 'LINKED MEMBER ID'
+];
 
 const REQUIRED_BINDINGS = [
   'AIRTABLE_TOKEN',
@@ -21,7 +25,8 @@ const REQUIRED_BINDINGS = [
   'AIRTABLE_EVENTS_TABLE_ID',
   'AIRTABLE_PHOTOS_TABLE_ID',
   'AIRTABLE_ATTENDANCE_TABLE_ID',
-  'AIRTABLE_VOTES_TABLE_ID'
+  'AIRTABLE_VOTES_TABLE_ID',
+  'AIRTABLE_MEMBER_REQUESTS_TABLE_ID'
 ];
 
 function upstreamError() {
@@ -113,6 +118,61 @@ export function createAirtable(env, fetchImpl = fetch) {
     });
     if (data?.id !== recordId || !data.fields || typeof data.fields !== 'object') throw upstreamError();
     return data;
+  }
+
+  async function createRecord(tableId, fields) {
+    const data = await fetchJson(tableUrl(tableId), {
+      method: 'POST',
+      body: JSON.stringify({ fields })
+    });
+    if (!/^rec[A-Za-z0-9]{14}$/.test(data?.id) || !data.fields) throw upstreamError();
+    return data;
+  }
+
+  async function deleteRecord(tableId, recordId) {
+    requireRecordId(recordId);
+    const data = await fetchJson(`${tableUrl(tableId)}/${recordId}`, { method: 'DELETE' });
+    if (data?.id !== recordId || data.deleted !== true) throw upstreamError();
+    return { id: recordId, deleted: true };
+  }
+
+  async function getRecord(tableId, recordId) {
+    requireRecordId(recordId);
+    const data = await fetchJson(`${tableUrl(tableId)}/${recordId}`);
+    if (data?.id !== recordId || !data.fields) throw upstreamError();
+    return data;
+  }
+
+  async function writeRecordBatches(tableId, method, records) {
+    const saved = [];
+    for (let index = 0; index < records.length; index += 10) {
+      const batch = records.slice(index, index + 10);
+      const data = await fetchJson(tableUrl(tableId), {
+        method,
+        body: JSON.stringify({ records: batch })
+      });
+      if (!Array.isArray(data.records) || data.records.length !== batch.length) throw upstreamError();
+      saved.push(...data.records);
+    }
+    return saved;
+  }
+
+  async function uploadAttachment(tableId, recordId, fieldName, value) {
+    requireRecordId(recordId);
+    await fetchJson(
+      `${AIRTABLE_CONTENT_API}/${baseId}/${recordId}/${encodeURIComponent(fieldName)}/uploadAttachment`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          contentType: value.contentType,
+          file: value.base64,
+          filename: value.filename
+        })
+      }
+    );
+    const record = await getRecord(tableId, recordId);
+    if (!Array.isArray(record.fields?.[fieldName]) || record.fields[fieldName].length === 0) throw upstreamError();
+    return record;
   }
 
   const eventCreationAdapter = {
@@ -233,6 +293,235 @@ export function createAirtable(env, fetchImpl = fetch) {
         [rsvpField]: value.response,
         ...(guestField ? { [guestField]: value.guests } : {})
       });
+    },
+
+    async setVote(recordId, eventId, vote) {
+      requireRecordId(recordId);
+      requireRecordId(eventId);
+      const event = await getRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId);
+      if (event.fields?.Status !== 'Suggested' || event.fields?.['SETUP STATE'] !== 'ready') {
+        throw new ApiError(409, 'VOTING_CLOSED', 'Voting is not open for this event.');
+      }
+      const params = paramsWithFields(VOTE_FIELDS, {
+        filterByFormula: `AND({MEMBER RECORD ID}='${recordId}',{EVENT RECORD ID}='${eventId}')`,
+        maxRecords: '2'
+      });
+      const data = await fetchJson(`${tableUrl(env.AIRTABLE_VOTES_TABLE_ID)}?${params}`);
+      if (!Array.isArray(data.records) || data.records.length > 1) throw upstreamError();
+      const existing = data.records[0];
+      if (vote === null) {
+        return existing ? deleteRecord(env.AIRTABLE_VOTES_TABLE_ID, existing.id) : { deleted: false };
+      }
+      if (existing) return patchRecord(env.AIRTABLE_VOTES_TABLE_ID, existing.id, { VOTE: vote });
+      return createRecord(env.AIRTABLE_VOTES_TABLE_ID, {
+        'MEMBER RECORD ID': recordId,
+        'EVENT RECORD ID': eventId,
+        VOTE: vote
+      });
+    },
+
+    async submitMemberRequest(value) {
+      const params = paramsWithFields(MEMBER_REQUEST_FIELDS, {
+        filterByFormula: `AND({SUBMITTED MEMBER #}=${value.memberNumber},{STATUS}='Pending')`,
+        maxRecords: '1'
+      });
+      const existing = await fetchJson(`${tableUrl(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID)}?${params}`);
+      if (!Array.isArray(existing.records)) throw upstreamError();
+      if (existing.records.length > 0) {
+        throw new ApiError(409, 'ALREADY_PENDING', 'This member number already has a pending request.');
+      }
+      const submittedDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const created = await createRecord(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID, {
+        'SUBMITTED NAME': value.name,
+        'SUBMITTED MEMBER #': value.memberNumber,
+        STATUS: 'Pending',
+        'SUBMITTED DATE': submittedDate
+      });
+      return { id: created.id, status: 'Pending' };
+    },
+
+    async getMemberRequests() {
+      const requestParams = paramsWithFields(MEMBER_REQUEST_FIELDS, {
+        filterByFormula: "{STATUS}='Pending'"
+      });
+      const memberParams = paramsWithFields(['FULL NAME', 'MEMBER #', 'IN DIRECTORY'], {
+        filterByFormula: '{IN DIRECTORY}=TRUE()'
+      });
+      const [requests, members] = await Promise.all([
+        listAll(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID, requestParams),
+        listAll(env.AIRTABLE_MEMBERS_TABLE_ID, memberParams)
+      ]);
+      return { requests, members };
+    },
+
+    async approveMemberRequest(requestId, memberId) {
+      const request = await getRecord(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID, requestId);
+      if (request.fields?.STATUS !== 'Pending' || !Number.isSafeInteger(request.fields?.['SUBMITTED MEMBER #'])) {
+        throw new ApiError(409, 'REQUEST_NOT_PENDING', 'This request is no longer pending.');
+      }
+      const memberNumber = request.fields['SUBMITTED MEMBER #'];
+      const updatedMember = await patchRecord(env.AIRTABLE_MEMBERS_TABLE_ID, memberId, {
+        'MEMBER #': memberNumber
+      });
+      if (updatedMember.fields?.['MEMBER #'] !== memberNumber) throw upstreamError();
+      await patchRecord(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID, requestId, {
+        STATUS: 'Approved',
+        'LINKED MEMBER ID': memberId
+      });
+      return { id: requestId, status: 'Approved', memberId };
+    },
+
+    async rejectMemberRequest(requestId) {
+      const request = await getRecord(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID, requestId);
+      if (request.fields?.STATUS !== 'Pending') {
+        throw new ApiError(409, 'REQUEST_NOT_PENDING', 'This request is no longer pending.');
+      }
+      await patchRecord(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID, requestId, { STATUS: 'Rejected' });
+      return { id: requestId, status: 'Rejected' };
+    },
+
+    async getMemberNumberDiagnostics() {
+      const params = paramsWithFields(['MEMBER #', 'IN DIRECTORY'], {
+        filterByFormula: '{IN DIRECTORY}=TRUE()'
+      });
+      const records = await listAll(env.AIRTABLE_MEMBERS_TABLE_ID, params);
+      const withNumber = records.filter(record => Number.isSafeInteger(record.fields?.['MEMBER #'])).length;
+      return {
+        totalInDirectory: records.length,
+        withNumber,
+        missingNumber: records.length - withNumber
+      };
+    },
+
+    async updateEvent(eventId, value) {
+      const existing = await getRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId);
+      const fields = {
+        'EVENT NAME': value.name,
+        DATE: value.date || null,
+        SPEAKER: value.speaker,
+        TIME: value.time,
+        ROOM: value.room,
+        NOTES: value.notes,
+        Status: value.status
+      };
+      const needsScheduledSetup = value.status === 'Scheduled' && (
+        existing.fields?.Status !== 'Scheduled'
+        || existing.fields?.['SETUP STATE'] !== 'ready'
+        || typeof existing.fields?.['RSVP FIELD'] !== 'string'
+      );
+      if (!needsScheduledSetup) {
+        return patchRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId, fields);
+      }
+
+      const mapping = await buildEventFieldMapping({
+        date: value.date,
+        name: value.name,
+        idempotencyKey: eventId
+      });
+      try {
+        await patchRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId, {
+          ...fields,
+          'RSVP FIELD': mapping.rsvpField,
+          'GUEST FIELD': mapping.guestField,
+          'SETUP STATE': 'creating'
+        });
+        await eventCreationAdapter.ensureMemberField(mapping.rsvpField, 'singleSelect');
+        await eventCreationAdapter.ensureMemberField(mapping.guestField, 'number');
+        return patchRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId, {
+          ...fields,
+          'RSVP FIELD': mapping.rsvpField,
+          'GUEST FIELD': mapping.guestField,
+          'SETUP STATE': 'ready'
+        });
+      } catch {
+        try {
+          await patchRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId, { 'SETUP STATE': 'failed:SETUP_FAILED' });
+        } catch {
+          // Preserve the original bounded setup failure.
+        }
+        throw new ApiError(502, 'SETUP_FAILED', 'The event setup did not finish. Retry to resume it.');
+      }
+    },
+
+    async saveAttendance(eventId, entries) {
+      requireRecordId(eventId);
+      const params = paramsWithFields(ATTENDANCE_FIELDS, {
+        filterByFormula: `{EVENT RECORD ID}='${eventId}'`
+      });
+      const existing = await listAll(env.AIRTABLE_ATTENDANCE_TABLE_ID, params);
+      const byMember = new Map();
+      for (const record of existing) {
+        const memberId = record.fields?.['MEMBER RECORD ID'];
+        if (typeof memberId !== 'string' || byMember.has(memberId)) throw upstreamError();
+        byMember.set(memberId, record);
+      }
+
+      const updates = [];
+      const creates = [];
+      for (const entry of entries) {
+        requireRecordId(entry.memberId);
+        const fields = {
+          'EVENT RECORD ID': eventId,
+          'MEMBER RECORD ID': entry.memberId,
+          ATTENDED: entry.attended,
+          'ACTUAL GUESTS': entry.actualGuests
+        };
+        const record = byMember.get(entry.memberId);
+        if (record) updates.push({ id: requireRecordId(record.id), fields });
+        else creates.push({ fields });
+      }
+      if (updates.length > 0) await writeRecordBatches(env.AIRTABLE_ATTENDANCE_TABLE_ID, 'PATCH', updates);
+      if (creates.length > 0) await writeRecordBatches(env.AIRTABLE_ATTENDANCE_TABLE_ID, 'POST', creates);
+      return { saved: entries.length };
+    },
+
+    uploadMemberPhoto(memberId, value) {
+      return uploadAttachment(env.AIRTABLE_MEMBERS_TABLE_ID, memberId, 'PHOTO', value);
+    },
+
+    uploadEventPhoto(eventId, value) {
+      return uploadAttachment(env.AIRTABLE_EVENTS_TABLE_ID, eventId, 'SPEAKER PHOTO', value);
+    },
+
+    clearEventPhoto(eventId) {
+      return patchRecord(env.AIRTABLE_EVENTS_TABLE_ID, eventId, { 'SPEAKER PHOTO': [] });
+    },
+
+    async addEventPhoto(session, eventId, value) {
+      requireRecordId(eventId);
+      let memberName = 'ADMIN';
+      let memberId = '';
+      if (session.role === 'member') {
+        const member = await getRecord(env.AIRTABLE_MEMBERS_TABLE_ID, session.sub);
+        memberName = String(member.fields?.['FULL NAME'] ?? '').slice(0, 160);
+        memberId = session.sub;
+      }
+      const submittedDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const record = await createRecord(env.AIRTABLE_PHOTOS_TABLE_ID, {
+        'EVENT RECORD ID': eventId,
+        ...(memberId ? { 'MEMBER RECORD ID': memberId } : {}),
+        'MEMBER NAME': memberName,
+        CAPTION: value.caption,
+        SUBMITTED: submittedDate
+      });
+      try {
+        return await uploadAttachment(env.AIRTABLE_PHOTOS_TABLE_ID, record.id, 'PHOTO', value);
+      } catch (error) {
+        try {
+          await deleteRecord(env.AIRTABLE_PHOTOS_TABLE_ID, record.id);
+        } catch {
+          // Preserve the original bounded upload error if cleanup also fails.
+        }
+        throw error;
+      }
+    },
+
+    deletePhoto(photoId) {
+      return deleteRecord(env.AIRTABLE_PHOTOS_TABLE_ID, photoId);
+    },
+
+    updatePhotoCaption(photoId, caption) {
+      return patchRecord(env.AIRTABLE_PHOTOS_TABLE_ID, photoId, { CAPTION: caption });
     },
 
     createEvent(value) {

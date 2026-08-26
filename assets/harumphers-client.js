@@ -126,6 +126,13 @@
     loginMember(memberNumber) {
       return login('/api/login/member', { memberNumber });
     },
+    submitMemberRequest(name, memberNumber) {
+      return requestJson('/api/member-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, memberNumber })
+      }, false);
+    },
     logout() {
       clearSession();
     }

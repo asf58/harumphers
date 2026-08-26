@@ -1189,16 +1189,6 @@
 
   <script src="assets/harumphers-client.js" data-api-origin="https://harumphers-api.adamsfeuer.workers.dev"></script>
   <script>
-    // Airtable calls go through our Cloudflare Worker proxy.
-    // The Worker injects the real Airtable PAT server-side (no longer in client JS),
-    // and caches GET responses so all members share one upstream fetch per ~5min.
-    const API_BASE = 'https://harumphers-api.adamsfeuer.workers.dev';
-    const API_KEY = 'QtS8Oq-sU1SwjalDXjY4atSmwIW8fYs9gQ9w0KfvDJw';
-    const BASE_ID = 'appW7Df1qJlznxxtf';
-    const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
-    const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
-    const REQUESTS_TABLE = 'tblz8NLFYE7XsOhrR';
-    const VOTES_TABLE = 'tblnpBxZ7N6X7004t';
     let votesData = {}; // eventRecordId -> { memberRecordId: { vote, recordId } }
     let votingInFlight = new Set();
 
@@ -1248,41 +1238,6 @@
     // --- Service Worker ---
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
-
-    // --- API helpers ---
-    async function apiFetch(url) {
-      const res = await fetch(url, {
-        headers: { 'X-Harumphers-Key': API_KEY }
-      });
-      if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
-      return res.json();
-    }
-
-    async function apiFetchAll(url) {
-      let allRecords = [];
-      let fetchUrl = url;
-      while (true) {
-        const data = await apiFetch(fetchUrl);
-        allRecords = allRecords.concat(data.records);
-        if (!data.offset) break;
-        const sep = fetchUrl.includes('?') ? '&' : '?';
-        fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
-      }
-      return { records: allRecords };
-    }
-
-    async function apiPatch(recordId, fields) {
-      const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
-        method: 'PATCH',
-        headers: {
-          'X-Harumphers-Key': API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ fields })
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      return res.json();
     }
 
     // --- Login Logic ---
@@ -1502,13 +1457,12 @@
       const msgEl = document.getElementById('prof-msg');
       const saveBtn = document.getElementById('prof-save-btn');
 
-      const updates = {};
       const f = memberRecord.fields;
-      if (newName && newName !== f['FULL NAME']) updates['FULL NAME'] = newName;
-      if (newPhone !== (f['CELL #'] || '')) updates['CELL #'] = newPhone;
-      if (newEmail !== (f['E-MAIL ADDRESS'] || '')) updates['E-MAIL ADDRESS'] = newEmail;
-
-      if (Object.keys(updates).length === 0) {
+      if (
+        newName === f['FULL NAME']
+        && newPhone === (f['CELL #'] || '')
+        && newEmail === (f['E-MAIL ADDRESS'] || '')
+      ) {
         msgEl.className = 'profile-edit-msg error';
         msgEl.textContent = 'No changes detected';
         return;
@@ -1519,12 +1473,14 @@
       msgEl.textContent = 'Saving...';
 
       try {
-        const updated = await apiPatch(info.recordId, updates);
+        const updated = await Harumphers.api('/api/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName, phone: newPhone, email: newEmail })
+        });
         memberRecord = updated;
 
-        if (updates['FULL NAME']) {
-          currentMemberInfo.name = updates['FULL NAME'];
-        }
+        currentMemberInfo.name = newName;
 
         editFormVisible = false;
         renderProfile();
@@ -1571,27 +1527,20 @@
       }
 
       try {
-        // Get table metadata for RSVP + GUESTS fields
-        const meta = await apiFetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables`);
-        const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
-        const rsvpFields = membersTable.fields.filter(f =>
+        const bootstrap = await Harumphers.api('/api/events');
+        const rsvpFields = bootstrap.memberFields.filter(f =>
           f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
         );
-        const guestFields = membersTable.fields.filter(f =>
+        const guestFields = bootstrap.memberFields.filter(f =>
           f.name.toUpperCase().startsWith('GUESTS-')
         );
 
-        // Get event details (preserve record IDs)
-        const eventsData = await apiFetchAll(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`);
-        const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
+        const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
 
         // Load votes data
         votesData = {};
         try {
-          const votesRaw = await apiFetchAll(
-            `${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`
-          );
-          votesRaw.records.forEach(r => {
+          bootstrap.votes.forEach(r => {
             const f = r.fields;
             const eventId = f['EVENT RECORD ID'];
             const memberId = f['MEMBER RECORD ID'];
@@ -1605,9 +1554,7 @@
         } catch (e) { /* votes load failure is non-fatal */ }
 
         // Get member's full record (no fields filter)
-        const memberData = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`
-        );
+        const memberData = await Harumphers.api('/api/me');
         myMemberRecord = memberData;
         const myFields = memberData.fields || {};
 
@@ -1710,16 +1657,13 @@
       const container = document.getElementById('guest-quick-events');
 
       try {
-        const eventsData = await apiFetchAll(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`);
-        const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
+        const bootstrap = await Harumphers.api('/api/events');
+        const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
 
         // Load votes data for tallies
         votesData = {};
         try {
-          const votesRaw = await apiFetchAll(
-            `${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`
-          );
-          votesRaw.records.forEach(r => {
+          bootstrap.votes.forEach(r => {
             const f = r.fields;
             const eventId = f['EVENT RECORD ID'];
             const memberId = f['MEMBER RECORD ID'];
@@ -2003,63 +1947,14 @@
         // If clicking the same vote, toggle it off (clear)
         const currentVote = existing ? existing.vote : null;
         const newValue = (currentVote === value) ? null : value;
-
-        if (newValue === null) {
-          // DELETE existing vote
-          if (existing && existing.recordId) {
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-              method: 'DELETE',
-              headers: { 'X-Harumphers-Key': API_KEY },
-            });
-            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
-          }
-          if (votesData[ev._recordId]) {
-            delete votesData[ev._recordId][info.recordId];
-          }
-        } else if (existing && existing.recordId) {
-          // PATCH existing vote record
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'VOTE': newValue } })
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
-          votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: existing.recordId };
-        } else {
-          // No local record — query Airtable for deduplication
-          const formula = encodeURIComponent(`AND({MEMBER RECORD ID}="${info.recordId}",{EVENT RECORD ID}="${ev._recordId}")`);
-          const checkRes = await apiFetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
-          if (checkRes.records && checkRes.records.length > 0) {
-            const existingId = checkRes.records[0].id;
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
-              method: 'PATCH',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: { 'VOTE': newValue } })
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
-            votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: existingId };
-          } else {
-            // POST new vote
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
-              method: 'POST',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fields: {
-                  'MEMBER RECORD ID': info.recordId,
-                  'MEMBER NAME': info.name || '',
-                  'EVENT RECORD ID': ev._recordId,
-                  'VOTE': newValue,
-                }
-              })
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
-            votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: data.id };
-          }
-        }
+        const result = await Harumphers.api(`/api/events/${ev._recordId}/vote`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote: newValue })
+        });
+        if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
+        if (newValue === null) delete votesData[ev._recordId][info.recordId];
+        else votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: result.id };
 
         // Re-render
         renderQuickEvents();
@@ -2094,7 +1989,11 @@
       msgEl.textContent = 'Saving...';
 
       try {
-        await apiPatch(info.recordId, { [ev.fieldName]: value });
+        await Harumphers.api(`/api/events/${ev._recordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: value, guests: ev.guestCount || 0 })
+        });
         ev.rsvp = value;
         if (myMemberRecord) myMemberRecord.fields[ev.fieldName] = value;
         renderQuickEvents();
@@ -2123,7 +2022,11 @@
       const msgEl = document.getElementById(`qe-msg-${idx}`);
 
       try {
-        await apiPatch(info.recordId, { [ev.guestFieldName]: count });
+        await Harumphers.api(`/api/events/${ev._recordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: ev.rsvp || 'YES', guests: count })
+        });
         ev.guestCount = count;
         if (myMemberRecord) myMemberRecord.fields[ev.guestFieldName] = count;
 
@@ -2203,39 +2106,7 @@
       msgEl.textContent = 'Submitting...';
 
       try {
-        // Check for duplicate pending request with same number
-        const formula = encodeURIComponent(`AND({SUBMITTED MEMBER #}=${num},{STATUS}="Pending")`);
-        const checkUrl = `${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=${formula}`;
-        const existing = await apiFetch(checkUrl);
-        if (existing.records && existing.records.length > 0) {
-          msgEl.className = 'submit-request-msg error';
-          msgEl.textContent = 'This number has already been submitted and is pending review.';
-          btn.disabled = false;
-          return;
-        }
-
-        // Create the request
-        const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' });
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}`, {
-          method: 'POST',
-          headers: {
-            'X-Harumphers-Key': API_KEY,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            fields: {
-              'SUBMITTED NAME': name,
-              'SUBMITTED MEMBER #': parseInt(num),
-              'STATUS': 'Pending',
-              'SUBMITTED DATE': today
-            }
-          })
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-        }
+        await Harumphers.submitMemberRequest(name, Number(num));
 
         // Show success
         const gate = document.getElementById('gate');
@@ -2251,7 +2122,9 @@
         `;
       } catch (err) {
         msgEl.className = 'submit-request-msg error';
-        msgEl.textContent = 'Failed to submit: ' + err.message;
+        msgEl.textContent = err.code === 'ALREADY_PENDING'
+          ? 'This number has already been submitted and is pending review.'
+          : 'Failed to submit. Please try again.';
         btn.disabled = false;
       }
     }
@@ -2266,25 +2139,9 @@
       const container = document.getElementById('admin-requests');
 
       try {
-        // Load pending requests
-        const reqFormula = encodeURIComponent('{STATUS}="Pending"');
-        const reqSort = encodeURIComponent('SUBMITTED DATE');
-        const reqData = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=${reqFormula}&sort[0][field]=${reqSort}&sort[0][direction]=desc`
-        );
-        pendingRequests = reqData.records || [];
-
-        // Load all members for the search dropdown
-        const memberParams = new URLSearchParams();
-        memberParams.append('fields[]', 'FULL NAME');
-        memberParams.append('fields[]', 'MEMBER #');
-        memberParams.append('fields[]', 'IN DIRECTORY');
-        memberParams.append('sort[0][field]', 'LAST NAME');
-        memberParams.append('sort[0][direction]', 'asc');
-        const memberData = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}?${memberParams}`
-        );
-        allMembersForSearch = memberData.records.filter(r => r.fields['IN DIRECTORY']);
+        const data = await Harumphers.api('/api/admin/member-requests');
+        pendingRequests = data.requests || [];
+        allMembersForSearch = data.members || [];
 
         renderAdminRequests();
       } catch (err) {
@@ -2437,8 +2294,6 @@
       const selected = selectedMembers[requestId];
       if (!selected) return;
 
-      const req = pendingRequests[idx];
-      const memberNum = req.fields['SUBMITTED MEMBER #'];
       const msgEl = document.getElementById(`req-msg-${requestId}`);
       const btn = document.getElementById(`approve-${requestId}`);
 
@@ -2446,14 +2301,10 @@
       if (msgEl) { msgEl.className = 'request-msg'; msgEl.textContent = 'Linking member...'; }
 
       try {
-        // Step 1: Update the member's MEMBER # field (text field, needs string)
-        await apiPatch(selected.recordId, { 'MEMBER #': String(memberNum) });
-
-        // Step 2: Mark request as approved with linked member ID
-        await fetch(`${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}/${requestId}`, {
-          method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'STATUS': 'Approved', 'LINKED MEMBER ID': selected.recordId } })
+        await Harumphers.api(`/api/admin/member-requests/${requestId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ memberId: selected.recordId })
         });
 
         // Remove from pending list
@@ -2475,10 +2326,10 @@
       if (msgEl) { msgEl.className = 'request-msg'; msgEl.textContent = 'Rejecting...'; }
 
       try {
-        await fetch(`${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}/${requestId}`, {
-          method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'STATUS': 'Rejected' } })
+        await Harumphers.api(`/api/admin/member-requests/${requestId}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
         });
 
         pendingRequests = pendingRequests.filter(r => r.id !== requestId);

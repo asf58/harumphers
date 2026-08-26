@@ -95,6 +95,25 @@ test('member and administrator login use distinct explicit session endpoints', a
   ]);
 });
 
+test('a member-number coverage request uses the explicit public endpoint without a session header', async () => {
+  const requests = [];
+  const { Harumphers } = await loadClient(async (url, init) => {
+    requests.push({ url, init });
+    return new Response(JSON.stringify({ id: 'recFixtureRequest1', status: 'Pending' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  });
+
+  await Harumphers.submitMemberRequest('Fixture Member', 42001);
+
+  assert.equal(requests[0].url, 'https://api.example.test/api/member-requests');
+  assert.equal(new Headers(requests[0].init.headers).has('Authorization'), false);
+  assert.deepEqual(JSON.parse(requests[0].init.body), {
+    name: 'Fixture Member', memberNumber: 42001
+  });
+});
+
 test('authenticated API calls use the bearer session and reject non-API paths', async () => {
   const requests = [];
   const { Harumphers, values } = await loadClient(async (url, init) => {

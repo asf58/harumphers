@@ -10,7 +10,8 @@ const ENV = {
   AIRTABLE_EVENTS_TABLE_ID: 'tblFixtureEvents',
   AIRTABLE_PHOTOS_TABLE_ID: 'tblFixturePhotos',
   AIRTABLE_ATTENDANCE_TABLE_ID: 'tblFixtureAttendance',
-  AIRTABLE_VOTES_TABLE_ID: 'tblFixtureVotes'
+  AIRTABLE_VOTES_TABLE_ID: 'tblFixtureVotes',
+  AIRTABLE_MEMBER_REQUESTS_TABLE_ID: 'tblFixtureMemberRequests'
 };
 
 function jsonResponse(value, status = 200) {
@@ -264,4 +265,126 @@ test('pagination stops after ten pages instead of following an unbounded offset 
 
   await assert.rejects(() => airtable.getDirectory('guest'), error => error.code === 'UPSTREAM_FAILED');
   assert.equal(fetchCalls, 10);
+});
+
+test('attendance saves update existing rows and create missing rows without duplicates', async () => {
+  const requests = [];
+  const airtable = createAirtable(ENV, async (url, init = {}) => {
+    const request = { url: new URL(url), init };
+    requests.push(request);
+    if (init.method === undefined) {
+      return jsonResponse({
+        records: [{
+          id: 'recAttendance0001',
+          fields: {
+            'EVENT RECORD ID': 'recFixtureEvent01',
+            'MEMBER RECORD ID': 'recFixtureMember1'
+          }
+        }]
+      });
+    }
+    const records = JSON.parse(init.body).records;
+    return jsonResponse({
+      records: records.map((record, index) => ({
+        id: record.id ?? `recAttendance000${index + 2}`,
+        fields: record.fields
+      }))
+    });
+  });
+
+  const result = await airtable.saveAttendance('recFixtureEvent01', [
+    { memberId: 'recFixtureMember1', attended: true, actualGuests: 2 },
+    { memberId: 'recFixtureMember2', attended: false, actualGuests: 0 }
+  ]);
+
+  assert.deepEqual(result, { saved: 2 });
+  assert.equal(requests[0].url.searchParams.get('filterByFormula'), "{EVENT RECORD ID}='recFixtureEvent01'");
+  assert.equal(requests[1].init.method, 'PATCH');
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    records: [{
+      id: 'recAttendance0001',
+      fields: {
+        'EVENT RECORD ID': 'recFixtureEvent01',
+        'MEMBER RECORD ID': 'recFixtureMember1',
+        ATTENDED: true,
+        'ACTUAL GUESTS': 2
+      }
+    }]
+  });
+  assert.equal(requests[2].init.method, 'POST');
+  assert.deepEqual(JSON.parse(requests[2].init.body), {
+    records: [{
+      fields: {
+        'EVENT RECORD ID': 'recFixtureEvent01',
+        'MEMBER RECORD ID': 'recFixtureMember2',
+        ATTENDED: false,
+        'ACTUAL GUESTS': 0
+      }
+    }]
+  });
+});
+
+test('attendance saves fail closed when existing rows contain a duplicate member', async () => {
+  let requestCount = 0;
+  const airtable = createAirtable(ENV, async () => {
+    requestCount += 1;
+    return jsonResponse({
+      records: [
+        { id: 'recAttendance0001', fields: { 'MEMBER RECORD ID': 'recFixtureMember1' } },
+        { id: 'recAttendance0002', fields: { 'MEMBER RECORD ID': 'recFixtureMember1' } }
+      ]
+    });
+  });
+
+  await assert.rejects(
+    () => airtable.saveAttendance('recFixtureEvent01', [
+      { memberId: 'recFixtureMember1', attended: true, actualGuests: 0 }
+    ]),
+    error => error.code === 'UPSTREAM_FAILED'
+  );
+  assert.equal(requestCount, 1);
+});
+
+test('promoting a suggested event creates exact RSVP mappings before marking it ready', async () => {
+  const requests = [];
+  const airtable = createAirtable(ENV, async (url, init = {}) => {
+    const request = { url: new URL(url), init };
+    requests.push(request);
+    if (requests.length === 1) {
+      return jsonResponse({
+        id: 'recFixtureEvent02',
+        fields: { 'EVENT NAME': 'Suggested Fixture', Status: 'Suggested', 'SETUP STATE': 'ready' }
+      });
+    }
+    if (request.url.pathname === '/v0/meta/bases/appFixtureBase/tables') {
+      return jsonResponse({ tables: [{ id: 'tblFixtureMembers', fields: [] }] });
+    }
+    if (request.url.pathname.endsWith('/fields')) {
+      const body = JSON.parse(init.body);
+      return jsonResponse({ id: 'fldFixtureCreated', name: body.name, type: body.type });
+    }
+    const body = JSON.parse(init.body);
+    return jsonResponse({ id: 'recFixtureEvent02', fields: body.fields });
+  });
+
+  const result = await airtable.updateEvent('recFixtureEvent02', {
+    name: 'Promoted Fixture',
+    date: '2026-10-17',
+    speaker: 'Fixture Speaker',
+    time: '6:30 PM',
+    room: 'Fixture Hall',
+    notes: '',
+    status: 'Scheduled'
+  });
+
+  assert.equal(result.fields.Status, 'Scheduled');
+  assert.equal(result.fields['SETUP STATE'], 'ready');
+  assert.match(result.fields['RSVP FIELD'], / RSVP$/);
+  assert.match(result.fields['GUEST FIELD'], /^GUESTS-/);
+  const fieldCreates = requests.filter(request => request.url.pathname.endsWith('/fields'));
+  assert.equal(fieldCreates.length, 2);
+  assert.deepEqual(fieldCreates.map(request => JSON.parse(request.init.body).type), ['singleSelect', 'number']);
+  const finalPatch = JSON.parse(requests.at(-1).init.body).fields;
+  assert.equal(finalPatch.Status, 'Scheduled');
+  assert.equal(finalPatch['SETUP STATE'], 'ready');
 });

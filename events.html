@@ -982,19 +982,6 @@
       window.location.href = 'index.html';
     }
 
-    // Airtable calls go through our Cloudflare Worker proxy.
-    // The Worker injects the real Airtable PAT server-side (no longer in client JS),
-    // and caches GET responses so all members share one upstream fetch per ~5min.
-    const API_BASE = 'https://harumphers-api.adamsfeuer.workers.dev';
-    const API_KEY = 'QtS8Oq-sU1SwjalDXjY4atSmwIW8fYs9gQ9w0KfvDJw';
-    const BASE_ID = 'appW7Df1qJlznxxtf';
-    const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
-    const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
-    const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
-    const PHOTOS_TABLE = 'tblTQM3DY7BAqs9BL';
-    const ATTENDANCE_TABLE = 'tbloa1qulpNHKkFNk';
-    const VOTES_TABLE = 'tblnpBxZ7N6X7004t';
-
     let allMembers = [];
     let allEvents = [];
     let galleryPhotos = {}; // eventRecordId -> [{url, thumb, memberName, caption}]
@@ -1014,6 +1001,7 @@
     // Admin edit state
     let editingEvent = null; // eventIdx being edited
     let showingNewEvent = false;
+    let newEventCreationKey = null;
 
     function normalizeStatus(raw) {
       const s = (raw || '').toLowerCase();
@@ -1022,85 +1010,6 @@
       if (s === 'todo') return 'Upcoming';
       if (['suggested', 'upcoming', 'scheduled', 'completed', 'cancelled'].includes(s)) return raw;
       return 'Upcoming';
-    }
-
-    async function apiFetch(url) {
-      const res = await fetch(url, {
-        headers: { 'X-Harumphers-Key': API_KEY }
-      });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      return res.json();
-    }
-
-    async function apiFetchAll(url) {
-      let allRecords = [];
-      let fetchUrl = url;
-      while (true) {
-        const data = await apiFetch(fetchUrl);
-        allRecords = allRecords.concat(data.records);
-        if (!data.offset) break;
-        const sep = fetchUrl.includes('?') ? '&' : '?';
-        fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
-      }
-      return { records: allRecords };
-    }
-
-    async function apiPatch(recordId, fields) {
-      const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
-        method: 'PATCH',
-        headers: {
-          'X-Harumphers-Key': API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ fields })
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
-        throw new Error(errMsg);
-      }
-      return res.json();
-    }
-
-    async function applyApprovedChanges() {
-      try {
-        const data = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`
-        );
-        for (const rec of data.records) {
-          const f = rec.fields;
-          const memberId = f['MEMBER RECORD ID'];
-          const changes = f['REQUESTED CHANGES'] || '';
-          if (!memberId) continue;
-
-          const updates = {};
-          for (const line of changes.split('\n')) {
-            const match = line.match(/^(.+?):\s*.+?\s*->\s*(.+)$/);
-            if (!match) continue;
-            const field = match[1].trim();
-            const newVal = match[2].trim();
-            if (field === 'Name') updates['FULL NAME'] = newVal;
-            else if (field === 'Phone') updates['CELL #'] = newVal;
-            else if (field === 'Email') updates['E-MAIL ADDRESS'] = newVal;
-          }
-
-          if (Object.keys(updates).length > 0) {
-            await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${memberId}`, {
-              method: 'PATCH',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: updates })
-            });
-          }
-
-          await fetch(`${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'APPLIED AT': new Date().toISOString() } })
-          });
-        }
-      } catch (e) {
-        console.log('Auto-apply check:', e.message);
-      }
     }
 
     // Find matching guest field using multiple strategies
@@ -1465,11 +1374,6 @@
                   <option value="Scheduled">Scheduled</option>
                 </select>
               </div>
-              <div class="new-event-row">
-                <span class="new-event-label">RSVP Field</span>
-                <input class="new-event-input" id="new-event-prefix" placeholder="Auto-generated from name + date">
-              </div>
-              <div class="new-event-hint">Column name in Airtable (auto-fills when you enter name + date)</div>
               <div class="new-event-checkbox">
                 <input type="checkbox" id="new-event-guests" checked>
                 <label for="new-event-guests">Enable guest count tracking</label>
@@ -1883,8 +1787,11 @@
       }
 
       try {
-        const patchValue = value === null ? null : value;
-        await apiPatch(member.id, { [ev.fieldName]: patchValue });
+        await Harumphers.api(`/api/events/${ev.eventRecordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: value, guests: getMyGuestCountForEvent(ev) })
+        });
         member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
         render();
@@ -1918,7 +1825,11 @@
       if (!member) return;
 
       try {
-        await apiPatch(member.id, { [ev.guestFieldName]: count });
+        await Harumphers.api(`/api/events/${ev.eventRecordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: getMyRsvpForEvent(ev) || 'YES', guests: count })
+        });
         member.fields[ev.guestFieldName] = count;
         recalcEvent(ev);
         render();
@@ -1952,8 +1863,11 @@
       }
 
       try {
-        const patchValue = value === null ? null : value;
-        await apiPatch(member.id, { [ev.fieldName]: patchValue });
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/rsvps/${member.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: value, guests: getMemberGuestCount(ev, member.id) })
+        });
         member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
         // Keep inline edit open on same member
@@ -1988,7 +1902,11 @@
       const count = parseInt(input.value) || 0;
 
       try {
-        await apiPatch(member.id, { [ev.guestFieldName]: count });
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/rsvps/${member.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: getMemberRsvpForEvent(ev, member.id) || 'YES', guests: count })
+        });
         member.fields[ev.guestFieldName] = count;
         recalcEvent(ev);
         inlineEdit = { eventIdx, memberId };
@@ -2318,31 +2236,14 @@
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Uploading photo...'; }
 
       try {
-        // Upload to temp host
-        const publicUrl = await uploadPhotoFile(file);
-
-        // Create record in EVENT PHOTOS table
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}`, {
+        const upload = await preparePhotoFile(file);
+        const data = await Harumphers.api(`/api/events/${ev.eventRecordId}/photos`, {
           method: 'POST',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              'EVENT RECORD ID': ev.eventRecordId,
-              'EVENT NAME': ev.name,
-              'MEMBER NAME': memberName,
-              'PHOTO': [{ url: publicUrl }],
-              'CAPTION': caption,
-              'SUBMITTED': new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' }),
-            }
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...upload, caption })
         });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-        }
 
         // Add to local gallery data
-        const data = await res.json();
         if (!galleryPhotos[ev.eventRecordId]) galleryPhotos[ev.eventRecordId] = [];
         const newPhotos = data.fields['PHOTO'] || [];
         newPhotos.forEach(p => {
@@ -2367,11 +2268,9 @@
 
     async function removeGalleryPhoto(eventRecordId, photoRecordId) {
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+        await Harumphers.api(`/api/admin/photos/${photoRecordId}`, {
           method: 'DELETE',
-          headers: { 'X-Harumphers-Key': API_KEY },
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         // Remove from local data
         if (galleryPhotos[eventRecordId]) {
           galleryPhotos[eventRecordId] = galleryPhotos[eventRecordId].filter(p => p.recordId !== photoRecordId);
@@ -2390,12 +2289,11 @@
 
     async function saveGalleryCaption(photoRecordId, caption) {
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+        await Harumphers.api(`/api/admin/photos/${photoRecordId}`, {
           method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'CAPTION': caption } })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ caption })
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         // Update local data
         for (const eventId in galleryPhotos) {
           const photo = galleryPhotos[eventId].find(p => p.recordId === photoRecordId);
@@ -2445,15 +2343,9 @@
       const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Removing photo...'; }
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
-          method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'SPEAKER PHOTO': [] } })
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/speaker-photo`, {
+          method: 'DELETE'
         });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-        }
         ev.speakerPhoto = null;
         render();
       } catch (err) {
@@ -2461,20 +2353,37 @@
       }
     }
 
-    async function uploadPhotoFile(file) {
-      // Upload to tmpfiles.org (free, no API key, 1 hour expiry — enough for Airtable to download)
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('https://tmpfiles.org/api/v1/upload', {
-        method: 'POST',
-        body: formData,
+    async function preparePhotoFile(file) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        throw new Error('Use a JPEG, PNG, or WebP image');
+      }
+      const image = await new Promise((resolve, reject) => {
+        const element = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        element.onload = () => { URL.revokeObjectURL(objectUrl); resolve(element); };
+        element.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Could not read this image')); };
+        element.src = objectUrl;
       });
-      if (!res.ok) throw new Error('Photo upload failed');
-      const data = await res.json();
-      // tmpfiles.org returns URL like https://tmpfiles.org/12345/image.jpg
-      // Direct download URL is https://tmpfiles.org/dl/12345/image.jpg
-      const url = data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-      return url;
+      const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      const outputType = file.type === 'image/png' ? 'image/png' : file.type;
+      let quality = 0.88;
+      let blob;
+      do {
+        blob = await new Promise(resolve => canvas.toBlob(resolve, outputType, quality));
+        quality -= 0.1;
+      } while (blob && blob.size > 1024 * 1024 && quality >= 0.48 && outputType !== 'image/png');
+      if (!blob || blob.size > 1024 * 1024) throw new Error('Image is still larger than 1 MB after resizing');
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Could not prepare this image'));
+        reader.readAsDataURL(blob);
+      });
+      return { filename: file.name, contentType: outputType, base64 };
     }
 
     async function saveEventDetails(eventIdx) {
@@ -2485,7 +2394,6 @@
       const time = document.getElementById(`edit-time-${eventIdx}`).value.trim();
       const room = document.getElementById(`edit-room-${eventIdx}`).value.trim();
       const notes = document.getElementById(`edit-notes-${eventIdx}`).value.trim();
-      const photoUrl = document.getElementById(`edit-photo-url-${eventIdx}`).value.trim();
       const status = document.getElementById(`edit-status-${eventIdx}`).value;
       const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
       const saveBtn = document.getElementById(`edit-save-${eventIdx}`);
@@ -2505,129 +2413,24 @@
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Saving...'; }
 
       try {
-        // If promoting Suggested/Upcoming → Scheduled and no RSVP column exists yet,
-        // auto-create the RSVP + GUESTS columns. Without this, the events page
-        // would show "RSVP not yet configured" because no Members-table column
-        // would ever match this event.
-        const ns = normalizeStatus(status).toLowerCase();
-        let createdColumns = false;
-        if (ns === 'scheduled' && !ev.fieldName && date && name) {
-          const dt = new Date(date + 'T12:00:00');
-          const mon = dt.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-          const day = dt.getDate();
-          const newRsvpFieldName = `${mon}${day}-${name.toUpperCase()} RSVP`;
-
-          if (msgEl) msgEl.textContent = 'Creating RSVP field...';
-          const fieldRes = await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: newRsvpFieldName,
-              type: 'singleSelect',
-              options: { choices: [
-                { name: 'YES', color: 'greenLight2' },
-                { name: 'NO', color: 'redLight2' },
-                { name: 'MAYBE', color: 'yellowLight2' }
-              ]}
-            })
-          });
-          if (!fieldRes.ok) {
-            const errData = await fieldRes.json().catch(() => ({}));
-            if (fieldRes.status === 403 || fieldRes.status === 422) {
-              throw new Error('Cannot create RSVP field. Token needs schema.bases:write scope.');
-            }
-            throw new Error((errData.error && errData.error.message) || `RSVP field creation failed (${fieldRes.status})`);
-          }
-
-          if (msgEl) msgEl.textContent = 'Creating guest count field...';
-          const nameWords = name.toUpperCase().split(/\s+/);
-          const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
-          const guestFieldName = `GUESTS-${guestKey}`;
-          await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
-          });
-
-          ev.fieldName = newRsvpFieldName;
-          ev.guestFieldName = guestFieldName;
-          createdColumns = true;
-        }
-
-        const fields = {
-          'EVENT NAME': name,
-          'Status': status || null,
-          'NOTES': notes || null,
-          'DATE': date || null,
-          'SPEAKER': speaker || null,
-          'TIME': time || null,
-          'ROOM': room || null,
-        };
-
-        // Handle photo: file upload takes precedence over URL
-        let finalPhotoUrl = photoUrl;
+        if (!ev.eventRecordId) throw new Error('This event needs a valid event record before it can be edited');
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, date, speaker, time, room, notes, status })
+        });
         if (pendingPhotoFiles[eventIdx]) {
           if (msgEl) msgEl.textContent = 'Uploading photo...';
-          finalPhotoUrl = await uploadPhotoFile(pendingPhotoFiles[eventIdx]);
+          const upload = await preparePhotoFile(pendingPhotoFiles[eventIdx]);
+          await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/speaker-photo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(upload)
+          });
           delete pendingPhotoFiles[eventIdx];
         }
-        if (finalPhotoUrl) {
-          fields['SPEAKER PHOTO'] = [{ url: finalPhotoUrl }];
-        }
-
-        if (ev.eventRecordId) {
-          // Update existing EVENTS record
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ typecast: true, fields })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
-            throw new Error(errMsg);
-          }
-        } else {
-          // Create new EVENTS record for this RSVP field
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ typecast: true, fields })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
-            throw new Error(errMsg);
-          }
-          const data = await res.json();
-          ev.eventRecordId = data.id;
-        }
-
-        // If new RSVP/GUESTS columns were created, do a full reload so the
-        // members data and bucket fills include the new columns.
-        if (createdColumns) {
-          if (msgEl) { msgEl.style.color = '#4CAF50'; msgEl.textContent = 'Saved! Reloading...'; }
-          editingEvent = null;
-          await loadEvents();
-          return;
-        }
-
-        // Update local state (no reload needed)
-        ev.name = name;
-        ev.speaker = speaker;
-        ev.date = date;
-        ev.time = time;
-        ev.room = room;
-        ev.notes = notes;
-        ev.isCompleted = ns === 'completed';
-        ev.isSuggested = ns === 'suggested';
-        ev.isUpcoming = ns === 'upcoming' || ns === '';
-        ev.isScheduled = ns === 'scheduled';
-        ev.isCancelled = ns === 'cancelled';
-        ev.status = normalizeStatus(status);
-        if (finalPhotoUrl) ev.speakerPhoto = finalPhotoUrl;
         editingEvent = null;
-        render();
+        await loadEvents();
       } catch (err) {
         if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Save failed: ' + err.message; }
         if (saveBtn) saveBtn.disabled = false;
@@ -2637,6 +2440,7 @@
     // --- New Event Creation ---
     function toggleNewEvent() {
       showingNewEvent = !showingNewEvent;
+      newEventCreationKey = showingNewEvent ? crypto.randomUUID() : null;
       render();
     }
 
@@ -2644,7 +2448,6 @@
       const name = document.getElementById('new-event-name').value.trim();
       const date = document.getElementById('new-event-date').value;
       const status = document.getElementById('new-event-status').value;
-      const prefix = document.getElementById('new-event-prefix').value.trim();
       const speaker = document.getElementById('new-event-speaker').value.trim();
       const time = document.getElementById('new-event-time').value.trim();
       const room = document.getElementById('new-event-room').value.trim();
@@ -2663,84 +2466,40 @@
         return;
       }
 
-      // Validate prefix ends with RSVP (only needed for Scheduled events)
-      const rsvpFieldName = prefix ? (prefix.toUpperCase().endsWith('RSVP') ? prefix.toUpperCase() : prefix.toUpperCase() + ' RSVP') : null;
-
-      if (status === 'Scheduled' && !prefix) {
-        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'RSVP Field is required for Scheduled events'; }
-        return;
-      }
-
       if (createBtn) createBtn.disabled = true;
 
       try {
-        // Step 1: Create singleSelect RSVP field on Members table (Scheduled only)
-        if (status === 'Scheduled') {
-          if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating RSVP field...'; }
-          const fieldRes = await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: rsvpFieldName,
-              type: 'singleSelect',
-              options: {
-                choices: [
-                  { name: 'YES', color: 'greenLight2' },
-                  { name: 'NO', color: 'redLight2' },
-                  { name: 'MAYBE', color: 'yellowLight2' }
-                ]
-              }
-            })
-          });
-
-          if (!fieldRes.ok) {
-            const errData = await fieldRes.json().catch(() => ({}));
-            if (fieldRes.status === 403 || fieldRes.status === 422) {
-              throw new Error('Token needs schema.bases:write scope. Update token at airtable.com/create/tokens');
-            }
-            throw new Error(errData.error?.message || `Field creation failed (${fieldRes.status})`);
-          }
-
-          // Step 2: Optionally create guest count field
-          if (enableGuests) {
-            if (msgEl) msgEl.textContent = 'Creating guest field...';
-            const nameWords = name.toUpperCase().split(/\s+/);
-            const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
-            const guestFieldName = `GUESTS-${guestKey}`;
-
-            await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-              method: 'POST',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
-            });
-          }
-        }
-
-        // Step 3: Handle speaker photo upload if provided
-        let photoUrl = null;
-        if (photoInput && photoInput.files && photoInput.files[0]) {
-          if (msgEl) msgEl.textContent = 'Uploading speaker photo...';
-          photoUrl = await uploadPhotoFile(photoInput.files[0]);
-        }
-
-        // Step 4: Create EVENTS table record with all fields
-        if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating event record...'; }
-        const eventFields = { 'EVENT NAME': name, 'Status': status };
-        if (date) eventFields['DATE'] = date;
-        if (speaker) eventFields['SPEAKER'] = speaker;
-        if (time) eventFields['TIME'] = time;
-        if (room) eventFields['ROOM'] = room;
-        if (notes) eventFields['NOTES'] = notes;
-        if (photoUrl) eventFields['SPEAKER PHOTO'] = [{ url: photoUrl }];
-        await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`, {
+        if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating event...'; }
+        const result = await Harumphers.api('/api/admin/events', {
           method: 'POST',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ typecast: true, fields: eventFields })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idempotencyKey: newEventCreationKey,
+            name,
+            date,
+            speaker,
+            time,
+            room,
+            notes,
+            status,
+            enableGuests
+          })
         });
+
+        if (photoInput?.files?.[0]) {
+          if (msgEl) msgEl.textContent = 'Uploading speaker photo...';
+          const upload = await preparePhotoFile(photoInput.files[0]);
+          await Harumphers.api(`/api/admin/events/${result.eventId}/speaker-photo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(upload)
+          });
+        }
 
         // Reload everything
         if (msgEl) { msgEl.style.color = '#4CAF50'; msgEl.textContent = 'Event created! Reloading...'; }
         showingNewEvent = false;
+        newEventCreationKey = null;
         await loadEvents();
       } catch (err) {
         if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = err.message; }
@@ -2885,87 +2644,21 @@
                          ...ev.no.map(e => ({...e, rsvp: 'NO'})),
                          ...ev.pending.map(e => ({...e, rsvp: null}))];
 
-      const evAttendance = attendanceData[ev.eventRecordId] || {};
-
-      // Collect records to create and update
-      const toCreate = [];
-      const toUpdate = [];
-
-      allEntries.forEach((entry, ri) => {
+      const entries = allEntries.map((entry, ri) => {
         const chk = document.getElementById(`att-chk-${eventIdx}-${ri}`);
         const gInput = document.getElementById(`att-guests-${eventIdx}-${ri}`);
         const attended = chk ? chk.checked : false;
         const actualGuests = gInput ? parseInt(gInput.value) || 0 : 0;
-        const existing = evAttendance[entry.recordId];
-
-        if (existing) {
-          // Update if changed
-          if (existing.attended !== attended || existing.actualGuests !== actualGuests) {
-            toUpdate.push({
-              id: existing.recordId,
-              fields: { 'ATTENDED': attended, 'ACTUAL GUESTS': actualGuests }
-            });
-          }
-        } else {
-          // Only create if attended or has guests (skip empty rows)
-          if (attended || actualGuests > 0) {
-            toCreate.push({
-              fields: {
-                'MEMBER RECORD ID': entry.recordId,
-                'MEMBER NAME': entry.name,
-                'EVENT RECORD ID': ev.eventRecordId,
-                'ATTENDED': attended,
-                'ACTUAL GUESTS': actualGuests,
-              }
-            });
-          }
-        }
+        return { memberId: entry.recordId, attended, actualGuests };
       });
 
       try {
-        // Batch creates (Airtable max 10 per request)
-        for (let j = 0; j < toCreate.length; j += 10) {
-          const batch = toCreate.slice(j, j + 10);
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ records: batch })
-          });
-          if (!res.ok) throw new Error(`Create failed: ${res.status}`);
-          // Update local cache with new record IDs
-          const data = await res.json();
-          data.records.forEach(r => {
-            const f = r.fields;
-            const memberId = f['MEMBER RECORD ID'];
-            if (!attendanceData[ev.eventRecordId]) attendanceData[ev.eventRecordId] = {};
-            attendanceData[ev.eventRecordId][memberId] = {
-              attended: !!f['ATTENDED'],
-              actualGuests: f['ACTUAL GUESTS'] || 0,
-              recordId: r.id,
-            };
-          });
-        }
-
-        // Batch updates (Airtable max 10 per request)
-        for (let j = 0; j < toUpdate.length; j += 10) {
-          const batch = toUpdate.slice(j, j + 10);
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ records: batch })
-          });
-          if (!res.ok) throw new Error(`Update failed: ${res.status}`);
-          // Update local cache
-          const data = await res.json();
-          data.records.forEach(r => {
-            const f = r.fields;
-            const memberId = f['MEMBER RECORD ID'];
-            if (attendanceData[ev.eventRecordId] && attendanceData[ev.eventRecordId][memberId]) {
-              attendanceData[ev.eventRecordId][memberId].attended = !!f['ATTENDED'];
-              attendanceData[ev.eventRecordId][memberId].actualGuests = f['ACTUAL GUESTS'] || 0;
-            }
-          });
-        }
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/attendance`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries })
+        });
+        await loadEvents();
 
         if (msgEl) { msgEl.className = 'attendance-msg success'; msgEl.textContent = 'Attendance saved!'; }
         showingAttendance = null;
@@ -3118,77 +2811,14 @@
       if (msgEl) { msgEl.className = 'vote-msg'; msgEl.textContent = 'Submitting...'; }
 
       try {
-        const evVotes = votesData[ev.eventRecordId] || {};
-        const existing = evVotes[myInfo.recordId];
-
-        if (value === null) {
-          // DELETE existing vote
-          if (existing && existing.recordId) {
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-              method: 'DELETE',
-              headers: { 'X-Harumphers-Key': API_KEY },
-            });
-            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
-          }
-          // Remove from local cache
-          if (votesData[ev.eventRecordId]) {
-            delete votesData[ev.eventRecordId][myInfo.recordId];
-          }
-        } else if (existing && existing.recordId) {
-          // PATCH existing vote record
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'VOTE': value } })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-          }
-          // Update local cache
-          if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
-          votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: existing.recordId };
-        } else {
-          // No local record — query Airtable for deduplication
-          const formula = encodeURIComponent(`AND({MEMBER RECORD ID}="${myInfo.recordId}",{EVENT RECORD ID}="${ev.eventRecordId}")`);
-          const checkRes = await apiFetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
-          if (checkRes.records && checkRes.records.length > 0) {
-            // Found existing — PATCH
-            const existingId = checkRes.records[0].id;
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
-              method: 'PATCH',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: { 'VOTE': value } })
-            });
-            if (!res.ok) {
-              const errData = await res.json().catch(() => ({}));
-              throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-            }
-            if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
-            votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: existingId };
-          } else {
-            // No existing record — POST new
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
-              method: 'POST',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fields: {
-                  'MEMBER RECORD ID': myInfo.recordId,
-                  'MEMBER NAME': myInfo.name || '',
-                  'EVENT RECORD ID': ev.eventRecordId,
-                  'VOTE': value,
-                }
-              })
-            });
-            if (!res.ok) {
-              const errData = await res.json().catch(() => ({}));
-              throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-            }
-            const data = await res.json();
-            if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
-            votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: data.id };
-          }
-        }
+        const result = await Harumphers.api(`/api/events/${ev.eventRecordId}/vote`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote: value })
+        });
+        if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
+        if (value === null) delete votesData[ev.eventRecordId][myInfo.recordId];
+        else votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: result.id };
 
         // Show success
         render();
@@ -3232,50 +2862,13 @@
       try {
         if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
         const evVotes = votesData[ev.eventRecordId];
-        const existing = evVotes[memberId];
-
-        if (value === null) {
-          if (existing && existing.recordId) {
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-              method: 'DELETE',
-              headers: { 'X-Harumphers-Key': API_KEY },
-            });
-            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
-          }
-          delete evVotes[memberId];
-        } else if (existing && existing.recordId) {
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'VOTE': value } })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-          }
-          evVotes[memberId] = { vote: value, recordId: existing.recordId };
-        } else {
-          // No existing record — POST new (skip the dedup-query optimization
-          // since admin edits are rare and the local cache should be fresh enough).
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fields: {
-                'MEMBER RECORD ID': memberId,
-                'MEMBER NAME': member.fields['FULL NAME'] || '',
-                'EVENT RECORD ID': ev.eventRecordId,
-                'VOTE': value,
-              }
-            })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-          }
-          const data = await res.json();
-          evVotes[memberId] = { vote: value, recordId: data.id };
-        }
+        const result = await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/votes/${memberId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote: value })
+        });
+        if (value === null) delete evVotes[memberId];
+        else evVotes[memberId] = { vote: value, recordId: result.id };
 
         // Close the inline editor and re-render so the chip moves to its new tier
         inlineVoteEdit = null;
