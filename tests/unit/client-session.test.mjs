@@ -164,3 +164,25 @@ test('session state comes from the Worker response rather than a local role valu
 
   assert.deepEqual(await Harumphers.getSession(), { role: 'member' });
 });
+
+test('display helpers escape untrusted markup and classify RSVP values exactly', async () => {
+  const { Harumphers } = await loadClient(async () => new Response('{}'));
+
+  assert.equal(
+    Harumphers.escapeHtml(`<img src=x onerror="fixture()"> O'Reilly & Co.`),
+    '&lt;img src=x onerror=&quot;fixture()&quot;&gt; O&#39;Reilly &amp; Co.'
+  );
+  assert.equal(Harumphers.classifyRsvp(' YES '), 'yes');
+  assert.equal(Harumphers.classifyRsvp('NO'), 'no');
+  assert.equal(Harumphers.classifyRsvp('NO RESPONSE'), 'pending');
+  assert.equal(Harumphers.classifyRsvp('not sure'), 'unknown');
+});
+
+test('display URLs allow only web, loopback, and same-site relative images', async () => {
+  const { Harumphers } = await loadClient(async () => new Response('{}'));
+
+  assert.equal(Harumphers.safeImageUrl('https://images.example.test/photo.png'), 'https://images.example.test/photo.png');
+  assert.equal(Harumphers.safeImageUrl('/apple-touch-icon.png'), '/apple-touch-icon.png');
+  assert.equal(Harumphers.safeImageUrl('javascript:fixture()'), '');
+  assert.equal(Harumphers.safeImageUrl('data:image/svg+xml,<svg onload=fixture()>'), '');
+});

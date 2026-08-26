@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>HARUMPHERS Events</title>
   <meta name="theme-color" content="#8B0000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <style>
@@ -22,7 +23,7 @@
 
     header {
       background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
-      padding: 12px 16px;
+      padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -54,6 +55,11 @@
       text-decoration: none;
       font-size: 13px;
       white-space: nowrap;
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .logout-link { opacity: 0.7; }
@@ -89,6 +95,15 @@
     }
 
     .event-header:active { background: #333; }
+    .event-header:focus-visible,
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      outline: 3px solid #FFD700;
+      outline-offset: 3px;
+    }
 
     .event-name {
       font-weight: 700;
@@ -541,6 +556,15 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
     .error { color: #ff6b6b; }
     .error a { color: #FFD700; display: inline-block; margin-top: 12px; }
 
@@ -797,6 +821,7 @@
 
     .new-event-create-btn {
       flex: 1;
+      min-height: 44px;
       padding: 10px;
       background: #4CAF50;
       color: #fff;
@@ -817,6 +842,7 @@
       border-radius: 8px;
       font-size: 14px;
       cursor: pointer;
+      min-height: 44px;
       font-family: inherit;
     }
 
@@ -1014,6 +1040,10 @@
 
     // Find matching guest field using multiple strategies
     function findGuestField(guestFields, fieldWords, matched) {
+      const exactGuestField = matched?.['GUEST FIELD'];
+      if (typeof exactGuestField === 'string' && guestFields.some(field => field.name === exactGuestField)) {
+        return exactGuestField;
+      }
       for (const gf of guestFields) {
         const guestKey = gf.name.toUpperCase().replace('GUESTS-', '').trim();
         if (fieldWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
@@ -1054,6 +1084,8 @@
     // Replaces the old .find() first-match which caused MAY19-MAY SPEAKER RSVP to attach
     // to "SPEAKER - CORY OCONNOR" because both contain the word SPEAKER.
     function matchEventToRsvpField(fieldName, eventDetails) {
+      const exact = eventDetails.find(event => event['RSVP FIELD'] === fieldName);
+      if (exact) return exact;
       const { datePrefix, words } = parseRsvpFieldName(fieldName);
 
       // Strategy 1: exact DATE match against month+day from prefix
@@ -1125,18 +1157,11 @@
           const phone = f['CELL #'] || '';
           const memberNum = f['MEMBER #'] || '';
           const entry = { name, guestCount, recordId: r.id, email, phone, memberNum };
-          if (!rsvp) {
-            pending.push(entry);
-            return;
-          }
-          const val = rsvp.toUpperCase();
-          if (val.includes('YES') || val.includes('GOING')) {
-            yes.push(entry);
-          } else if (val.includes('NO')) {
-            no.push(entry);
-          } else {
-            maybe.push(entry);
-          }
+          const rsvpState = Harumphers.classifyRsvp(rsvp);
+          if (rsvpState === 'yes') yes.push(entry);
+          else if (rsvpState === 'no') no.push(entry);
+          else if (rsvpState === 'maybe') maybe.push(entry);
+          else pending.push(entry);
         });
 
         let displayName = field.name
@@ -1312,9 +1337,14 @@
       return member.fields[ev.guestFieldName] || 0;
     }
 
+    function eventStateKey(eventIdx) {
+      return allEvents[eventIdx]?.eventRecordId || `temporary:${eventIdx}`;
+    }
+
     function toggleEvent(idx) {
-      if (openEvents.has(idx)) openEvents.delete(idx);
-      else openEvents.add(idx);
+      const key = eventStateKey(idx);
+      if (openEvents.has(key)) openEvents.delete(key);
+      else openEvents.add(key);
       render();
     }
 
@@ -1339,35 +1369,35 @@
             <div class="new-event-form">
               <h3>Add New Event</h3>
               <div class="new-event-row">
-                <span class="new-event-label">Name</span>
+                <label class="new-event-label" for="new-event-name">Name</label>
                 <input class="new-event-input" id="new-event-name" placeholder="e.g. Bob Smith Speaker Night">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Date</span>
+                <label class="new-event-label" for="new-event-date">Date</label>
                 <input class="new-event-input" type="date" id="new-event-date">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Speaker</span>
+                <label class="new-event-label" for="new-event-speaker">Speaker</label>
                 <input class="new-event-input" id="new-event-speaker" placeholder="e.g. Bob Smith">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Time</span>
+                <label class="new-event-label" for="new-event-time">Time</label>
                 <input class="new-event-input" id="new-event-time" placeholder="e.g. 6:30 PM">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Room</span>
+                <label class="new-event-label" for="new-event-room">Room</label>
                 <input class="new-event-input" id="new-event-room" placeholder="e.g. Cigar Lounge">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Speaker Photo</span>
+                <label class="new-event-label" for="new-event-photo">Speaker Photo</label>
                 <input class="new-event-input" type="file" id="new-event-photo" accept="image/*">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Notes</span>
+                <label class="new-event-label" for="new-event-notes">Notes</label>
                 <input class="new-event-input" id="new-event-notes" placeholder="Optional notes about the event">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Status</span>
+                <label class="new-event-label" for="new-event-status">Status</label>
                 <select class="new-event-input" id="new-event-status">
                   <option value="Suggested" selected>Suggested</option>
                   <option value="Upcoming">Upcoming</option>
@@ -1382,7 +1412,7 @@
                 <button class="new-event-cancel-btn" onclick="toggleNewEvent()">Cancel</button>
                 <button class="new-event-create-btn" id="new-event-create-btn" onclick="createNewEvent()">Create Event</button>
               </div>
-              <div class="new-event-msg" id="new-event-msg"></div>
+              <div class="new-event-msg" id="new-event-msg" role="status" aria-live="polite"></div>
             </div>
           </div>`;
         } else {
@@ -1407,23 +1437,21 @@
           const clickable = authMode === 'admin' && !ev.isCompleted ? ' clickable' : '';
           const onclick = clickable ? ` onclick="event.stopPropagation(); toggleInlineEdit(${i}, '${entry.recordId}', event)"` : '';
 
-          let html = `<span class="rsvp-chip ${cls}${youClass}${editingClass}${clickable}"${onclick}>${entry.name}${youLabel}${guestLabel}</span>`;
+          let html = `<span class="rsvp-chip ${cls}${youClass}${editingClass}${clickable}"${onclick}>${Harumphers.escapeHtml(entry.name)}${youLabel}${guestLabel}</span>`;
 
           // Inline edit panel
           if (isEditing && authMode === 'admin') {
             const memberRsvp = getMemberRsvpForEvent(ev, entry.recordId);
             const memberGuests = getMemberGuestCount(ev, entry.recordId);
             let ac = { yes: '', maybe: '', no: '' };
-            if (memberRsvp) {
-              const u = memberRsvp.toUpperCase();
-              if (u.includes('YES') || u.includes('GOING')) ac.yes = ' active';
-              else if (u.includes('NO')) ac.no = ' active';
-              else ac.maybe = ' active';
-            }
+            const memberRsvpState = Harumphers.classifyRsvp(memberRsvp);
+            if (memberRsvpState === 'yes') ac.yes = ' active';
+            else if (memberRsvpState === 'no') ac.no = ' active';
+            else if (memberRsvpState === 'maybe') ac.maybe = ' active';
 
             html += `
               <div class="inline-edit" onclick="event.stopPropagation()">
-                <div class="inline-edit-name">Edit: ${entry.name}</div>
+                <div class="inline-edit-name">Edit: ${Harumphers.escapeHtml(entry.name)}</div>
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${ac.yes}" onclick="submitInlineRsvp(${i}, '${entry.recordId}', 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${ac.maybe}" onclick="submitInlineRsvp(${i}, '${entry.recordId}', 'MAYBE')">MAYBE</button>
@@ -1484,16 +1512,14 @@
             const myGuests = getMyGuestCountForEvent(ev);
 
             let activeClass = { yes: '', maybe: '', no: '' };
-            if (myRsvp) {
-              const upper = myRsvp.toUpperCase();
-              if (upper.includes('YES') || upper.includes('GOING')) activeClass.yes = ' active';
-              else if (upper.includes('NO')) activeClass.no = ' active';
-              else activeClass.maybe = ' active';
-            }
+            const myRsvpState = Harumphers.classifyRsvp(myRsvp);
+            if (myRsvpState === 'yes') activeClass.yes = ' active';
+            else if (myRsvpState === 'no') activeClass.no = ' active';
+            else if (myRsvpState === 'maybe') activeClass.maybe = ' active';
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
                 <div class="rsvp-form-title">Your RSVP</div>
-                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
+                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${Harumphers.escapeHtml(myRsvp)}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${activeClass.yes}" onclick="submitMemberRsvp(${i}, 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${activeClass.maybe}" onclick="submitMemberRsvp(${i}, 'MAYBE')">MAYBE</button>
@@ -1516,18 +1542,16 @@
             const myGuests = getMyGuestCountForEvent(ev);
 
             let activeClass = { yes: '', maybe: '', no: '' };
-            if (myRsvp) {
-              const upper = myRsvp.toUpperCase();
-              if (upper.includes('YES') || upper.includes('GOING')) activeClass.yes = ' active';
-              else if (upper.includes('NO')) activeClass.no = ' active';
-              else activeClass.maybe = ' active';
-            }
+            const myRsvpState = Harumphers.classifyRsvp(myRsvp);
+            if (myRsvpState === 'yes') activeClass.yes = ' active';
+            else if (myRsvpState === 'no') activeClass.no = ' active';
+            else if (myRsvpState === 'maybe') activeClass.maybe = ' active';
 
             const hasOwnRecord = !!myInfo;
 
             const ownRsvpSection = hasOwnRecord ? `
                 <div class="rsvp-form-title">Your RSVP</div>
-                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
+                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${Harumphers.escapeHtml(myRsvp)}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${activeClass.yes}" onclick="submitMemberRsvp(${i}, 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${activeClass.maybe}" onclick="submitMemberRsvp(${i}, 'MAYBE')">MAYBE</button>
@@ -1599,11 +1623,11 @@
         // Admin edit form for event details
         let editForm = '';
         if (authMode === 'admin' && editingEvent === i) {
-          const eName = ev.name.replace(/"/g, '&quot;');
-          const eDate = (ev.date || '').replace(/"/g, '&quot;');
-          const eSpeaker = (ev.speaker || '').replace(/"/g, '&quot;');
-          const eTime = (ev.time || '').replace(/"/g, '&quot;');
-          const eRoom = (ev.room || '').replace(/"/g, '&quot;');
+          const eName = Harumphers.escapeHtml(ev.name);
+          const eDate = Harumphers.escapeHtml(ev.date || '');
+          const eSpeaker = Harumphers.escapeHtml(ev.speaker || '');
+          const eTime = Harumphers.escapeHtml(ev.time || '');
+          const eRoom = Harumphers.escapeHtml(ev.room || '');
           const eStat = (ev.status || '').toLowerCase();
           editForm = `
             <div class="event-edit-form" onclick="event.stopPropagation()">
@@ -1630,23 +1654,22 @@
               <div class="event-edit-row">
                 <span class="event-edit-label">Photo</span>
                 <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                  <input class="event-edit-input" id="edit-photo-url-${i}" placeholder="Paste image URL" style="margin:0">
                   <div style="display:flex;align-items:center;gap:8px">
                     <label style="font-size:12px;color:#FFD700;cursor:pointer;white-space:nowrap">
                       <input type="file" accept="image/*" id="edit-photo-file-${i}" style="display:none" onchange="handlePhotoFile(${i})">
-                      Or choose file
+                      Choose file
                     </label>
                     <span id="edit-photo-filename-${i}" style="font-size:11px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
                   </div>
-                  ${ev.speakerPhoto ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px">
-                    <img src="${ev.speakerPhoto}" style="width:48px;height:48px;border-radius:8px;object-fit:cover">
+                  ${Harumphers.safeImageUrl(ev.speakerPhoto) ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px">
+                    <img src="${Harumphers.escapeHtml(Harumphers.safeImageUrl(ev.speakerPhoto))}" style="width:48px;height:48px;border-radius:8px;object-fit:cover">
                     <button onclick="event.stopPropagation();removeSpeakerPhoto(${i})" style="background:#8B0000;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">Remove</button>
                   </div>` : ''}
                 </div>
               </div>
               <div class="event-edit-row">
                 <span class="event-edit-label">Notes</span>
-                <textarea class="event-edit-input" id="edit-notes-${i}" rows="3" placeholder="Event notes" style="resize:vertical">${(ev.notes || '').replace(/</g, '&lt;')}</textarea>
+                <textarea class="event-edit-input" id="edit-notes-${i}" rows="3" placeholder="Event notes" style="resize:vertical">${Harumphers.escapeHtml(ev.notes || '')}</textarea>
               </div>
               <div class="event-edit-row">
                 <span class="event-edit-label">Status</span>
@@ -1673,20 +1696,22 @@
             <button class="export-btn" onclick="toggleExport(${i})">${exportState && exportState.eventIdx === i ? 'Close Export' : 'Export'}</button>
           </div>` : '';
 
-        const isOpen = openEvents.has(i) ? ' open' : '';
-        const speakerPhotoHtml = ev.speakerPhoto
-          ? `<img src="${ev.speakerPhoto}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+        const eventIsOpen = openEvents.has(ev.eventRecordId || `temporary:${i}`);
+        const isOpen = eventIsOpen ? ' open' : '';
+        const safeSpeakerPhoto = Harumphers.safeImageUrl(ev.speakerPhoto);
+        const speakerPhotoHtml = safeSpeakerPhoto
+          ? `<img src="${Harumphers.escapeHtml(safeSpeakerPhoto)}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0">`
           : '';
         const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
         const detailLine = detailParts.length > 0
-          ? `<div style="font-size:12px;color:#aaa;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+          ? `<div style="font-size:12px;color:#aaa;margin-top:2px">${detailParts.map(Harumphers.escapeHtml).join(' &bull; ')}</div>`
           : '';
         return `<div class="event-card${isOpen}">
-          <div class="event-header" onclick="toggleEvent(${i})">
+          <div class="event-header" role="button" tabindex="0" aria-expanded="${eventIsOpen}" aria-controls="event-body-${i}" onclick="toggleEvent(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEvent(${i})}">
             ${speakerPhotoHtml}
             <div style="flex:1;min-width:0">
-              <div class="event-name">${ev.name}</div>
-              ${(() => { const dateDisplay = ev.isUpcoming || ev.isSuggested ? 'TBD' : (ev.date || 'TBD'); return `<div class="event-date">${dateDisplay}</div>`; })()}
+              <div class="event-name">${Harumphers.escapeHtml(ev.name)}</div>
+              ${(() => { const dateDisplay = ev.isUpcoming || ev.isSuggested ? 'TBD' : (ev.date || 'TBD'); return `<div class="event-date">${Harumphers.escapeHtml(dateDisplay)}</div>`; })()}
               ${detailLine}
               ${(ev.isScheduled || ev.isCompleted || ev.isCancelled) && total > 0 ? `<div class="event-counts">
                 <span class="count-yes">${ev.yes.length} going</span>
@@ -1695,15 +1720,15 @@
                 <span>${total} responded${guestCountNote}</span>
               </div>` : ''}
             </div>
-            <span class="event-status status-${statusClass}">${statusLabel}</span>
+            <span class="event-status status-${statusClass}">${Harumphers.escapeHtml(statusLabel)}</span>
             <span class="chevron">&#8250;</span>
           </div>
-          <div class="event-body">
+          <div class="event-body" id="event-body-${i}">
             ${adminToolbar}
             ${editForm}
             ${exportPanel}
-            ${ev.speakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${ev.speakerPhoto}" alt="${ev.speaker || 'Speaker'}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
-            ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${ev.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g, '<br>')}</div>` : ''}
+            ${safeSpeakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${Harumphers.escapeHtml(safeSpeakerPhoto)}" alt="${Harumphers.escapeHtml(ev.speaker || 'Speaker')}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
+            ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${Harumphers.escapeHtml(ev.notes).replace(/\n/g, '<br>')}</div>` : ''}
             ${rsvpForm}
             ${buildVotingSection(ev, i)}
             ${buildAttendanceSection(ev, i)}
@@ -1937,18 +1962,11 @@
         const phone = f['CELL #'] || '';
         const memberNum = f['MEMBER #'] || '';
         const entry = { name, guestCount, recordId: r.id, email, phone, memberNum };
-        if (!rsvp) {
-          ev.pending.push(entry);
-          return;
-        }
-        const val = rsvp.toUpperCase();
-        if (val.includes('YES') || val.includes('GOING')) {
-          ev.yes.push(entry);
-        } else if (val.includes('NO')) {
-          ev.no.push(entry);
-        } else {
-          ev.maybe.push(entry);
-        }
+        const rsvpState = Harumphers.classifyRsvp(rsvp);
+        if (rsvpState === 'yes') ev.yes.push(entry);
+        else if (rsvpState === 'no') ev.no.push(entry);
+        else if (rsvpState === 'maybe') ev.maybe.push(entry);
+        else ev.pending.push(entry);
       });
     }
 
@@ -1959,7 +1977,7 @@
       } else {
         exportState = { eventIdx, filter: 'yes' };
         // Always expand the event card when opening export
-        openEvents.add(eventIdx);
+        openEvents.add(eventStateKey(eventIdx));
       }
       render();
     }
@@ -2174,19 +2192,16 @@
       if (photos.length > 0) {
         gridHtml = `<div class="gallery-grid">
           ${photos.map((p, pi) => {
-            const safeUrl = p.url.replace(/'/g, "\\'");
-            const safeName = (p.memberName || '').replace(/'/g, "\\'");
-            const safeCaption = (p.caption || '').replace(/'/g, "\\'");
-            const fullLabel = safeName + (safeCaption ? ' — ' + safeCaption : '');
+            const safeThumb = Harumphers.safeImageUrl(p.thumb);
             const adminControls = authMode === 'admin' ? `
               <div class="gallery-admin" onclick="event.stopPropagation()">
                 <button class="gallery-delete-btn" onclick="removeGalleryPhoto('${ev.eventRecordId}', '${p.recordId}')" title="Remove">&#x2715;</button>
-                <button class="gallery-edit-btn" onclick="editGalleryCaption('${p.recordId}', '${safeCaption}')" title="Edit caption">&#9998;</button>
+                <button class="gallery-edit-btn" onclick="editGalleryCaption('${p.recordId}', ${eventIdx}, ${pi})" title="Edit caption">&#9998;</button>
               </div>` : '';
             return `
             <div class="gallery-item">
-              <img src="${p.thumb}" alt="" loading="lazy" onclick="showFullPhoto('${safeUrl}', '${fullLabel}')">
-              ${p.memberName ? `<div class="gallery-caption">${p.memberName}${p.caption ? ': ' + p.caption : ''}</div>` : ''}
+              ${safeThumb ? `<img src="${Harumphers.escapeHtml(safeThumb)}" alt="" loading="lazy" onclick="showFullPhoto('${ev.eventRecordId}', ${pi})">` : ''}
+              ${p.memberName ? `<div class="gallery-caption">${Harumphers.escapeHtml(p.memberName)}${p.caption ? ': ' + Harumphers.escapeHtml(p.caption) : ''}</div>` : ''}
               ${adminControls}
             </div>`;
           }).join('')}
@@ -2213,14 +2228,29 @@
         </div>`;
     }
 
-    function showFullPhoto(url, caption) {
+    function showFullPhoto(eventRecordId, photoIndex) {
+      const photo = (galleryPhotos[eventRecordId] || [])[photoIndex];
+      if (!photo) return;
+      const url = Harumphers.safeImageUrl(photo.url);
+      if (!url) return;
+      const caption = (photo.memberName || '') + (photo.caption ? ' — ' + photo.caption : '');
       const overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:pointer';
-      overlay.innerHTML = `
-        <img src="${url}" style="max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain">
-        ${caption ? `<div style="color:#fff;margin-top:12px;font-size:14px;text-align:center">${caption}</div>` : ''}
-        <div style="color:#888;margin-top:8px;font-size:12px">Tap to close</div>
-      `;
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = '';
+      image.style.cssText = 'max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain';
+      overlay.appendChild(image);
+      if (caption) {
+        const label = document.createElement('div');
+        label.style.cssText = 'color:#fff;margin-top:12px;font-size:14px;text-align:center';
+        label.textContent = caption;
+        overlay.appendChild(label);
+      }
+      const closeHint = document.createElement('div');
+      closeHint.style.cssText = 'color:#888;margin-top:8px;font-size:12px';
+      closeHint.textContent = 'Tap to close';
+      overlay.appendChild(closeHint);
       overlay.onclick = () => overlay.remove();
       document.body.appendChild(overlay);
     }
@@ -2281,7 +2311,9 @@
       }
     }
 
-    function editGalleryCaption(photoRecordId, currentCaption) {
+    function editGalleryCaption(photoRecordId, eventIdx, photoIdx) {
+      const event = allEvents[eventIdx];
+      const currentCaption = event ? (galleryPhotos[event.eventRecordId] || [])[photoIdx]?.caption || '' : '';
       const newCaption = prompt('Edit caption:', currentCaption);
       if (newCaption === null) return; // cancelled
       saveGalleryCaption(photoRecordId, newCaption);
@@ -2311,7 +2343,7 @@
         editingEvent = null;
       } else {
         editingEvent = eventIdx;
-        openEvents.add(eventIdx);
+        openEvents.add(eventStateKey(eventIdx));
       }
       render();
     }
@@ -2331,9 +2363,6 @@
         const file = fileInput.files[0];
         pendingPhotoFiles[eventIdx] = file;
         if (filenameEl) filenameEl.textContent = file.name;
-        // Clear URL input since file takes precedence
-        const urlInput = document.getElementById(`edit-photo-url-${eventIdx}`);
-        if (urlInput) urlInput.value = '';
       }
     }
 
@@ -2541,7 +2570,7 @@
           return `<div class="attendance-row">
             <label>
               <input type="checkbox" id="att-chk-${eventIdx}-${ri}" ${checked ? 'checked' : ''}>
-              <span>${entry.name}</span>
+              <span>${Harumphers.escapeHtml(entry.name)}</span>
             </label>
             <span class="attendance-rsvp-pill ${rsvpCls}">${rsvpLabel}</span>
             <input type="number" class="attendance-guest-input" id="att-guests-${eventIdx}-${ri}"
@@ -2610,15 +2639,15 @@
 
       if (attended.length > 0) {
         html += `<div style="margin-bottom:4px">${attended.map(a =>
-          `<span class="attendance-chip attended">${a.name}${a.guestLabel}</span>`).join('')}</div>`;
+          `<span class="attendance-chip attended">${Harumphers.escapeHtml(a.name)}${a.guestLabel}</span>`).join('')}</div>`;
       }
       if (walkIns.length > 0) {
         html += `<div style="margin-bottom:4px"><span style="font-size:11px;color:#6495ED;font-weight:600">WALK-INS</span> ${walkIns.map(a =>
-          `<span class="attendance-chip walk-in">${a.name}${a.guestLabel}</span>`).join('')}</div>`;
+          `<span class="attendance-chip walk-in">${Harumphers.escapeHtml(a.name)}${a.guestLabel}</span>`).join('')}</div>`;
       }
       if (noShows.length > 0) {
         html += `<div><span style="font-size:11px;color:#ff8a8a;font-weight:600">NO-SHOWS</span> ${noShows.map(a =>
-          `<span class="attendance-chip no-show">${a.name}</span>`).join('')}</div>`;
+          `<span class="attendance-chip no-show">${Harumphers.escapeHtml(a.name)}</span>`).join('')}</div>`;
       }
 
       html += '</div>';
@@ -2731,7 +2760,7 @@
           return `<div style="margin-top:8px"><span style="font-size:11px;color:${cls === 'up' ? '#81C784' : '#ff8a8a'};font-weight:600">${label}</span> ` +
             voters.map(v => {
               const isEditing = inlineVoteEdit && inlineVoteEdit.eventIdx === eventIdx && inlineVoteEdit.memberId === v.memberId;
-              const chip = `<span class="vote-chip ${cls}" style="cursor:pointer" onclick="event.stopPropagation(); openInlineVoteEdit(${eventIdx}, '${v.memberId}')" title="Click to edit ${v.name}'s vote">${v.name}</span>`;
+              const chip = `<span class="vote-chip ${cls}" style="cursor:pointer" onclick="event.stopPropagation(); openInlineVoteEdit(${eventIdx}, '${v.memberId}')" title="Edit vote">${Harumphers.escapeHtml(v.name)}</span>`;
               return chip + (isEditing ? buildInlineVoteEditPanel(eventIdx, v.memberId, cls === 'up' ? 'UP' : 'DOWN') : '');
             }).join('') +
             `</div>`;
@@ -2745,13 +2774,13 @@
           && !evVotes[inlineVoteEdit.memberId];
         const nonVoterPanel = nonVoterEditing
           ? `<div style="margin-top:6px;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px">
-               <div style="font-size:12px;color:#aaa;margin-bottom:4px">${(allMembers.find(m => m.id === inlineVoteEdit.memberId) || {}).fields?.['FULL NAME'] || 'Member'}</div>
+               <div style="font-size:12px;color:#aaa;margin-bottom:4px">${Harumphers.escapeHtml((allMembers.find(m => m.id === inlineVoteEdit.memberId) || {}).fields?.['FULL NAME'] || 'Member')}</div>
                ${buildInlineVoteEditPanel(eventIdx, inlineVoteEdit.memberId, null)}
              </div>`
           : '';
         const nonVoterOptions = allMembers
           .filter(m => !evVotes[m.id])
-          .map(m => `<option value="${m.id}">${m.fields['FULL NAME'] || 'Unknown'}</option>`)
+          .map(m => `<option value="${m.id}">${Harumphers.escapeHtml(m.fields['FULL NAME'] || 'Unknown')}</option>`)
           .join('');
         if (nonVoterOptions) {
           voterLists += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">

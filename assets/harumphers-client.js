@@ -43,6 +43,40 @@
     }
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function classifyRsvp(value) {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (normalized === 'YES') return 'yes';
+    if (normalized === 'NO') return 'no';
+    if (normalized === 'MAYBE') return 'maybe';
+    if (normalized === '' || normalized === 'NO RESPONSE') return 'pending';
+    return 'unknown';
+  }
+
+  function safeImageUrl(value) {
+    if (typeof value !== 'string' || value === '') return '';
+    if (value.startsWith('/') && !value.startsWith('//')) return value;
+    let parsed;
+    try {
+      parsed = new URL(value);
+    } catch {
+      return '';
+    }
+    const loopbackHttp = parsed.protocol === 'http:'
+      && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost' || parsed.hostname === '::1');
+    if (parsed.protocol !== 'https:' && !loopbackHttp) return '';
+    if (parsed.username || parsed.password) return '';
+    return parsed.href;
+  }
+
   function clearSession() {
     localStorage.removeItem(SESSION_KEY);
     for (const key of LEGACY_KEYS) localStorage.removeItem(key);
@@ -117,6 +151,8 @@
     getSession() {
       return requestJson('/api/session', {}, true);
     },
+    classifyRsvp,
+    escapeHtml,
     loginAdmin(password) {
       return login('/api/login/admin', { password });
     },
@@ -133,6 +169,7 @@
         body: JSON.stringify({ name, memberNumber })
       }, false);
     },
+    safeImageUrl,
     logout() {
       clearSession();
     }

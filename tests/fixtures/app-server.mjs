@@ -84,11 +84,16 @@ async function serveStatic(request, response, origin) {
 }
 
 export async function createFixtureServer({ host = '127.0.0.1', port = 4173 } = {}) {
-  const fixtureAirtable = createFixtureAirtable();
+  let fixtureAirtable = createFixtureAirtable();
   let origin;
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, origin);
+      if (url.pathname === '/__fixtures/reset' && request.method === 'POST') {
+        fixtureAirtable = createFixtureAirtable();
+        response.writeHead(204).end();
+        return;
+      }
       if (url.pathname.startsWith('/api/')) {
         const body = request.method === 'GET' || request.method === 'HEAD'
           ? undefined
