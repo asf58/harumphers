@@ -739,6 +739,9 @@
 
     .new-event-input {
       flex: 1;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       padding: 10px 12px;
       border-radius: 8px;
       border: 1px solid #444;
@@ -769,6 +772,28 @@
     }
 
     .new-event-actions { display: flex; gap: 8px; }
+
+    @media (max-width: 480px) {
+      .new-event-form { padding: 14px 12px; min-width: 0; }
+      .new-event-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+      }
+      .new-event-label { width: auto; }
+      .new-event-input[type="file"] { min-width: 0; max-width: 100%; overflow: hidden; }
+      .new-event-hint,
+      .new-event-checkbox { padding-left: 0; }
+      .new-event-actions { flex-wrap: wrap; }
+      .new-event-cancel-btn,
+      .new-event-create-btn { min-height: 44px; }
+    }
+
+    @media (max-width: 340px) {
+      .new-event-actions { flex-direction: column-reverse; }
+      .new-event-cancel-btn,
+      .new-event-create-btn { width: 100%; flex: none; }
+    }
 
     .new-event-create-btn {
       flex: 1;
@@ -1155,40 +1180,19 @@
     }
 
     async function loadEvents() {
-      const meta = await apiFetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables`);
-      const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
-      const rsvpFields = membersTable.fields.filter(f =>
+      const bootstrap = await Harumphers.api('/api/events');
+      const rsvpFields = bootstrap.memberFields.filter(f =>
         f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
       );
-      const guestFields = membersTable.fields.filter(f =>
+      const guestFields = bootstrap.memberFields.filter(f =>
         f.name.toUpperCase().startsWith('GUESTS-')
       );
 
       // Note: rsvpFields may be empty if no events have RSVP columns yet
       // (e.g., all events are Suggested or Upcoming). We still proceed to load events.
 
-      const eventsData = await apiFetchAll(
-        `${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`
-      );
-      const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
-
-      const params = new URLSearchParams({
-        'sort[0][field]': 'LAST NAME',
-        'sort[0][direction]': 'asc',
-      });
-      params.append('fields[]', 'FULL NAME');
-      params.append('fields[]', 'IN DIRECTORY');
-      params.append('fields[]', 'CELL #');
-      params.append('fields[]', 'E-MAIL ADDRESS');
-      params.append('fields[]', 'MEMBER #');
-      rsvpFields.forEach(f => params.append('fields[]', f.name));
-      guestFields.forEach(f => params.append('fields[]', f.name));
-
-      const membersData = await apiFetchAll(
-        `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
-      );
-
-      allMembers = membersData.records.filter(r => r.fields['IN DIRECTORY']);
+      const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
+      allMembers = bootstrap.members.filter(r => r.fields['IN DIRECTORY']);
 
       allEvents = rsvpFields.map((field, idx) => {
         // fieldWords is used by findGuestField (preserves prior behavior for that path)
@@ -1318,10 +1322,7 @@
       // Load gallery photos for past events
       galleryPhotos = {};
       try {
-        const photosData = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}`
-        );
-        photosData.records.forEach(r => {
+        bootstrap.photos.forEach(r => {
           const f = r.fields;
           const eventId = f['EVENT RECORD ID'];
           if (!eventId) return;
@@ -1342,10 +1343,7 @@
       // Load attendance records
       attendanceData = {};
       try {
-        const attData = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`
-        );
-        attData.records.forEach(r => {
+        bootstrap.attendance.forEach(r => {
           const f = r.fields;
           const eventId = f['EVENT RECORD ID'];
           const memberId = f['MEMBER RECORD ID'];
@@ -1362,10 +1360,7 @@
       // Load votes for suggested events
       votesData = {};
       try {
-        const votesRaw = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`
-        );
-        votesRaw.records.forEach(r => {
+        bootstrap.votes.forEach(r => {
           const f = r.fields;
           const eventId = f['EVENT RECORD ID'];
           const memberId = f['MEMBER RECORD ID'];
