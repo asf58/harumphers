@@ -321,7 +321,7 @@
       background: rgba(0,0,0,0.85);
       z-index: 100;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       opacity: 0;
       pointer-events: none;
@@ -343,6 +343,10 @@
       padding: 32px 24px;
       text-align: center;
       position: relative;
+      min-width: 0;
+      max-width: min(380px, 100%);
+      margin-block: auto;
+      overflow-wrap: anywhere;
     }
 
     .detail-close {
@@ -355,6 +359,8 @@
       font-size: 28px;
       cursor: pointer;
       line-height: 1;
+      width: 44px;
+      height: 44px;
       padding: 4px;
     }
 
@@ -380,12 +386,15 @@
       font-size: 24px;
       font-weight: 700;
       margin-bottom: 20px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
 
     .detail-actions {
       display: flex;
       flex-direction: column;
       gap: 12px;
+      min-width: 0;
     }
 
     .detail-btn {
@@ -398,6 +407,15 @@
       text-decoration: none;
       font-size: 17px;
       font-weight: 600;
+      min-width: 0;
+      min-height: 44px;
+      max-width: 100%;
+      line-height: 1.25;
+    }
+
+    .detail-btn-label {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .detail-btn.call {
@@ -438,6 +456,18 @@
       width: 20px;
       height: 20px;
       flex-shrink: 0;
+    }
+
+    @media (max-width: 390px) {
+      .overlay { padding: 10px; }
+      .detail { width: 100%; padding: 24px 14px; }
+      .detail .avatar,
+      .detail .initials {
+        width: clamp(120px, 45vw, 180px);
+        height: clamp(120px, 45vw, 180px);
+      }
+      .detail-name { font-size: 21px; padding-inline: 30px; }
+      .detail-btn { padding: 12px 10px; font-size: 16px; }
     }
 
     /* Edit / Admin edit form */
@@ -688,94 +718,31 @@
       window.location.href = 'index.html';
     }
 
-    // Airtable calls go through our Cloudflare Worker proxy.
-    // The Worker injects the real Airtable PAT server-side (no longer in client JS),
-    // and caches GET responses so all members share one upstream fetch per ~5min.
-    const API_BASE = 'https://harumphers-api.adamsfeuer.workers.dev';
-    const API_KEY = 'QtS8Oq-sU1SwjalDXjY4atSmwIW8fYs9gQ9w0KfvDJw';
-    const BASE_ID = 'appW7Df1qJlznxxtf';
-    const TABLE_ID = 'tbltzPyERz9wGE0zd';
-    const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
-
     let allMembers = [];
     let allRecords = [];
     let lastRendered = [];
     let exportPanelOpen = false;
 
-    async function applyApprovedChanges() {
-      try {
-        const res = await fetch(
-          `${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`,
-          { headers: { 'X-Harumphers-Key': API_KEY } }
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        for (const rec of data.records) {
-          const f = rec.fields;
-          const memberId = f['MEMBER RECORD ID'];
-          const changes = f['REQUESTED CHANGES'] || '';
-          if (!memberId) continue;
-
-          const updates = {};
-          for (const line of changes.split('\n')) {
-            const match = line.match(/^(.+?):\s*.+?\s*->\s*(.+)$/);
-            if (!match) continue;
-            const field = match[1].trim();
-            const newVal = match[2].trim();
-            if (field === 'Name') updates['FULL NAME'] = newVal;
-            else if (field === 'Phone') updates['CELL #'] = newVal;
-            else if (field === 'Email') updates['E-MAIL ADDRESS'] = newVal;
-          }
-
-          if (Object.keys(updates).length > 0) {
-            await fetch(`${API_BASE}/v0/${BASE_ID}/${TABLE_ID}/${memberId}`, {
-              method: 'PATCH',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: updates })
-            });
-          }
-
-          await fetch(`${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'APPLIED AT': new Date().toISOString() } })
-          });
-        }
-      } catch (e) {
-        console.log('Auto-apply check:', e.message);
-      }
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
     }
 
-    async function apiFetchAll(url) {
-      let allRecords = [];
-      let fetchUrl = url;
-      while (true) {
-        const res = await fetch(fetchUrl, {
-          headers: { 'X-Harumphers-Key': API_KEY }
-        });
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-        const data = await res.json();
-        allRecords = allRecords.concat(data.records);
-        if (!data.offset) break;
-        const sep = fetchUrl.includes('?') ? '&' : '?';
-        fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
+    function safeImageUrl(value) {
+      try {
+        const url = new URL(value);
+        return url.protocol === 'https:' ? escapeHtml(url.href) : '';
+      } catch {
+        return '';
       }
-      return { records: allRecords };
     }
 
     async function loadDirectory() {
-      const params = new URLSearchParams({
-        'filterByFormula': '{IN DIRECTORY}=TRUE()',
-        'sort[0][field]': 'LAST NAME',
-        'sort[0][direction]': 'asc',
-      });
-      ['FULL NAME', 'PHOTO', 'CELL #', 'E-MAIL ADDRESS', 'MEMBER #', 'IS ADMIN'].forEach(f => {
-        params.append('fields[]', f);
-      });
-
-      const url = `${API_BASE}/v0/${BASE_ID}/${TABLE_ID}?${params}`;
-
-      const data = await apiFetchAll(url);
+      const data = await Harumphers.api('/api/directory');
       allRecords = data.records;
       allMembers = data.records.map(r => {
         const f = r.fields;
@@ -823,16 +790,17 @@
     function buildListCardHtml(m, idx) {
       const name = m.name;
       const initials = initialsFor(name);
-      const avatarHtml = m.photoUrl
-        ? `<img class="avatar" src="${m.photoUrl}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`
-        : `<div class="initials">${initials}</div>`;
+      const photoUrl = safeImageUrl(m.photoUrl);
+      const avatarHtml = photoUrl
+        ? `<img class="avatar" src="${photoUrl}" alt="" loading="lazy">`
+        : `<div class="initials">${escapeHtml(initials)}</div>`;
       let contactHtml = '';
       if (m.phone) {
         const digits = m.phone.replace(/\D/g, '');
-        contactHtml += `<a href="tel:+1${digits}">${m.phone}</a>`;
+        contactHtml += `<a href="tel:+1${digits}">${escapeHtml(m.phone)}</a>`;
       }
       if (m.email) {
-        contactHtml += `<a href="mailto:${m.email}">${m.email}</a>`;
+        contactHtml += `<a href="mailto:${encodeURIComponent(m.email)}">${escapeHtml(m.email)}</a>`;
       }
       const isMe = myInfo && m.recordId === myInfo.recordId;
       const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
@@ -840,7 +808,7 @@
       return `<div class="card" onclick="showDetail(${idx})">
         ${avatarHtml}
         <div class="info">
-          <div class="name">${name}${youBadge}${adminBadge}</div>
+          <div class="name">${escapeHtml(name)}${youBadge}${adminBadge}</div>
           <div class="contact">${contactHtml}</div>
         </div>
       </div>`;
@@ -849,16 +817,17 @@
     function buildGridCardHtml(m, idx) {
       const name = m.name;
       const initials = initialsFor(name);
-      const avatarHtml = m.photoUrl
-        ? `<img class="grid-avatar" src="${m.photoUrl}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'grid-initials\\'>${initials}</div>'">`
-        : `<div class="grid-initials">${initials}</div>`;
+      const photoUrl = safeImageUrl(m.photoUrl);
+      const avatarHtml = photoUrl
+        ? `<img class="grid-avatar" src="${photoUrl}" alt="" loading="lazy">`
+        : `<div class="grid-initials">${escapeHtml(initials)}</div>`;
       const isMe = myInfo && m.recordId === myInfo.recordId;
       const youBadge = isMe ? '<span class="you-badge">You</span>' : '';
       const adminBadge = (authMode === 'admin' && m.isAdmin) ? '<span class="admin-badge">ADMIN</span>' : '';
       const badges = (youBadge || adminBadge) ? `<div class="grid-badges">${youBadge}${adminBadge}</div>` : '';
       return `<div class="grid-card" onclick="showDetail(${idx})">
         ${avatarHtml}
-        <div class="grid-name">${name}</div>
+        <div class="grid-name">${escapeHtml(name)}</div>
         ${badges}
       </div>`;
     }
@@ -914,9 +883,10 @@
         ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
         : (words[0] || '').substring(0,2).toUpperCase();
 
-      const avatarHtml = m.photoUrl
-        ? `<img class="avatar" src="${m.photoUrl}" alt="" onerror="this.outerHTML='<div class=\\'initials\\'>${initials}</div>'">`
-        : `<div class="initials">${initials}</div>`;
+      const photoUrl = safeImageUrl(m.photoUrl);
+      const avatarHtml = photoUrl
+        ? `<img class="avatar" src="${photoUrl}" alt="">`
+        : `<div class="initials">${escapeHtml(initials)}</div>`;
 
       const isMe = myInfo && m.recordId === myInfo.recordId;
 
@@ -925,17 +895,17 @@
         const digits = m.phone.replace(/\D/g, '');
         actionsHtml += `<a class="detail-btn call" href="tel:+1${digits}">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24 11.36 11.36 0 003.58.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.36 11.36 0 00.57 3.58 1 1 0 01-.25 1.02l-2.2 2.19z"/></svg>
-          Call ${m.phone}</a>`;
+          <span class="detail-btn-label">Call ${escapeHtml(m.phone)}</span></a>`;
         if (authMode !== 'guest') {
           actionsHtml += `<a class="detail-btn sms" href="sms:+1${digits}">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
-            Text Message</a>`;
+            <span class="detail-btn-label">Text Message</span></a>`;
         }
       }
       if (m.email) {
-        actionsHtml += `<a class="detail-btn email" href="mailto:${m.email}">
+        actionsHtml += `<a class="detail-btn email" href="mailto:${encodeURIComponent(m.email)}">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
-          ${m.email}</a>`;
+          <span class="detail-btn-label">${escapeHtml(m.email)}</span></a>`;
       }
 
       // Add to Contacts (vCard download) — members and admin only
@@ -945,9 +915,10 @@
         if (m.email) vcardParts.push(`EMAIL:${m.email}`);
         vcardParts.push('END:VCARD');
         const vcardUrl = 'data:text/vcard;charset=utf-8,' + encodeURIComponent(vcardParts.join('\n'));
-        actionsHtml += `<a class="detail-btn contact" href="${vcardUrl}" download="${m.name.replace(/\s+/g, '_')}.vcf">
+        const downloadName = m.name.replace(/[^A-Za-z0-9_-]+/g, '_');
+        actionsHtml += `<a class="detail-btn contact" href="${vcardUrl}" download="${escapeHtml(downloadName)}.vcf">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-          Add to Contacts</a>`;
+          <span class="detail-btn-label">Add to Contacts</span></a>`;
       }
 
       // --- Auth-conditional edit button ---
@@ -955,14 +926,14 @@
         // Admin: direct edit on all cards
         actionsHtml += `<button class="detail-btn edit" onclick="toggleEditForm(${idx})">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-          Edit Member</button>`;
+          <span class="detail-btn-label">Edit Member</span></button>`;
 
         // Admin: promote/demote toggle
         const toggleLabel = m.isAdmin ? 'Remove Admin' : 'Make Admin';
         const toggleCls = m.isAdmin ? 'admin-toggle remove' : 'admin-toggle';
         actionsHtml += `<button class="detail-btn ${toggleCls}" id="admin-toggle-btn-${idx}" onclick="toggleAdmin(${idx})">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-          ${toggleLabel}</button>`;
+          <span class="detail-btn-label">${toggleLabel}</span></button>`;
       }
       // Guest and Member: no edit button (members edit via profile on home screen)
 
@@ -974,19 +945,19 @@
             <div class="edit-form-title">Edit Member</div>
             <div class="edit-field">
               <label>Name</label>
-              <input type="text" id="edit-name" value="${m.name}" placeholder="Full name">
+              <input type="text" id="edit-name" value="${escapeHtml(m.name)}" placeholder="Full name">
             </div>
             <div class="edit-field">
               <label>Phone</label>
-              <input type="tel" id="edit-phone" value="${m.phone}" placeholder="(412) 555-1234">
+              <input type="tel" id="edit-phone" value="${escapeHtml(m.phone)}" placeholder="(412) 555-1234">
             </div>
             <div class="edit-field">
               <label>Email</label>
-              <input type="email" id="edit-email" value="${m.email}" placeholder="email@example.com">
+              <input type="email" id="edit-email" value="${escapeHtml(m.email)}" placeholder="email@example.com">
             </div>
             <div class="edit-field">
               <label>Member # (Duquesne ID)</label>
-              <input type="number" id="edit-membernum" value="${m.memberNum}" placeholder="e.g. 9566">
+              <input type="number" id="edit-membernum" value="${escapeHtml(m.memberNum)}" placeholder="e.g. 9566">
             </div>
             <div class="edit-field">
               <label>Photo URL</label>
@@ -1004,7 +975,7 @@
       document.getElementById('detail').innerHTML = `
         <button class="detail-close" onclick="closeDetail()">&times;</button>
         ${avatarHtml}
-        <div class="detail-name">${name}${detailAdminBadge}</div>
+        <div class="detail-name">${escapeHtml(name)}${detailAdminBadge}</div>
         <div class="detail-actions">${actionsHtml}</div>
         ${editForm}`;
     }
