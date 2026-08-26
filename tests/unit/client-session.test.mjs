@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 import { readSource } from '../helpers/read-source.mjs';
 
-async function loadClient(fetchImpl) {
+async function loadClient(fetchImpl, apiOrigin = 'https://api.example.test') {
   const values = new Map();
   const storage = {
     getItem(key) {
@@ -20,7 +20,7 @@ async function loadClient(fetchImpl) {
   const context = {
     console,
     document: {
-      currentScript: { dataset: { apiOrigin: 'https://api.example.test' } }
+      currentScript: { dataset: { apiOrigin } }
     },
     fetch: fetchImpl,
     Headers,
@@ -36,6 +36,25 @@ async function loadClient(fetchImpl) {
 
   return { Harumphers: context.Harumphers, values };
 }
+
+test('local fixture models may use loopback HTTP while non-loopback HTTP is rejected', async () => {
+  const requests = [];
+  const local = await loadClient(async (url) => {
+    requests.push(url);
+    return new Response(JSON.stringify({ role: 'guest' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }, 'http://127.0.0.1:4173');
+
+  await local.Harumphers.getSession();
+  assert.equal(requests[0], 'http://127.0.0.1:4173/api/session');
+
+  await assert.rejects(
+    () => loadClient(async () => new Response(), 'http://app.example.test'),
+    /HTTPS origin/
+  );
+});
 
 test('guest login sends the phrase only in an HTTPS body and stores only the signed token', async () => {
   const requests = [];

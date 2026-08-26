@@ -16,8 +16,10 @@
   function apiOrigin() {
     const configured = document.currentScript?.dataset.apiOrigin;
     const parsed = new URL(configured);
+    const isLoopbackHttp = parsed.protocol === 'http:'
+      && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost' || parsed.hostname === '::1');
     if (
-      parsed.protocol !== 'https:'
+      (parsed.protocol !== 'https:' && !isLoopbackHttp)
       || parsed.username
       || parsed.password
       || parsed.pathname !== '/'

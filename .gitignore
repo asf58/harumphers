@@ -1,1 +1,8 @@
-/node_modules/
+.dev.vars
+.env
+.env.*
+!.env.example
+.wrangler/
+node_modules/
+playwright-report/
+test-results/
