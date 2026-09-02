@@ -59,7 +59,7 @@ npx wrangler secret put ADMIN_LOGIN
 
 Before any staging deploy, create a separate staging base and confirm these tables and exact fields. Record-ID fields are single-line text unless noted:
 
-- Members: `FULL NAME`, `CELL #`, `E-MAIL ADDRESS`, `PHOTO` (attachments), `IN DIRECTORY` (checkbox), and `MEMBER #` (integer).
+- Members: `FULL NAME`, `CELL #`, `E-MAIL ADDRESS`, `PHOTO` (attachments), `IN DIRECTORY` (checkbox), and `MEMBER #` (single-line text).
 - Events: `EVENT NAME`, `DATE` (date), `SPEAKER`, `TIME`, `ROOM`, `SPEAKER PHOTO` (attachments), `NOTES` (long text), `Status` (Suggested, Upcoming, Scheduled, Completed, Cancelled), `RSVP FIELD`, `GUEST FIELD`, `CREATION KEY`, and `SETUP STATE`.
 - Photos: `EVENT RECORD ID`, `MEMBER RECORD ID`, `MEMBER NAME`, `PHOTO` (attachments), `CAPTION` (long text), and `SUBMITTED` (date).
 - Attendance: `EVENT RECORD ID`, `MEMBER RECORD ID`, `ATTENDED` (checkbox), and `ACTUAL GUESTS` (integer).
