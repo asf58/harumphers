@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>HARUMPHERS Events</title>
   <meta name="theme-color" content="#8B0000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <style>
@@ -22,7 +23,7 @@
 
     header {
       background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
-      padding: 12px 16px;
+      padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -54,6 +55,11 @@
       text-decoration: none;
       font-size: 13px;
       white-space: nowrap;
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .logout-link { opacity: 0.7; }
@@ -89,6 +95,15 @@
     }
 
     .event-header:active { background: #333; }
+    .event-header:focus-visible,
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      outline: 3px solid #FFD700;
+      outline-offset: 3px;
+    }
 
     .event-name {
       font-weight: 700;
@@ -541,6 +556,15 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
     .error { color: #ff6b6b; }
     .error a { color: #FFD700; display: inline-block; margin-top: 12px; }
 
@@ -739,6 +763,9 @@
 
     .new-event-input {
       flex: 1;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       padding: 10px 12px;
       border-radius: 8px;
       border: 1px solid #444;
@@ -770,8 +797,31 @@
 
     .new-event-actions { display: flex; gap: 8px; }
 
+    @media (max-width: 480px) {
+      .new-event-form { padding: 14px 12px; min-width: 0; }
+      .new-event-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+      }
+      .new-event-label { width: auto; }
+      .new-event-input[type="file"] { min-width: 0; max-width: 100%; overflow: hidden; }
+      .new-event-hint,
+      .new-event-checkbox { padding-left: 0; }
+      .new-event-actions { flex-wrap: wrap; }
+      .new-event-cancel-btn,
+      .new-event-create-btn { min-height: 44px; }
+    }
+
+    @media (max-width: 340px) {
+      .new-event-actions { flex-direction: column-reverse; }
+      .new-event-cancel-btn,
+      .new-event-create-btn { width: 100%; flex: none; }
+    }
+
     .new-event-create-btn {
       flex: 1;
+      min-height: 44px;
       padding: 10px;
       background: #4CAF50;
       color: #fff;
@@ -792,6 +842,7 @@
       border-radius: 8px;
       font-size: 14px;
       cursor: pointer;
+      min-height: 44px;
       font-family: inherit;
     }
 
@@ -946,64 +997,23 @@
     </div>
   </div>
 
+  <script src="assets/harumphers-client.js" data-api-origin="https://harumphers-api.adamsfeuer.workers.dev"></script>
   <script>
     // --- Auth Helpers ---
-    function getAuthMode() {
-      const auth = localStorage.getItem('harumphers_auth');
-      if (auth === 'admin') return 'admin';
-      if (auth === 'member') return 'member';
-      if (auth === 'guest' || auth === '1') return 'guest';
-      return null;
-    }
-
-    function getMemberInfo() {
-      const recordId = localStorage.getItem('harumphers_member_id');
-      const name = localStorage.getItem('harumphers_member_name');
-      const duqId = localStorage.getItem('harumphers_duq_id');
-      if (!recordId) return null;
-      return { recordId, name, duqId };
-    }
+    let authMode = null;
+    let myInfo = null;
 
     function logout() {
-      localStorage.removeItem('harumphers_auth');
-      localStorage.removeItem('harumphers_member_id');
-      localStorage.removeItem('harumphers_member_name');
-      localStorage.removeItem('harumphers_duq_id');
-      localStorage.removeItem('harumphers_myname');
+      Harumphers.logout();
       window.location.href = 'index.html';
     }
-
-    function requireAuth() {
-      if (!getAuthMode()) {
-        window.location.href = 'index.html';
-        return false;
-      }
-      return true;
-    }
-
-    if (!requireAuth()) throw new Error('Not authenticated');
-
-    const authMode = getAuthMode();
-    const myInfo = getMemberInfo();
-
-    // Airtable calls go through our Cloudflare Worker proxy.
-    // The Worker injects the real Airtable PAT server-side (no longer in client JS),
-    // and caches GET responses so all members share one upstream fetch per ~5min.
-    const API_BASE = 'https://harumphers-api.adamsfeuer.workers.dev';
-    const API_KEY = 'QtS8Oq-sU1SwjalDXjY4atSmwIW8fYs9gQ9w0KfvDJw';
-    const BASE_ID = 'appW7Df1qJlznxxtf';
-    const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
-    const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
-    const CHANGES_TABLE = 'tbljI55IdCDB0uFuS';
-    const PHOTOS_TABLE = 'tblTQM3DY7BAqs9BL';
-    const ATTENDANCE_TABLE = 'tbloa1qulpNHKkFNk';
-    const VOTES_TABLE = 'tblnpBxZ7N6X7004t';
 
     let allMembers = [];
     let allEvents = [];
     let galleryPhotos = {}; // eventRecordId -> [{url, thumb, memberName, caption}]
     let attendanceData = {}; // eventRecordId -> { memberRecordId: { attended, actualGuests, recordId } }
     let votesData = {}; // eventRecordId -> { memberRecordId: { vote, recordId } }
+    let voteTalliesData = {}; // eventRecordId -> { up, down }
     let votingInFlight = new Set(); // per-event lock
     let showingAttendance = null; // eventIdx or null
 
@@ -1018,6 +1028,7 @@
     // Admin edit state
     let editingEvent = null; // eventIdx being edited
     let showingNewEvent = false;
+    let newEventCreationKey = null;
 
     function normalizeStatus(raw) {
       const s = (raw || '').toLowerCase();
@@ -1028,87 +1039,12 @@
       return 'Upcoming';
     }
 
-    async function apiFetch(url) {
-      const res = await fetch(url, {
-        headers: { 'X-Harumphers-Key': API_KEY }
-      });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      return res.json();
-    }
-
-    async function apiFetchAll(url) {
-      let allRecords = [];
-      let fetchUrl = url;
-      while (true) {
-        const data = await apiFetch(fetchUrl);
-        allRecords = allRecords.concat(data.records);
-        if (!data.offset) break;
-        const sep = fetchUrl.includes('?') ? '&' : '?';
-        fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
-      }
-      return { records: allRecords };
-    }
-
-    async function apiPatch(recordId, fields) {
-      const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
-        method: 'PATCH',
-        headers: {
-          'X-Harumphers-Key': API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ fields })
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
-        throw new Error(errMsg);
-      }
-      return res.json();
-    }
-
-    async function applyApprovedChanges() {
-      try {
-        const data = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}?filterByFormula=AND({STATUS}="Approved",{APPLIED AT}=BLANK())`
-        );
-        for (const rec of data.records) {
-          const f = rec.fields;
-          const memberId = f['MEMBER RECORD ID'];
-          const changes = f['REQUESTED CHANGES'] || '';
-          if (!memberId) continue;
-
-          const updates = {};
-          for (const line of changes.split('\n')) {
-            const match = line.match(/^(.+?):\s*.+?\s*->\s*(.+)$/);
-            if (!match) continue;
-            const field = match[1].trim();
-            const newVal = match[2].trim();
-            if (field === 'Name') updates['FULL NAME'] = newVal;
-            else if (field === 'Phone') updates['CELL #'] = newVal;
-            else if (field === 'Email') updates['E-MAIL ADDRESS'] = newVal;
-          }
-
-          if (Object.keys(updates).length > 0) {
-            await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${memberId}`, {
-              method: 'PATCH',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: updates })
-            });
-          }
-
-          await fetch(`${API_BASE}/v0/${BASE_ID}/${CHANGES_TABLE}/${rec.id}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'APPLIED AT': new Date().toISOString() } })
-          });
-        }
-      } catch (e) {
-        console.log('Auto-apply check:', e.message);
-      }
-    }
-
     // Find matching guest field using multiple strategies
     function findGuestField(guestFields, fieldWords, matched) {
+      const exactGuestField = matched?.['GUEST FIELD'];
+      if (typeof exactGuestField === 'string' && guestFields.some(field => field.name === exactGuestField)) {
+        return exactGuestField;
+      }
       for (const gf of guestFields) {
         const guestKey = gf.name.toUpperCase().replace('GUESTS-', '').trim();
         if (fieldWords.some(w => w.length > 2 && (guestKey.includes(w) || w.includes(guestKey)))) {
@@ -1149,6 +1085,8 @@
     // Replaces the old .find() first-match which caused MAY19-MAY SPEAKER RSVP to attach
     // to "SPEAKER - CORY OCONNOR" because both contain the word SPEAKER.
     function matchEventToRsvpField(fieldName, eventDetails) {
+      const exact = eventDetails.find(event => event['RSVP FIELD'] === fieldName);
+      if (exact) return exact;
       const { datePrefix, words } = parseRsvpFieldName(fieldName);
 
       // Strategy 1: exact DATE match against month+day from prefix
@@ -1184,40 +1122,20 @@
     }
 
     async function loadEvents() {
-      const meta = await apiFetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables`);
-      const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
-      const rsvpFields = membersTable.fields.filter(f =>
+      const bootstrap = await Harumphers.api('/api/events');
+      voteTalliesData = bootstrap.voteTallies || {};
+      const rsvpFields = bootstrap.memberFields.filter(f =>
         f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
       );
-      const guestFields = membersTable.fields.filter(f =>
+      const guestFields = bootstrap.memberFields.filter(f =>
         f.name.toUpperCase().startsWith('GUESTS-')
       );
 
       // Note: rsvpFields may be empty if no events have RSVP columns yet
       // (e.g., all events are Suggested or Upcoming). We still proceed to load events.
 
-      const eventsData = await apiFetchAll(
-        `${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`
-      );
-      const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
-
-      const params = new URLSearchParams({
-        'sort[0][field]': 'LAST NAME',
-        'sort[0][direction]': 'asc',
-      });
-      params.append('fields[]', 'FULL NAME');
-      params.append('fields[]', 'IN DIRECTORY');
-      params.append('fields[]', 'CELL #');
-      params.append('fields[]', 'E-MAIL ADDRESS');
-      params.append('fields[]', 'MEMBER #');
-      rsvpFields.forEach(f => params.append('fields[]', f.name));
-      guestFields.forEach(f => params.append('fields[]', f.name));
-
-      const membersData = await apiFetchAll(
-        `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}?${params}`
-      );
-
-      allMembers = membersData.records.filter(r => r.fields['IN DIRECTORY']);
+      const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
+      allMembers = bootstrap.members.filter(r => r.fields['IN DIRECTORY']);
 
       allEvents = rsvpFields.map((field, idx) => {
         // fieldWords is used by findGuestField (preserves prior behavior for that path)
@@ -1241,18 +1159,11 @@
           const phone = f['CELL #'] || '';
           const memberNum = f['MEMBER #'] || '';
           const entry = { name, guestCount, recordId: r.id, email, phone, memberNum };
-          if (!rsvp) {
-            pending.push(entry);
-            return;
-          }
-          const val = rsvp.toUpperCase();
-          if (val.includes('YES') || val.includes('GOING')) {
-            yes.push(entry);
-          } else if (val.includes('NO')) {
-            no.push(entry);
-          } else {
-            maybe.push(entry);
-          }
+          const rsvpState = Harumphers.classifyRsvp(rsvp);
+          if (rsvpState === 'yes') yes.push(entry);
+          else if (rsvpState === 'no') no.push(entry);
+          else if (rsvpState === 'maybe') maybe.push(entry);
+          else pending.push(entry);
         });
 
         let displayName = field.name
@@ -1347,10 +1258,7 @@
       // Load gallery photos for past events
       galleryPhotos = {};
       try {
-        const photosData = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}`
-        );
-        photosData.records.forEach(r => {
+        bootstrap.photos.forEach(r => {
           const f = r.fields;
           const eventId = f['EVENT RECORD ID'];
           if (!eventId) return;
@@ -1371,30 +1279,36 @@
       // Load attendance records
       attendanceData = {};
       try {
-        const attData = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`
-        );
-        attData.records.forEach(r => {
-          const f = r.fields;
-          const eventId = f['EVENT RECORD ID'];
-          const memberId = f['MEMBER RECORD ID'];
-          if (!eventId || !memberId) return;
-          if (!attendanceData[eventId]) attendanceData[eventId] = {};
-          attendanceData[eventId][memberId] = {
-            attended: !!f['ATTENDED'],
-            actualGuests: f['ACTUAL GUESTS'] || 0,
-            recordId: r.id,
-          };
-        });
+        if (authMode === 'admin') {
+          bootstrap.attendance.forEach(r => {
+            const f = r.fields;
+            const eventId = f['EVENT RECORD ID'];
+            const memberId = f['MEMBER RECORD ID'];
+            if (!eventId || !memberId) return;
+            if (!attendanceData[eventId]) attendanceData[eventId] = {};
+            attendanceData[eventId][memberId] = {
+              attended: !!f['ATTENDED'],
+              actualGuests: f['ACTUAL GUESTS'] || 0,
+              recordId: r.id,
+            };
+          });
+        } else {
+          (bootstrap.attendanceSummary || []).forEach((entry, index) => {
+            if (!entry.eventId) return;
+            if (!attendanceData[entry.eventId]) attendanceData[entry.eventId] = {};
+            attendanceData[entry.eventId][`summary-${index}`] = {
+              attended: entry.attended === true,
+              actualGuests: entry.actualGuests || 0,
+              name: entry.memberName || 'Member'
+            };
+          });
+        }
       } catch (e) { /* attendance load failure is non-fatal */ }
 
       // Load votes for suggested events
       votesData = {};
       try {
-        const votesRaw = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`
-        );
-        votesRaw.records.forEach(r => {
+        bootstrap.votes.forEach(r => {
           const f = r.fields;
           const eventId = f['EVENT RECORD ID'];
           const memberId = f['MEMBER RECORD ID'];
@@ -1405,6 +1319,13 @@
             recordId: r.id,
           };
         });
+        if (authMode === 'member' && myInfo) {
+          const memberVotes = await Harumphers.api('/api/me/votes');
+          memberVotes.votes.forEach(item => {
+            if (!votesData[item.eventId]) votesData[item.eventId] = {};
+            votesData[item.eventId][myInfo.recordId] = { vote: item.vote };
+          });
+        }
       } catch (e) { /* votes load failure is non-fatal */ }
 
       render();
@@ -1437,9 +1358,14 @@
       return member.fields[ev.guestFieldName] || 0;
     }
 
+    function eventStateKey(eventIdx) {
+      return allEvents[eventIdx]?.eventRecordId || `temporary:${eventIdx}`;
+    }
+
     function toggleEvent(idx) {
-      if (openEvents.has(idx)) openEvents.delete(idx);
-      else openEvents.add(idx);
+      const key = eventStateKey(idx);
+      if (openEvents.has(key)) openEvents.delete(key);
+      else openEvents.add(key);
       render();
     }
 
@@ -1464,46 +1390,41 @@
             <div class="new-event-form">
               <h3>Add New Event</h3>
               <div class="new-event-row">
-                <span class="new-event-label">Name</span>
+                <label class="new-event-label" for="new-event-name">Name</label>
                 <input class="new-event-input" id="new-event-name" placeholder="e.g. Bob Smith Speaker Night">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Date</span>
+                <label class="new-event-label" for="new-event-date">Date</label>
                 <input class="new-event-input" type="date" id="new-event-date">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Speaker</span>
+                <label class="new-event-label" for="new-event-speaker">Speaker</label>
                 <input class="new-event-input" id="new-event-speaker" placeholder="e.g. Bob Smith">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Time</span>
+                <label class="new-event-label" for="new-event-time">Time</label>
                 <input class="new-event-input" id="new-event-time" placeholder="e.g. 6:30 PM">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Room</span>
+                <label class="new-event-label" for="new-event-room">Room</label>
                 <input class="new-event-input" id="new-event-room" placeholder="e.g. Cigar Lounge">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Speaker Photo</span>
+                <label class="new-event-label" for="new-event-photo">Speaker Photo</label>
                 <input class="new-event-input" type="file" id="new-event-photo" accept="image/*">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Notes</span>
+                <label class="new-event-label" for="new-event-notes">Notes</label>
                 <input class="new-event-input" id="new-event-notes" placeholder="Optional notes about the event">
               </div>
               <div class="new-event-row">
-                <span class="new-event-label">Status</span>
+                <label class="new-event-label" for="new-event-status">Status</label>
                 <select class="new-event-input" id="new-event-status">
                   <option value="Suggested" selected>Suggested</option>
                   <option value="Upcoming">Upcoming</option>
                   <option value="Scheduled">Scheduled</option>
                 </select>
               </div>
-              <div class="new-event-row">
-                <span class="new-event-label">RSVP Field</span>
-                <input class="new-event-input" id="new-event-prefix" placeholder="Auto-generated from name + date">
-              </div>
-              <div class="new-event-hint">Column name in Airtable (auto-fills when you enter name + date)</div>
               <div class="new-event-checkbox">
                 <input type="checkbox" id="new-event-guests" checked>
                 <label for="new-event-guests">Enable guest count tracking</label>
@@ -1512,7 +1433,7 @@
                 <button class="new-event-cancel-btn" onclick="toggleNewEvent()">Cancel</button>
                 <button class="new-event-create-btn" id="new-event-create-btn" onclick="createNewEvent()">Create Event</button>
               </div>
-              <div class="new-event-msg" id="new-event-msg"></div>
+              <div class="new-event-msg" id="new-event-msg" role="status" aria-live="polite"></div>
             </div>
           </div>`;
         } else {
@@ -1537,23 +1458,21 @@
           const clickable = authMode === 'admin' && !ev.isCompleted ? ' clickable' : '';
           const onclick = clickable ? ` onclick="event.stopPropagation(); toggleInlineEdit(${i}, '${entry.recordId}', event)"` : '';
 
-          let html = `<span class="rsvp-chip ${cls}${youClass}${editingClass}${clickable}"${onclick}>${entry.name}${youLabel}${guestLabel}</span>`;
+          let html = `<span class="rsvp-chip ${cls}${youClass}${editingClass}${clickable}"${onclick}>${Harumphers.escapeHtml(entry.name)}${youLabel}${guestLabel}</span>`;
 
           // Inline edit panel
           if (isEditing && authMode === 'admin') {
             const memberRsvp = getMemberRsvpForEvent(ev, entry.recordId);
             const memberGuests = getMemberGuestCount(ev, entry.recordId);
             let ac = { yes: '', maybe: '', no: '' };
-            if (memberRsvp) {
-              const u = memberRsvp.toUpperCase();
-              if (u.includes('YES') || u.includes('GOING')) ac.yes = ' active';
-              else if (u.includes('NO')) ac.no = ' active';
-              else ac.maybe = ' active';
-            }
+            const memberRsvpState = Harumphers.classifyRsvp(memberRsvp);
+            if (memberRsvpState === 'yes') ac.yes = ' active';
+            else if (memberRsvpState === 'no') ac.no = ' active';
+            else if (memberRsvpState === 'maybe') ac.maybe = ' active';
 
             html += `
               <div class="inline-edit" onclick="event.stopPropagation()">
-                <div class="inline-edit-name">Edit: ${entry.name}</div>
+                <div class="inline-edit-name">Edit: ${Harumphers.escapeHtml(entry.name)}</div>
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${ac.yes}" onclick="submitInlineRsvp(${i}, '${entry.recordId}', 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${ac.maybe}" onclick="submitInlineRsvp(${i}, '${entry.recordId}', 'MAYBE')">MAYBE</button>
@@ -1614,16 +1533,14 @@
             const myGuests = getMyGuestCountForEvent(ev);
 
             let activeClass = { yes: '', maybe: '', no: '' };
-            if (myRsvp) {
-              const upper = myRsvp.toUpperCase();
-              if (upper.includes('YES') || upper.includes('GOING')) activeClass.yes = ' active';
-              else if (upper.includes('NO')) activeClass.no = ' active';
-              else activeClass.maybe = ' active';
-            }
+            const myRsvpState = Harumphers.classifyRsvp(myRsvp);
+            if (myRsvpState === 'yes') activeClass.yes = ' active';
+            else if (myRsvpState === 'no') activeClass.no = ' active';
+            else if (myRsvpState === 'maybe') activeClass.maybe = ' active';
             rsvpForm = `
               <div class="rsvp-form" onclick="event.stopPropagation()">
                 <div class="rsvp-form-title">Your RSVP</div>
-                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
+                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${Harumphers.escapeHtml(myRsvp)}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${activeClass.yes}" onclick="submitMemberRsvp(${i}, 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${activeClass.maybe}" onclick="submitMemberRsvp(${i}, 'MAYBE')">MAYBE</button>
@@ -1646,18 +1563,16 @@
             const myGuests = getMyGuestCountForEvent(ev);
 
             let activeClass = { yes: '', maybe: '', no: '' };
-            if (myRsvp) {
-              const upper = myRsvp.toUpperCase();
-              if (upper.includes('YES') || upper.includes('GOING')) activeClass.yes = ' active';
-              else if (upper.includes('NO')) activeClass.no = ' active';
-              else activeClass.maybe = ' active';
-            }
+            const myRsvpState = Harumphers.classifyRsvp(myRsvp);
+            if (myRsvpState === 'yes') activeClass.yes = ' active';
+            else if (myRsvpState === 'no') activeClass.no = ' active';
+            else if (myRsvpState === 'maybe') activeClass.maybe = ' active';
 
             const hasOwnRecord = !!myInfo;
 
             const ownRsvpSection = hasOwnRecord ? `
                 <div class="rsvp-form-title">Your RSVP</div>
-                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${myRsvp}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
+                ${myRsvp ? `<div class="your-rsvp">Current: <strong>${Harumphers.escapeHtml(myRsvp)}</strong></div>` : '<div class="your-rsvp" style="color:#FFA500">Not yet responded</div>'}
                 <div class="rsvp-buttons">
                   <button class="rsvp-btn yes-btn${activeClass.yes}" onclick="submitMemberRsvp(${i}, 'YES')">YES</button>
                   <button class="rsvp-btn maybe-btn${activeClass.maybe}" onclick="submitMemberRsvp(${i}, 'MAYBE')">MAYBE</button>
@@ -1729,11 +1644,11 @@
         // Admin edit form for event details
         let editForm = '';
         if (authMode === 'admin' && editingEvent === i) {
-          const eName = ev.name.replace(/"/g, '&quot;');
-          const eDate = (ev.date || '').replace(/"/g, '&quot;');
-          const eSpeaker = (ev.speaker || '').replace(/"/g, '&quot;');
-          const eTime = (ev.time || '').replace(/"/g, '&quot;');
-          const eRoom = (ev.room || '').replace(/"/g, '&quot;');
+          const eName = Harumphers.escapeHtml(ev.name);
+          const eDate = Harumphers.escapeHtml(ev.date || '');
+          const eSpeaker = Harumphers.escapeHtml(ev.speaker || '');
+          const eTime = Harumphers.escapeHtml(ev.time || '');
+          const eRoom = Harumphers.escapeHtml(ev.room || '');
           const eStat = (ev.status || '').toLowerCase();
           editForm = `
             <div class="event-edit-form" onclick="event.stopPropagation()">
@@ -1760,23 +1675,22 @@
               <div class="event-edit-row">
                 <span class="event-edit-label">Photo</span>
                 <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                  <input class="event-edit-input" id="edit-photo-url-${i}" placeholder="Paste image URL" style="margin:0">
                   <div style="display:flex;align-items:center;gap:8px">
                     <label style="font-size:12px;color:#FFD700;cursor:pointer;white-space:nowrap">
                       <input type="file" accept="image/*" id="edit-photo-file-${i}" style="display:none" onchange="handlePhotoFile(${i})">
-                      Or choose file
+                      Choose file
                     </label>
                     <span id="edit-photo-filename-${i}" style="font-size:11px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
                   </div>
-                  ${ev.speakerPhoto ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px">
-                    <img src="${ev.speakerPhoto}" style="width:48px;height:48px;border-radius:8px;object-fit:cover">
+                  ${Harumphers.safeImageUrl(ev.speakerPhoto) ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px">
+                    <img src="${Harumphers.escapeHtml(Harumphers.safeImageUrl(ev.speakerPhoto))}" style="width:48px;height:48px;border-radius:8px;object-fit:cover">
                     <button onclick="event.stopPropagation();removeSpeakerPhoto(${i})" style="background:#8B0000;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer">Remove</button>
                   </div>` : ''}
                 </div>
               </div>
               <div class="event-edit-row">
                 <span class="event-edit-label">Notes</span>
-                <textarea class="event-edit-input" id="edit-notes-${i}" rows="3" placeholder="Event notes" style="resize:vertical">${(ev.notes || '').replace(/</g, '&lt;')}</textarea>
+                <textarea class="event-edit-input" id="edit-notes-${i}" rows="3" placeholder="Event notes" style="resize:vertical">${Harumphers.escapeHtml(ev.notes || '')}</textarea>
               </div>
               <div class="event-edit-row">
                 <span class="event-edit-label">Status</span>
@@ -1803,20 +1717,22 @@
             <button class="export-btn" onclick="toggleExport(${i})">${exportState && exportState.eventIdx === i ? 'Close Export' : 'Export'}</button>
           </div>` : '';
 
-        const isOpen = openEvents.has(i) ? ' open' : '';
-        const speakerPhotoHtml = ev.speakerPhoto
-          ? `<img src="${ev.speakerPhoto}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+        const eventIsOpen = openEvents.has(ev.eventRecordId || `temporary:${i}`);
+        const isOpen = eventIsOpen ? ' open' : '';
+        const safeSpeakerPhoto = Harumphers.safeImageUrl(ev.speakerPhoto);
+        const speakerPhotoHtml = safeSpeakerPhoto
+          ? `<img src="${Harumphers.escapeHtml(safeSpeakerPhoto)}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0">`
           : '';
         const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
         const detailLine = detailParts.length > 0
-          ? `<div style="font-size:12px;color:#aaa;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+          ? `<div style="font-size:12px;color:#aaa;margin-top:2px">${detailParts.map(Harumphers.escapeHtml).join(' &bull; ')}</div>`
           : '';
         return `<div class="event-card${isOpen}">
-          <div class="event-header" onclick="toggleEvent(${i})">
+          <div class="event-header" role="button" tabindex="0" aria-expanded="${eventIsOpen}" aria-controls="event-body-${i}" onclick="toggleEvent(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEvent(${i})}">
             ${speakerPhotoHtml}
             <div style="flex:1;min-width:0">
-              <div class="event-name">${ev.name}</div>
-              ${(() => { const dateDisplay = ev.isUpcoming || ev.isSuggested ? 'TBD' : (ev.date || 'TBD'); return `<div class="event-date">${dateDisplay}</div>`; })()}
+              <div class="event-name">${Harumphers.escapeHtml(ev.name)}</div>
+              ${(() => { const dateDisplay = ev.isUpcoming || ev.isSuggested ? 'TBD' : (ev.date || 'TBD'); return `<div class="event-date">${Harumphers.escapeHtml(dateDisplay)}</div>`; })()}
               ${detailLine}
               ${(ev.isScheduled || ev.isCompleted || ev.isCancelled) && total > 0 ? `<div class="event-counts">
                 <span class="count-yes">${ev.yes.length} going</span>
@@ -1825,15 +1741,15 @@
                 <span>${total} responded${guestCountNote}</span>
               </div>` : ''}
             </div>
-            <span class="event-status status-${statusClass}">${statusLabel}</span>
+            <span class="event-status status-${statusClass}">${Harumphers.escapeHtml(statusLabel)}</span>
             <span class="chevron">&#8250;</span>
           </div>
-          <div class="event-body">
+          <div class="event-body" id="event-body-${i}">
             ${adminToolbar}
             ${editForm}
             ${exportPanel}
-            ${ev.speakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${ev.speakerPhoto}" alt="${ev.speaker || 'Speaker'}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
-            ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${ev.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g, '<br>')}</div>` : ''}
+            ${safeSpeakerPhoto ? `<div style="text-align:center;padding:12px 16px 0"><img src="${Harumphers.escapeHtml(safeSpeakerPhoto)}" alt="${Harumphers.escapeHtml(ev.speaker || 'Speaker')}" style="width:120px;height:120px;border-radius:12px;object-fit:cover"></div>` : ''}
+            ${ev.notes ? `<div style="padding:8px 16px;font-size:13px;color:#ccc;border-bottom:1px solid #333">${Harumphers.escapeHtml(ev.notes).replace(/\n/g, '<br>')}</div>` : ''}
             ${rsvpForm}
             ${buildVotingSection(ev, i)}
             ${buildAttendanceSection(ev, i)}
@@ -1917,8 +1833,11 @@
       }
 
       try {
-        const patchValue = value === null ? null : value;
-        await apiPatch(member.id, { [ev.fieldName]: patchValue });
+        await Harumphers.api(`/api/events/${ev.eventRecordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: value, guests: getMyGuestCountForEvent(ev) })
+        });
         member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
         render();
@@ -1952,7 +1871,11 @@
       if (!member) return;
 
       try {
-        await apiPatch(member.id, { [ev.guestFieldName]: count });
+        await Harumphers.api(`/api/events/${ev.eventRecordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: getMyRsvpForEvent(ev) || 'YES', guests: count })
+        });
         member.fields[ev.guestFieldName] = count;
         recalcEvent(ev);
         render();
@@ -1986,8 +1909,11 @@
       }
 
       try {
-        const patchValue = value === null ? null : value;
-        await apiPatch(member.id, { [ev.fieldName]: patchValue });
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/rsvps/${member.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: value, guests: getMemberGuestCount(ev, member.id) })
+        });
         member.fields[ev.fieldName] = value === null ? undefined : value;
         recalcEvent(ev);
         // Keep inline edit open on same member
@@ -2022,7 +1948,11 @@
       const count = parseInt(input.value) || 0;
 
       try {
-        await apiPatch(member.id, { [ev.guestFieldName]: count });
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/rsvps/${member.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: getMemberRsvpForEvent(ev, member.id) || 'YES', guests: count })
+        });
         member.fields[ev.guestFieldName] = count;
         recalcEvent(ev);
         inlineEdit = { eventIdx, memberId };
@@ -2053,18 +1983,11 @@
         const phone = f['CELL #'] || '';
         const memberNum = f['MEMBER #'] || '';
         const entry = { name, guestCount, recordId: r.id, email, phone, memberNum };
-        if (!rsvp) {
-          ev.pending.push(entry);
-          return;
-        }
-        const val = rsvp.toUpperCase();
-        if (val.includes('YES') || val.includes('GOING')) {
-          ev.yes.push(entry);
-        } else if (val.includes('NO')) {
-          ev.no.push(entry);
-        } else {
-          ev.maybe.push(entry);
-        }
+        const rsvpState = Harumphers.classifyRsvp(rsvp);
+        if (rsvpState === 'yes') ev.yes.push(entry);
+        else if (rsvpState === 'no') ev.no.push(entry);
+        else if (rsvpState === 'maybe') ev.maybe.push(entry);
+        else ev.pending.push(entry);
       });
     }
 
@@ -2075,7 +1998,7 @@
       } else {
         exportState = { eventIdx, filter: 'yes' };
         // Always expand the event card when opening export
-        openEvents.add(eventIdx);
+        openEvents.add(eventStateKey(eventIdx));
       }
       render();
     }
@@ -2290,19 +2213,16 @@
       if (photos.length > 0) {
         gridHtml = `<div class="gallery-grid">
           ${photos.map((p, pi) => {
-            const safeUrl = p.url.replace(/'/g, "\\'");
-            const safeName = (p.memberName || '').replace(/'/g, "\\'");
-            const safeCaption = (p.caption || '').replace(/'/g, "\\'");
-            const fullLabel = safeName + (safeCaption ? ' — ' + safeCaption : '');
+            const safeThumb = Harumphers.safeImageUrl(p.thumb);
             const adminControls = authMode === 'admin' ? `
               <div class="gallery-admin" onclick="event.stopPropagation()">
                 <button class="gallery-delete-btn" onclick="removeGalleryPhoto('${ev.eventRecordId}', '${p.recordId}')" title="Remove">&#x2715;</button>
-                <button class="gallery-edit-btn" onclick="editGalleryCaption('${p.recordId}', '${safeCaption}')" title="Edit caption">&#9998;</button>
+                <button class="gallery-edit-btn" onclick="editGalleryCaption('${p.recordId}', ${eventIdx}, ${pi})" title="Edit caption">&#9998;</button>
               </div>` : '';
             return `
             <div class="gallery-item">
-              <img src="${p.thumb}" alt="" loading="lazy" onclick="showFullPhoto('${safeUrl}', '${fullLabel}')">
-              ${p.memberName ? `<div class="gallery-caption">${p.memberName}${p.caption ? ': ' + p.caption : ''}</div>` : ''}
+              ${safeThumb ? `<img src="${Harumphers.escapeHtml(safeThumb)}" alt="" loading="lazy" onclick="showFullPhoto('${ev.eventRecordId}', ${pi})">` : ''}
+              ${p.memberName ? `<div class="gallery-caption">${Harumphers.escapeHtml(p.memberName)}${p.caption ? ': ' + Harumphers.escapeHtml(p.caption) : ''}</div>` : ''}
               ${adminControls}
             </div>`;
           }).join('')}
@@ -2329,14 +2249,29 @@
         </div>`;
     }
 
-    function showFullPhoto(url, caption) {
+    function showFullPhoto(eventRecordId, photoIndex) {
+      const photo = (galleryPhotos[eventRecordId] || [])[photoIndex];
+      if (!photo) return;
+      const url = Harumphers.safeImageUrl(photo.url);
+      if (!url) return;
+      const caption = (photo.memberName || '') + (photo.caption ? ' — ' + photo.caption : '');
       const overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:pointer';
-      overlay.innerHTML = `
-        <img src="${url}" style="max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain">
-        ${caption ? `<div style="color:#fff;margin-top:12px;font-size:14px;text-align:center">${caption}</div>` : ''}
-        <div style="color:#888;margin-top:8px;font-size:12px">Tap to close</div>
-      `;
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = '';
+      image.style.cssText = 'max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain';
+      overlay.appendChild(image);
+      if (caption) {
+        const label = document.createElement('div');
+        label.style.cssText = 'color:#fff;margin-top:12px;font-size:14px;text-align:center';
+        label.textContent = caption;
+        overlay.appendChild(label);
+      }
+      const closeHint = document.createElement('div');
+      closeHint.style.cssText = 'color:#888;margin-top:8px;font-size:12px';
+      closeHint.textContent = 'Tap to close';
+      overlay.appendChild(closeHint);
       overlay.onclick = () => overlay.remove();
       document.body.appendChild(overlay);
     }
@@ -2352,31 +2287,14 @@
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Uploading photo...'; }
 
       try {
-        // Upload to temp host
-        const publicUrl = await uploadPhotoFile(file);
-
-        // Create record in EVENT PHOTOS table
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}`, {
+        const upload = await preparePhotoFile(file);
+        const data = await Harumphers.api(`/api/events/${ev.eventRecordId}/photos`, {
           method: 'POST',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fields: {
-              'EVENT RECORD ID': ev.eventRecordId,
-              'EVENT NAME': ev.name,
-              'MEMBER NAME': memberName,
-              'PHOTO': [{ url: publicUrl }],
-              'CAPTION': caption,
-              'SUBMITTED': new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' }),
-            }
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...upload, caption })
         });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-        }
 
         // Add to local gallery data
-        const data = await res.json();
         if (!galleryPhotos[ev.eventRecordId]) galleryPhotos[ev.eventRecordId] = [];
         const newPhotos = data.fields['PHOTO'] || [];
         newPhotos.forEach(p => {
@@ -2401,11 +2319,9 @@
 
     async function removeGalleryPhoto(eventRecordId, photoRecordId) {
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+        await Harumphers.api(`/api/admin/photos/${photoRecordId}`, {
           method: 'DELETE',
-          headers: { 'X-Harumphers-Key': API_KEY },
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         // Remove from local data
         if (galleryPhotos[eventRecordId]) {
           galleryPhotos[eventRecordId] = galleryPhotos[eventRecordId].filter(p => p.recordId !== photoRecordId);
@@ -2416,7 +2332,9 @@
       }
     }
 
-    function editGalleryCaption(photoRecordId, currentCaption) {
+    function editGalleryCaption(photoRecordId, eventIdx, photoIdx) {
+      const event = allEvents[eventIdx];
+      const currentCaption = event ? (galleryPhotos[event.eventRecordId] || [])[photoIdx]?.caption || '' : '';
       const newCaption = prompt('Edit caption:', currentCaption);
       if (newCaption === null) return; // cancelled
       saveGalleryCaption(photoRecordId, newCaption);
@@ -2424,12 +2342,11 @@
 
     async function saveGalleryCaption(photoRecordId, caption) {
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${PHOTOS_TABLE}/${photoRecordId}`, {
+        await Harumphers.api(`/api/admin/photos/${photoRecordId}`, {
           method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'CAPTION': caption } })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ caption })
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         // Update local data
         for (const eventId in galleryPhotos) {
           const photo = galleryPhotos[eventId].find(p => p.recordId === photoRecordId);
@@ -2447,7 +2364,7 @@
         editingEvent = null;
       } else {
         editingEvent = eventIdx;
-        openEvents.add(eventIdx);
+        openEvents.add(eventStateKey(eventIdx));
       }
       render();
     }
@@ -2467,9 +2384,6 @@
         const file = fileInput.files[0];
         pendingPhotoFiles[eventIdx] = file;
         if (filenameEl) filenameEl.textContent = file.name;
-        // Clear URL input since file takes precedence
-        const urlInput = document.getElementById(`edit-photo-url-${eventIdx}`);
-        if (urlInput) urlInput.value = '';
       }
     }
 
@@ -2479,15 +2393,9 @@
       const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Removing photo...'; }
       try {
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
-          method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'SPEAKER PHOTO': [] } })
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/speaker-photo`, {
+          method: 'DELETE'
         });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-        }
         ev.speakerPhoto = null;
         render();
       } catch (err) {
@@ -2495,20 +2403,37 @@
       }
     }
 
-    async function uploadPhotoFile(file) {
-      // Upload to tmpfiles.org (free, no API key, 1 hour expiry — enough for Airtable to download)
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('https://tmpfiles.org/api/v1/upload', {
-        method: 'POST',
-        body: formData,
+    async function preparePhotoFile(file) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        throw new Error('Use a JPEG, PNG, or WebP image');
+      }
+      const image = await new Promise((resolve, reject) => {
+        const element = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        element.onload = () => { URL.revokeObjectURL(objectUrl); resolve(element); };
+        element.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Could not read this image')); };
+        element.src = objectUrl;
       });
-      if (!res.ok) throw new Error('Photo upload failed');
-      const data = await res.json();
-      // tmpfiles.org returns URL like https://tmpfiles.org/12345/image.jpg
-      // Direct download URL is https://tmpfiles.org/dl/12345/image.jpg
-      const url = data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-      return url;
+      const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      const outputType = file.type === 'image/png' ? 'image/png' : file.type;
+      let quality = 0.88;
+      let blob;
+      do {
+        blob = await new Promise(resolve => canvas.toBlob(resolve, outputType, quality));
+        quality -= 0.1;
+      } while (blob && blob.size > 1024 * 1024 && quality >= 0.48 && outputType !== 'image/png');
+      if (!blob || blob.size > 1024 * 1024) throw new Error('Image is still larger than 1 MB after resizing');
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Could not prepare this image'));
+        reader.readAsDataURL(blob);
+      });
+      return { filename: file.name, contentType: outputType, base64 };
     }
 
     async function saveEventDetails(eventIdx) {
@@ -2519,7 +2444,6 @@
       const time = document.getElementById(`edit-time-${eventIdx}`).value.trim();
       const room = document.getElementById(`edit-room-${eventIdx}`).value.trim();
       const notes = document.getElementById(`edit-notes-${eventIdx}`).value.trim();
-      const photoUrl = document.getElementById(`edit-photo-url-${eventIdx}`).value.trim();
       const status = document.getElementById(`edit-status-${eventIdx}`).value;
       const msgEl = document.getElementById(`edit-msg-${eventIdx}`);
       const saveBtn = document.getElementById(`edit-save-${eventIdx}`);
@@ -2539,129 +2463,24 @@
       if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Saving...'; }
 
       try {
-        // If promoting Suggested/Upcoming → Scheduled and no RSVP column exists yet,
-        // auto-create the RSVP + GUESTS columns. Without this, the events page
-        // would show "RSVP not yet configured" because no Members-table column
-        // would ever match this event.
-        const ns = normalizeStatus(status).toLowerCase();
-        let createdColumns = false;
-        if (ns === 'scheduled' && !ev.fieldName && date && name) {
-          const dt = new Date(date + 'T12:00:00');
-          const mon = dt.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-          const day = dt.getDate();
-          const newRsvpFieldName = `${mon}${day}-${name.toUpperCase()} RSVP`;
-
-          if (msgEl) msgEl.textContent = 'Creating RSVP field...';
-          const fieldRes = await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: newRsvpFieldName,
-              type: 'singleSelect',
-              options: { choices: [
-                { name: 'YES', color: 'greenLight2' },
-                { name: 'NO', color: 'redLight2' },
-                { name: 'MAYBE', color: 'yellowLight2' }
-              ]}
-            })
-          });
-          if (!fieldRes.ok) {
-            const errData = await fieldRes.json().catch(() => ({}));
-            if (fieldRes.status === 403 || fieldRes.status === 422) {
-              throw new Error('Cannot create RSVP field. Token needs schema.bases:write scope.');
-            }
-            throw new Error((errData.error && errData.error.message) || `RSVP field creation failed (${fieldRes.status})`);
-          }
-
-          if (msgEl) msgEl.textContent = 'Creating guest count field...';
-          const nameWords = name.toUpperCase().split(/\s+/);
-          const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
-          const guestFieldName = `GUESTS-${guestKey}`;
-          await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
-          });
-
-          ev.fieldName = newRsvpFieldName;
-          ev.guestFieldName = guestFieldName;
-          createdColumns = true;
-        }
-
-        const fields = {
-          'EVENT NAME': name,
-          'Status': status || null,
-          'NOTES': notes || null,
-          'DATE': date || null,
-          'SPEAKER': speaker || null,
-          'TIME': time || null,
-          'ROOM': room || null,
-        };
-
-        // Handle photo: file upload takes precedence over URL
-        let finalPhotoUrl = photoUrl;
+        if (!ev.eventRecordId) throw new Error('This event needs a valid event record before it can be edited');
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, date, speaker, time, room, notes, status })
+        });
         if (pendingPhotoFiles[eventIdx]) {
           if (msgEl) msgEl.textContent = 'Uploading photo...';
-          finalPhotoUrl = await uploadPhotoFile(pendingPhotoFiles[eventIdx]);
+          const upload = await preparePhotoFile(pendingPhotoFiles[eventIdx]);
+          await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/speaker-photo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(upload)
+          });
           delete pendingPhotoFiles[eventIdx];
         }
-        if (finalPhotoUrl) {
-          fields['SPEAKER PHOTO'] = [{ url: finalPhotoUrl }];
-        }
-
-        if (ev.eventRecordId) {
-          // Update existing EVENTS record
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}/${ev.eventRecordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ typecast: true, fields })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
-            throw new Error(errMsg);
-          }
-        } else {
-          // Create new EVENTS record for this RSVP field
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ typecast: true, fields })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            const errMsg = errData.error ? errData.error.message : `HTTP ${res.status}`;
-            throw new Error(errMsg);
-          }
-          const data = await res.json();
-          ev.eventRecordId = data.id;
-        }
-
-        // If new RSVP/GUESTS columns were created, do a full reload so the
-        // members data and bucket fills include the new columns.
-        if (createdColumns) {
-          if (msgEl) { msgEl.style.color = '#4CAF50'; msgEl.textContent = 'Saved! Reloading...'; }
-          editingEvent = null;
-          await loadEvents();
-          return;
-        }
-
-        // Update local state (no reload needed)
-        ev.name = name;
-        ev.speaker = speaker;
-        ev.date = date;
-        ev.time = time;
-        ev.room = room;
-        ev.notes = notes;
-        ev.isCompleted = ns === 'completed';
-        ev.isSuggested = ns === 'suggested';
-        ev.isUpcoming = ns === 'upcoming' || ns === '';
-        ev.isScheduled = ns === 'scheduled';
-        ev.isCancelled = ns === 'cancelled';
-        ev.status = normalizeStatus(status);
-        if (finalPhotoUrl) ev.speakerPhoto = finalPhotoUrl;
         editingEvent = null;
-        render();
+        await loadEvents();
       } catch (err) {
         if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'Save failed: ' + err.message; }
         if (saveBtn) saveBtn.disabled = false;
@@ -2671,6 +2490,7 @@
     // --- New Event Creation ---
     function toggleNewEvent() {
       showingNewEvent = !showingNewEvent;
+      newEventCreationKey = showingNewEvent ? crypto.randomUUID() : null;
       render();
     }
 
@@ -2678,7 +2498,6 @@
       const name = document.getElementById('new-event-name').value.trim();
       const date = document.getElementById('new-event-date').value;
       const status = document.getElementById('new-event-status').value;
-      const prefix = document.getElementById('new-event-prefix').value.trim();
       const speaker = document.getElementById('new-event-speaker').value.trim();
       const time = document.getElementById('new-event-time').value.trim();
       const room = document.getElementById('new-event-room').value.trim();
@@ -2697,84 +2516,40 @@
         return;
       }
 
-      // Validate prefix ends with RSVP (only needed for Scheduled events)
-      const rsvpFieldName = prefix ? (prefix.toUpperCase().endsWith('RSVP') ? prefix.toUpperCase() : prefix.toUpperCase() + ' RSVP') : null;
-
-      if (status === 'Scheduled' && !prefix) {
-        if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = 'RSVP Field is required for Scheduled events'; }
-        return;
-      }
-
       if (createBtn) createBtn.disabled = true;
 
       try {
-        // Step 1: Create singleSelect RSVP field on Members table (Scheduled only)
-        if (status === 'Scheduled') {
-          if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating RSVP field...'; }
-          const fieldRes = await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: rsvpFieldName,
-              type: 'singleSelect',
-              options: {
-                choices: [
-                  { name: 'YES', color: 'greenLight2' },
-                  { name: 'NO', color: 'redLight2' },
-                  { name: 'MAYBE', color: 'yellowLight2' }
-                ]
-              }
-            })
-          });
-
-          if (!fieldRes.ok) {
-            const errData = await fieldRes.json().catch(() => ({}));
-            if (fieldRes.status === 403 || fieldRes.status === 422) {
-              throw new Error('Token needs schema.bases:write scope. Update token at airtable.com/create/tokens');
-            }
-            throw new Error(errData.error?.message || `Field creation failed (${fieldRes.status})`);
-          }
-
-          // Step 2: Optionally create guest count field
-          if (enableGuests) {
-            if (msgEl) msgEl.textContent = 'Creating guest field...';
-            const nameWords = name.toUpperCase().split(/\s+/);
-            const guestKey = nameWords[0].length > 2 ? nameWords[0] : nameWords.slice(0, 2).join('');
-            const guestFieldName = `GUESTS-${guestKey}`;
-
-            await fetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables/${MEMBERS_TABLE}/fields`, {
-              method: 'POST',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: guestFieldName, type: 'number', options: { precision: 0 } })
-            });
-          }
-        }
-
-        // Step 3: Handle speaker photo upload if provided
-        let photoUrl = null;
-        if (photoInput && photoInput.files && photoInput.files[0]) {
-          if (msgEl) msgEl.textContent = 'Uploading speaker photo...';
-          photoUrl = await uploadPhotoFile(photoInput.files[0]);
-        }
-
-        // Step 4: Create EVENTS table record with all fields
-        if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating event record...'; }
-        const eventFields = { 'EVENT NAME': name, 'Status': status };
-        if (date) eventFields['DATE'] = date;
-        if (speaker) eventFields['SPEAKER'] = speaker;
-        if (time) eventFields['TIME'] = time;
-        if (room) eventFields['ROOM'] = room;
-        if (notes) eventFields['NOTES'] = notes;
-        if (photoUrl) eventFields['SPEAKER PHOTO'] = [{ url: photoUrl }];
-        await fetch(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`, {
+        if (msgEl) { msgEl.style.color = '#aaa'; msgEl.textContent = 'Creating event...'; }
+        const result = await Harumphers.api('/api/admin/events', {
           method: 'POST',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ typecast: true, fields: eventFields })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idempotencyKey: newEventCreationKey,
+            name,
+            date,
+            speaker,
+            time,
+            room,
+            notes,
+            status,
+            enableGuests
+          })
         });
+
+        if (photoInput?.files?.[0]) {
+          if (msgEl) msgEl.textContent = 'Uploading speaker photo...';
+          const upload = await preparePhotoFile(photoInput.files[0]);
+          await Harumphers.api(`/api/admin/events/${result.eventId}/speaker-photo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(upload)
+          });
+        }
 
         // Reload everything
         if (msgEl) { msgEl.style.color = '#4CAF50'; msgEl.textContent = 'Event created! Reloading...'; }
         showingNewEvent = false;
+        newEventCreationKey = null;
         await loadEvents();
       } catch (err) {
         if (msgEl) { msgEl.style.color = '#ff6b6b'; msgEl.textContent = err.message; }
@@ -2816,7 +2591,7 @@
           return `<div class="attendance-row">
             <label>
               <input type="checkbox" id="att-chk-${eventIdx}-${ri}" ${checked ? 'checked' : ''}>
-              <span>${entry.name}</span>
+              <span>${Harumphers.escapeHtml(entry.name)}</span>
             </label>
             <span class="attendance-rsvp-pill ${rsvpCls}">${rsvpLabel}</span>
             <input type="number" class="attendance-guest-input" id="att-guests-${eventIdx}-${ri}"
@@ -2850,6 +2625,17 @@
     }
 
     function buildAttendanceSummary(ev, evAttendance) {
+      if (authMode !== 'admin') {
+        const attended = Object.values(evAttendance).filter(entry => entry.attended);
+        if (attended.length === 0) return '';
+        const totalGuests = attended.reduce((sum, entry) => sum + (entry.actualGuests || 0), 0);
+        return `<div class="attendance-summary">
+          <div class="attendance-summary-title">Attendance</div>
+          <div class="attendance-summary-stats">${attended.length} attended${totalGuests > 0 ? ` + ${totalGuests} guest${totalGuests !== 1 ? 's' : ''}` : ''}</div>
+          <div>${attended.map(entry => `<span class="attendance-chip attended">${Harumphers.escapeHtml(entry.name)}${entry.actualGuests > 0 ? ` (+${entry.actualGuests})` : ''}</span>`).join('')}</div>
+        </div>`;
+      }
+
       const allEntries = [...ev.yes, ...ev.maybe, ...ev.no, ...ev.pending];
       const attended = [];
       const noShows = []; // RSVP'd YES but didn't attend
@@ -2885,15 +2671,15 @@
 
       if (attended.length > 0) {
         html += `<div style="margin-bottom:4px">${attended.map(a =>
-          `<span class="attendance-chip attended">${a.name}${a.guestLabel}</span>`).join('')}</div>`;
+          `<span class="attendance-chip attended">${Harumphers.escapeHtml(a.name)}${a.guestLabel}</span>`).join('')}</div>`;
       }
       if (walkIns.length > 0) {
         html += `<div style="margin-bottom:4px"><span style="font-size:11px;color:#6495ED;font-weight:600">WALK-INS</span> ${walkIns.map(a =>
-          `<span class="attendance-chip walk-in">${a.name}${a.guestLabel}</span>`).join('')}</div>`;
+          `<span class="attendance-chip walk-in">${Harumphers.escapeHtml(a.name)}${a.guestLabel}</span>`).join('')}</div>`;
       }
       if (noShows.length > 0) {
         html += `<div><span style="font-size:11px;color:#ff8a8a;font-weight:600">NO-SHOWS</span> ${noShows.map(a =>
-          `<span class="attendance-chip no-show">${a.name}</span>`).join('')}</div>`;
+          `<span class="attendance-chip no-show">${Harumphers.escapeHtml(a.name)}</span>`).join('')}</div>`;
       }
 
       html += '</div>';
@@ -2919,87 +2705,21 @@
                          ...ev.no.map(e => ({...e, rsvp: 'NO'})),
                          ...ev.pending.map(e => ({...e, rsvp: null}))];
 
-      const evAttendance = attendanceData[ev.eventRecordId] || {};
-
-      // Collect records to create and update
-      const toCreate = [];
-      const toUpdate = [];
-
-      allEntries.forEach((entry, ri) => {
+      const entries = allEntries.map((entry, ri) => {
         const chk = document.getElementById(`att-chk-${eventIdx}-${ri}`);
         const gInput = document.getElementById(`att-guests-${eventIdx}-${ri}`);
         const attended = chk ? chk.checked : false;
         const actualGuests = gInput ? parseInt(gInput.value) || 0 : 0;
-        const existing = evAttendance[entry.recordId];
-
-        if (existing) {
-          // Update if changed
-          if (existing.attended !== attended || existing.actualGuests !== actualGuests) {
-            toUpdate.push({
-              id: existing.recordId,
-              fields: { 'ATTENDED': attended, 'ACTUAL GUESTS': actualGuests }
-            });
-          }
-        } else {
-          // Only create if attended or has guests (skip empty rows)
-          if (attended || actualGuests > 0) {
-            toCreate.push({
-              fields: {
-                'MEMBER RECORD ID': entry.recordId,
-                'MEMBER NAME': entry.name,
-                'EVENT RECORD ID': ev.eventRecordId,
-                'ATTENDED': attended,
-                'ACTUAL GUESTS': actualGuests,
-              }
-            });
-          }
-        }
+        return { memberId: entry.recordId, attended, actualGuests };
       });
 
       try {
-        // Batch creates (Airtable max 10 per request)
-        for (let j = 0; j < toCreate.length; j += 10) {
-          const batch = toCreate.slice(j, j + 10);
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ records: batch })
-          });
-          if (!res.ok) throw new Error(`Create failed: ${res.status}`);
-          // Update local cache with new record IDs
-          const data = await res.json();
-          data.records.forEach(r => {
-            const f = r.fields;
-            const memberId = f['MEMBER RECORD ID'];
-            if (!attendanceData[ev.eventRecordId]) attendanceData[ev.eventRecordId] = {};
-            attendanceData[ev.eventRecordId][memberId] = {
-              attended: !!f['ATTENDED'],
-              actualGuests: f['ACTUAL GUESTS'] || 0,
-              recordId: r.id,
-            };
-          });
-        }
-
-        // Batch updates (Airtable max 10 per request)
-        for (let j = 0; j < toUpdate.length; j += 10) {
-          const batch = toUpdate.slice(j, j + 10);
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${ATTENDANCE_TABLE}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ records: batch })
-          });
-          if (!res.ok) throw new Error(`Update failed: ${res.status}`);
-          // Update local cache
-          const data = await res.json();
-          data.records.forEach(r => {
-            const f = r.fields;
-            const memberId = f['MEMBER RECORD ID'];
-            if (attendanceData[ev.eventRecordId] && attendanceData[ev.eventRecordId][memberId]) {
-              attendanceData[ev.eventRecordId][memberId].attended = !!f['ATTENDED'];
-              attendanceData[ev.eventRecordId][memberId].actualGuests = f['ACTUAL GUESTS'] || 0;
-            }
-          });
-        }
+        await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/attendance`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries })
+        });
+        await loadEvents();
 
         if (msgEl) { msgEl.className = 'attendance-msg success'; msgEl.textContent = 'Attendance saved!'; }
         showingAttendance = null;
@@ -3030,20 +2750,25 @@
       if (!ev.eventRecordId) return '';
 
       const evVotes = votesData[ev.eventRecordId] || {};
-      let upCount = 0, downCount = 0;
+      let upCount = voteTalliesData[ev.eventRecordId]?.up || 0;
+      let downCount = voteTalliesData[ev.eventRecordId]?.down || 0;
       const upVoters = [], downVoters = [];
 
-      for (const memberId in evVotes) {
-        const v = evVotes[memberId];
-        const member = allMembers.find(m => m.id === memberId);
-        if (!member) continue;
-        const name = member.fields['FULL NAME'] || 'Unknown';
-        if (v.vote === 'UP') {
-          upCount++;
-          upVoters.push({ memberId, name });
-        } else if (v.vote === 'DOWN') {
-          downCount++;
-          downVoters.push({ memberId, name });
+      if (authMode === 'admin' || !voteTalliesData[ev.eventRecordId]) {
+        upCount = 0;
+        downCount = 0;
+        for (const memberId in evVotes) {
+          const v = evVotes[memberId];
+          const member = allMembers.find(m => m.id === memberId);
+          if (!member) continue;
+          const name = member.fields['FULL NAME'] || 'Unknown';
+          if (v.vote === 'UP') {
+            upCount++;
+            upVoters.push({ memberId, name });
+          } else if (v.vote === 'DOWN') {
+            downCount++;
+            downVoters.push({ memberId, name });
+          }
         }
       }
 
@@ -3072,7 +2797,7 @@
           return `<div style="margin-top:8px"><span style="font-size:11px;color:${cls === 'up' ? '#81C784' : '#ff8a8a'};font-weight:600">${label}</span> ` +
             voters.map(v => {
               const isEditing = inlineVoteEdit && inlineVoteEdit.eventIdx === eventIdx && inlineVoteEdit.memberId === v.memberId;
-              const chip = `<span class="vote-chip ${cls}" style="cursor:pointer" onclick="event.stopPropagation(); openInlineVoteEdit(${eventIdx}, '${v.memberId}')" title="Click to edit ${v.name}'s vote">${v.name}</span>`;
+              const chip = `<span class="vote-chip ${cls}" style="cursor:pointer" onclick="event.stopPropagation(); openInlineVoteEdit(${eventIdx}, '${v.memberId}')" title="Edit vote">${Harumphers.escapeHtml(v.name)}</span>`;
               return chip + (isEditing ? buildInlineVoteEditPanel(eventIdx, v.memberId, cls === 'up' ? 'UP' : 'DOWN') : '');
             }).join('') +
             `</div>`;
@@ -3086,13 +2811,13 @@
           && !evVotes[inlineVoteEdit.memberId];
         const nonVoterPanel = nonVoterEditing
           ? `<div style="margin-top:6px;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px">
-               <div style="font-size:12px;color:#aaa;margin-bottom:4px">${(allMembers.find(m => m.id === inlineVoteEdit.memberId) || {}).fields?.['FULL NAME'] || 'Member'}</div>
+               <div style="font-size:12px;color:#aaa;margin-bottom:4px">${Harumphers.escapeHtml((allMembers.find(m => m.id === inlineVoteEdit.memberId) || {}).fields?.['FULL NAME'] || 'Member')}</div>
                ${buildInlineVoteEditPanel(eventIdx, inlineVoteEdit.memberId, null)}
              </div>`
           : '';
         const nonVoterOptions = allMembers
           .filter(m => !evVotes[m.id])
-          .map(m => `<option value="${m.id}">${m.fields['FULL NAME'] || 'Unknown'}</option>`)
+          .map(m => `<option value="${m.id}">${Harumphers.escapeHtml(m.fields['FULL NAME'] || 'Unknown')}</option>`)
           .join('');
         if (nonVoterOptions) {
           voterLists += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">
@@ -3152,77 +2877,20 @@
       if (msgEl) { msgEl.className = 'vote-msg'; msgEl.textContent = 'Submitting...'; }
 
       try {
-        const evVotes = votesData[ev.eventRecordId] || {};
-        const existing = evVotes[myInfo.recordId];
-
-        if (value === null) {
-          // DELETE existing vote
-          if (existing && existing.recordId) {
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-              method: 'DELETE',
-              headers: { 'X-Harumphers-Key': API_KEY },
-            });
-            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
-          }
-          // Remove from local cache
-          if (votesData[ev.eventRecordId]) {
-            delete votesData[ev.eventRecordId][myInfo.recordId];
-          }
-        } else if (existing && existing.recordId) {
-          // PATCH existing vote record
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'VOTE': value } })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-          }
-          // Update local cache
-          if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
-          votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: existing.recordId };
-        } else {
-          // No local record — query Airtable for deduplication
-          const formula = encodeURIComponent(`AND({MEMBER RECORD ID}="${myInfo.recordId}",{EVENT RECORD ID}="${ev.eventRecordId}")`);
-          const checkRes = await apiFetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
-          if (checkRes.records && checkRes.records.length > 0) {
-            // Found existing — PATCH
-            const existingId = checkRes.records[0].id;
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
-              method: 'PATCH',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: { 'VOTE': value } })
-            });
-            if (!res.ok) {
-              const errData = await res.json().catch(() => ({}));
-              throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-            }
-            if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
-            votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: existingId };
-          } else {
-            // No existing record — POST new
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
-              method: 'POST',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fields: {
-                  'MEMBER RECORD ID': myInfo.recordId,
-                  'MEMBER NAME': myInfo.name || '',
-                  'EVENT RECORD ID': ev.eventRecordId,
-                  'VOTE': value,
-                }
-              })
-            });
-            if (!res.ok) {
-              const errData = await res.json().catch(() => ({}));
-              throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-            }
-            const data = await res.json();
-            if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
-            votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: data.id };
-          }
-        }
+        const result = await Harumphers.api(`/api/events/${ev.eventRecordId}/vote`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote: value })
+        });
+        const currentVote = votesData[ev.eventRecordId]?.[myInfo.recordId]?.vote || null;
+        const tally = voteTalliesData[ev.eventRecordId] ??= { up: 0, down: 0 };
+        if (currentVote === 'UP') tally.up = Math.max(0, tally.up - 1);
+        if (currentVote === 'DOWN') tally.down = Math.max(0, tally.down - 1);
+        if (value === 'UP') tally.up += 1;
+        if (value === 'DOWN') tally.down += 1;
+        if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
+        if (value === null) delete votesData[ev.eventRecordId][myInfo.recordId];
+        else votesData[ev.eventRecordId][myInfo.recordId] = { vote: value, recordId: result.id };
 
         // Show success
         render();
@@ -3266,50 +2934,13 @@
       try {
         if (!votesData[ev.eventRecordId]) votesData[ev.eventRecordId] = {};
         const evVotes = votesData[ev.eventRecordId];
-        const existing = evVotes[memberId];
-
-        if (value === null) {
-          if (existing && existing.recordId) {
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-              method: 'DELETE',
-              headers: { 'X-Harumphers-Key': API_KEY },
-            });
-            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
-          }
-          delete evVotes[memberId];
-        } else if (existing && existing.recordId) {
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'VOTE': value } })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-          }
-          evVotes[memberId] = { vote: value, recordId: existing.recordId };
-        } else {
-          // No existing record — POST new (skip the dedup-query optimization
-          // since admin edits are rare and the local cache should be fresh enough).
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
-            method: 'POST',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fields: {
-                'MEMBER RECORD ID': memberId,
-                'MEMBER NAME': member.fields['FULL NAME'] || '',
-                'EVENT RECORD ID': ev.eventRecordId,
-                'VOTE': value,
-              }
-            })
-          });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-          }
-          const data = await res.json();
-          evVotes[memberId] = { vote: value, recordId: data.id };
-        }
+        const result = await Harumphers.api(`/api/admin/events/${ev.eventRecordId}/votes/${memberId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote: value })
+        });
+        if (value === null) delete evVotes[memberId];
+        else evVotes[memberId] = { vote: value, recordId: result.id };
 
         // Close the inline editor and re-render so the chip moves to its new tier
         inlineVoteEdit = null;
@@ -3340,14 +2971,35 @@
       }
     }
 
-    applyApprovedChanges().then(() => loadEvents()).catch(err => {
-      document.getElementById('content').innerHTML = `
-        <div class="error">
-          <p>Could not load events</p>
-          <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
-          <a href="index.html">&larr; Back to Home</a>
-        </div>`;
-    });
+    async function initializeEvents() {
+      try {
+        const session = await Harumphers.getSession();
+        authMode = session.role;
+        if (session.role === 'member') {
+          const member = await Harumphers.api('/api/me');
+          myInfo = {
+            recordId: member.id,
+            name: member.fields?.['FULL NAME'] || '',
+            duqId: member.fields?.['MEMBER #'] || ''
+          };
+        }
+        await loadEvents();
+      } catch (err) {
+        if (['SESSION_REQUIRED', 'SESSION_INVALID', 'SESSION_EXPIRED'].includes(err.code)) {
+          Harumphers.logout();
+          window.location.href = 'index.html';
+          return;
+        }
+        document.getElementById('content').innerHTML = `
+          <div class="error">
+            <p>Could not load events</p>
+            <p style="font-size:13px;color:#888;margin-top:8px;">${err.message}</p>
+            <a href="index.html">&larr; Back to Home</a>
+          </div>`;
+      }
+    }
+
+    initializeEvents();
   </script>
 </body>
 </html>

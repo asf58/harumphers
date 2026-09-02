@@ -38,7 +38,7 @@
 
     body.logged-in {
       justify-content: flex-start;
-      padding-top: 70px;
+      padding-top: calc(70px + env(safe-area-inset-top));
       padding-bottom: calc(78px + env(safe-area-inset-bottom));
     }
 
@@ -49,7 +49,7 @@
       left: 0;
       right: 0;
       background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
-      padding: 12px 20px;
+      padding: calc(12px + env(safe-area-inset-top)) 20px 12px;
       display: flex;
       align-items: center;
       z-index: 100;
@@ -80,6 +80,11 @@
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .container { text-align: center; max-width: 400px; }
@@ -653,6 +658,23 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible {
+      outline: 3px solid #FFD700;
+      outline-offset: 3px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
     /* Member Request Submission Form (login screen) */
     .submit-request {
       margin-top: 20px;
@@ -1037,7 +1059,7 @@
     <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
     <h1>HARUMPHERS</h1>
     <p class="subtitle" style="margin-bottom:30px">Member Directory & Events</p>
-    <input type="text" id="pw" placeholder="Password or Member #" autocomplete="off">
+    <input type="text" id="pw" aria-label="Password or Member number" placeholder="Password or Member #" autocomplete="off">
     <div class="gate-error" id="gate-error"></div>
     <button class="btn" onclick="checkPassword()">Enter</button>
   </div>
@@ -1187,18 +1209,10 @@
     </div>
   </div>
 
+  <script src="assets/harumphers-client.js" data-api-origin="https://harumphers-api.adamsfeuer.workers.dev"></script>
   <script>
-    // Airtable calls go through our Cloudflare Worker proxy.
-    // The Worker injects the real Airtable PAT server-side (no longer in client JS),
-    // and caches GET responses so all members share one upstream fetch per ~5min.
-    const API_BASE = 'https://harumphers-api.adamsfeuer.workers.dev';
-    const API_KEY = 'QtS8Oq-sU1SwjalDXjY4atSmwIW8fYs9gQ9w0KfvDJw';
-    const BASE_ID = 'appW7Df1qJlznxxtf';
-    const MEMBERS_TABLE = 'tbltzPyERz9wGE0zd';
-    const EVENTS_TABLE = 'tblzPscL5Q2a2SZk1';
-    const REQUESTS_TABLE = 'tblz8NLFYE7XsOhrR';
-    const VOTES_TABLE = 'tblnpBxZ7N6X7004t';
     let votesData = {}; // eventRecordId -> { memberRecordId: { vote, recordId } }
+    let voteTalliesData = {}; // eventRecordId -> { up, down }
     let votingInFlight = new Set();
 
     function normalizeStatus(raw) {
@@ -1210,30 +1224,31 @@
       return 'Upcoming';
     }
 
-    // --- Auth Helpers (duplicated in each page) ---
+    // --- Auth Helpers ---
+    let currentAuthMode = null;
+    let currentMemberInfo = null;
+
     function getAuthMode() {
-      const auth = localStorage.getItem('harumphers_auth');
-      if (auth === 'admin') return 'admin';
-      if (auth === 'member') return 'member';
-      if (auth === 'guest' || auth === '1') return 'guest';
-      return null;
+      return currentAuthMode;
     }
 
     function getMemberInfo() {
-      const recordId = localStorage.getItem('harumphers_member_id');
-      const name = localStorage.getItem('harumphers_member_name');
-      const duqId = localStorage.getItem('harumphers_duq_id');
-      if (!recordId) return null;
-      return { recordId, name, duqId };
+      return currentMemberInfo;
     }
 
     function logout() {
-      localStorage.removeItem('harumphers_auth');
-      localStorage.removeItem('harumphers_member_id');
-      localStorage.removeItem('harumphers_member_name');
-      localStorage.removeItem('harumphers_duq_id');
-      localStorage.removeItem('harumphers_myname');
+      Harumphers.logout();
       window.location.href = 'index.html';
+    }
+
+    async function loadMemberIdentity() {
+      const record = await Harumphers.api('/api/me');
+      currentMemberInfo = {
+        recordId: record.id,
+        name: record.fields?.['FULL NAME'] || '',
+        duqId: record.fields?.['MEMBER #'] || ''
+      };
+      return record;
     }
 
     // --- Platform detection ---
@@ -1246,41 +1261,6 @@
     // --- Service Worker ---
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
-
-    // --- API helpers ---
-    async function apiFetch(url) {
-      const res = await fetch(url, {
-        headers: { 'X-Harumphers-Key': API_KEY }
-      });
-      if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
-      return res.json();
-    }
-
-    async function apiFetchAll(url) {
-      let allRecords = [];
-      let fetchUrl = url;
-      while (true) {
-        const data = await apiFetch(fetchUrl);
-        allRecords = allRecords.concat(data.records);
-        if (!data.offset) break;
-        const sep = fetchUrl.includes('?') ? '&' : '?';
-        fetchUrl = url + sep + 'offset=' + encodeURIComponent(data.offset);
-      }
-      return { records: allRecords };
-    }
-
-    async function apiPatch(recordId, fields) {
-      const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${recordId}`, {
-        method: 'PATCH',
-        headers: {
-          'X-Harumphers-Key': API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ fields })
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      return res.json();
     }
 
     // --- Login Logic ---
@@ -1318,20 +1298,6 @@
 
       if (!raw) return;
 
-      // Check for admin password (case-sensitive)
-      if (raw === 'Hrumphr904') {
-        localStorage.setItem('harumphers_auth', 'admin');
-        showMemberHome();
-        return;
-      }
-
-      // Check for guest password (case-insensitive)
-      if (raw.toLowerCase() === 'cigar') {
-        localStorage.setItem('harumphers_auth', 'guest');
-        showGuestHome();
-        return;
-      }
-
       // Check for Duquesne member # (all digits)
       if (/^\d+$/.test(raw)) {
         // Reject all-zeros input. In Airtable, a blank number field is treated
@@ -1351,48 +1317,47 @@
         errorEl.style.color = '#FFD700';
 
         try {
-          // The {MEMBER #}>0 clause excludes records with blank MEMBER #
-          // (which Airtable would otherwise coerce to 0 for the = comparison).
-          const formula = encodeURIComponent(`AND({MEMBER #}=${raw}, {MEMBER #}>0)`);
-          const url = `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}?filterByFormula=${formula}`;
-          const data = await apiFetch(url);
-
-          if (data.records && data.records.length > 0) {
-            const rec = data.records[0];
-            // Defense in depth: verify the returned record's MEMBER # exactly
-            // equals the input. Guards against any future formula coercion.
-            const actualNum = rec.fields['MEMBER #'];
-            if (actualNum == null || parseInt(actualNum, 10) !== parseInt(raw, 10)) {
-              errorEl.style.color = '#ff6b6b';
-              errorEl.textContent = 'Incorrect password or member #';
-              document.getElementById('pw').value = '';
-              document.getElementById('pw').focus();
-              return;
-            }
-            const role = rec.fields['IS ADMIN'] === true ? 'admin' : 'member';
-            localStorage.setItem('harumphers_auth', role);
-            localStorage.setItem('harumphers_member_id', rec.id);
-            localStorage.setItem('harumphers_member_name', rec.fields['FULL NAME'] || '');
-            localStorage.setItem('harumphers_duq_id', raw);
-            localStorage.setItem('harumphers_myname', rec.fields['FULL NAME'] || '');
-            showMemberHome();
-            return;
-          } else {
+          await Harumphers.loginMember(Number(raw));
+          currentAuthMode = 'member';
+          memberRecord = await loadMemberIdentity();
+          showMemberHome();
+          return;
+        } catch (err) {
+          if (err.code === 'LOGIN_FAILED') {
             showSubmissionForm(raw);
             return;
           }
-        } catch (err) {
           errorEl.style.color = '#ff6b6b';
           errorEl.textContent = 'Network error. Try again.';
           return;
         }
       }
 
-      // Nothing matched
-      errorEl.style.color = '#ff6b6b';
-      errorEl.textContent = 'Incorrect password or member #';
-      document.getElementById('pw').value = '';
-      document.getElementById('pw').focus();
+      try {
+        await Harumphers.loginGuest(raw);
+        currentAuthMode = 'guest';
+        showGuestHome();
+        return;
+      } catch (err) {
+        if (err.code !== 'LOGIN_FAILED') {
+          errorEl.style.color = '#ff6b6b';
+          errorEl.textContent = 'Network error. Try again.';
+          return;
+        }
+      }
+
+      try {
+        await Harumphers.loginAdmin(raw);
+        currentAuthMode = 'admin';
+        showMemberHome();
+      } catch (err) {
+        errorEl.style.color = '#ff6b6b';
+        errorEl.textContent = err.code === 'LOGIN_FAILED'
+          ? 'Incorrect password or member #'
+          : 'Network error. Try again.';
+        document.getElementById('pw').value = '';
+        document.getElementById('pw').focus();
+      }
     }
 
     document.getElementById('pw').addEventListener('keydown', e => {
@@ -1418,12 +1383,13 @@
         return;
       }
 
+      if (memberRecord) {
+        renderProfile();
+        return;
+      }
+
       try {
-        // Fetch full record (no fields[] filter - avoids URL encoding issues)
-        const data = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`
-        );
-        memberRecord = data;
+        memberRecord = await loadMemberIdentity();
         renderProfile();
       } catch (err) {
         if (strip) strip.innerHTML = `
@@ -1456,16 +1422,17 @@
         ? `${words[0][0]}${words[words.length-1][0]}`.toUpperCase()
         : (words[0] || '').substring(0,2).toUpperCase();
 
-      const photoHtml = photoUrl
-        ? `<img class="ws-photo" src="${photoUrl}" alt="" onerror="this.outerHTML='<div class=\\'ws-photo\\'>${initials}</div>'">`
-        : `<div class="ws-photo">${initials}</div>`;
+      const safePhotoUrl = Harumphers.safeImageUrl(photoUrl);
+      const photoHtml = safePhotoUrl
+        ? `<img class="ws-photo" src="${Harumphers.escapeHtml(safePhotoUrl)}" alt="">`
+        : `<div class="ws-photo">${Harumphers.escapeHtml(initials)}</div>`;
 
       const editLabel = editFormVisible ? 'Close' : 'Edit info';
       strip.innerHTML = `
         ${photoHtml}
         <div class="ws-greet">
           <div class="ws-hi">Welcome back,</div>
-          <div class="ws-name">${firstName}</div>
+          <div class="ws-name">${Harumphers.escapeHtml(firstName)}</div>
         </div>
         <div class="ws-edit" onclick="toggleProfileEdit()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -1478,16 +1445,16 @@
         card.innerHTML = `
           <div class="profile-edit-form">
             <div class="field">
-              <label>Name</label>
-              <input type="text" id="prof-name" value="${name}">
+              <label for="prof-name">Name</label>
+              <input type="text" id="prof-name" value="${Harumphers.escapeHtml(name)}">
             </div>
             <div class="field">
-              <label>Phone</label>
-              <input type="tel" id="prof-phone" value="${phone}" placeholder="(412) 555-1234">
+              <label for="prof-phone">Phone</label>
+              <input type="tel" id="prof-phone" value="${Harumphers.escapeHtml(phone)}" placeholder="(412) 555-1234">
             </div>
             <div class="field">
-              <label>Email</label>
-              <input type="email" id="prof-email" value="${email}" placeholder="email@example.com">
+              <label for="prof-email">Email</label>
+              <input type="email" id="prof-email" value="${Harumphers.escapeHtml(email)}" placeholder="email@example.com">
             </div>
             <button class="profile-save-btn" id="prof-save-btn" onclick="saveProfile()">Save Changes</button>
             <div class="profile-edit-msg" id="prof-msg"></div>
@@ -1514,13 +1481,12 @@
       const msgEl = document.getElementById('prof-msg');
       const saveBtn = document.getElementById('prof-save-btn');
 
-      const updates = {};
       const f = memberRecord.fields;
-      if (newName && newName !== f['FULL NAME']) updates['FULL NAME'] = newName;
-      if (newPhone !== (f['CELL #'] || '')) updates['CELL #'] = newPhone;
-      if (newEmail !== (f['E-MAIL ADDRESS'] || '')) updates['E-MAIL ADDRESS'] = newEmail;
-
-      if (Object.keys(updates).length === 0) {
+      if (
+        newName === f['FULL NAME']
+        && newPhone === (f['CELL #'] || '')
+        && newEmail === (f['E-MAIL ADDRESS'] || '')
+      ) {
         msgEl.className = 'profile-edit-msg error';
         msgEl.textContent = 'No changes detected';
         return;
@@ -1531,13 +1497,14 @@
       msgEl.textContent = 'Saving...';
 
       try {
-        const updated = await apiPatch(info.recordId, updates);
+        const updated = await Harumphers.api('/api/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName, phone: newPhone, email: newEmail })
+        });
         memberRecord = updated;
 
-        if (updates['FULL NAME']) {
-          localStorage.setItem('harumphers_member_name', updates['FULL NAME']);
-          localStorage.setItem('harumphers_myname', updates['FULL NAME']);
-        }
+        currentMemberInfo.name = newName;
 
         editFormVisible = false;
         renderProfile();
@@ -1554,6 +1521,10 @@
 
     // Find matching guest field using multiple strategies
     function findGuestField(guestFields, fieldWords, matched) {
+      const exactGuestField = matched?.['GUEST FIELD'];
+      if (typeof exactGuestField === 'string' && guestFields.some(field => field.name === exactGuestField)) {
+        return exactGuestField;
+      }
       for (const gf of guestFields) {
         const guestKey = gf.name.toUpperCase().replace('GUESTS-', '').trim();
         // Strategy 1: bidirectional word matching with RSVP field words
@@ -1584,27 +1555,22 @@
       }
 
       try {
-        // Get table metadata for RSVP + GUESTS fields
-        const meta = await apiFetch(`${API_BASE}/v0/meta/bases/${BASE_ID}/tables`);
-        const membersTable = meta.tables.find(t => t.id === MEMBERS_TABLE);
-        const rsvpFields = membersTable.fields.filter(f =>
+        const bootstrap = await Harumphers.api('/api/events');
+        const rsvpFields = bootstrap.memberFields.filter(f =>
           f.type === 'singleSelect' && f.name.toUpperCase().includes('RSVP')
         );
-        const guestFields = membersTable.fields.filter(f =>
+        const guestFields = bootstrap.memberFields.filter(f =>
           f.name.toUpperCase().startsWith('GUESTS-')
         );
 
-        // Get event details (preserve record IDs)
-        const eventsData = await apiFetchAll(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`);
-        const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
+        const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
 
-        // Load votes data
+        voteTalliesData = bootstrap.voteTallies || {};
+
+        // Only administrators receive identity-bearing vote rows.
         votesData = {};
         try {
-          const votesRaw = await apiFetchAll(
-            `${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`
-          );
-          votesRaw.records.forEach(r => {
+          bootstrap.votes.forEach(r => {
             const f = r.fields;
             const eventId = f['EVENT RECORD ID'];
             const memberId = f['MEMBER RECORD ID'];
@@ -1618,18 +1584,21 @@
         } catch (e) { /* votes load failure is non-fatal */ }
 
         // Get member's full record (no fields filter)
-        const memberData = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}/${info.recordId}`
-        );
+        const memberData = await Harumphers.api('/api/me');
         myMemberRecord = memberData;
         const myFields = memberData.fields || {};
+        const memberVotes = await Harumphers.api('/api/me/votes');
+        memberVotes.votes.forEach(item => {
+          if (!votesData[item.eventId]) votesData[item.eventId] = {};
+          votesData[item.eventId][memberData.id] = { vote: item.vote };
+        });
 
         // Build quick event list from RSVP fields (Scheduled events have RSVP columns)
         const rsvpEvents = rsvpFields.map(field => {
           const fieldWords = field.name.toUpperCase()
             .replace('RSVP', '').replace(/[^A-Z\s]/g, '').trim().split(/\s+/);
 
-          let matched = eventDetails.find(e => {
+          let matched = eventDetails.find(e => e['RSVP FIELD'] === field.name) || eventDetails.find(e => {
             const eName = (e['EVENT NAME'] || '').toUpperCase();
             return fieldWords.some(w => w.length > 2 && eName.includes(w));
           });
@@ -1723,16 +1692,15 @@
       const container = document.getElementById('guest-quick-events');
 
       try {
-        const eventsData = await apiFetchAll(`${API_BASE}/v0/${BASE_ID}/${EVENTS_TABLE}`);
-        const eventDetails = eventsData.records.map(r => ({ _recordId: r.id, ...r.fields }));
+        const bootstrap = await Harumphers.api('/api/events');
+        const eventDetails = bootstrap.events.map(r => ({ _recordId: r.id, ...r.fields }));
+
+        voteTalliesData = bootstrap.voteTallies || {};
 
         // Load votes data for tallies
         votesData = {};
         try {
-          const votesRaw = await apiFetchAll(
-            `${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`
-          );
-          votesRaw.records.forEach(r => {
+          bootstrap.votes.forEach(r => {
             const f = r.fields;
             const eventId = f['EVENT RECORD ID'];
             const memberId = f['MEMBER RECORD ID'];
@@ -1839,12 +1807,13 @@
     }
 
     function buildScheduledCard(ev, i, isGuest) {
-      const speakerImg = ev.speakerPhoto
-        ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+      const safeSpeakerPhoto = Harumphers.safeImageUrl(ev.speakerPhoto);
+      const speakerImg = safeSpeakerPhoto
+        ? `<img src="${Harumphers.escapeHtml(safeSpeakerPhoto)}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
         : '';
       const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
       const detailLine = detailParts.length > 0
-        ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+        ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.map(Harumphers.escapeHtml).join(' &bull; ')}</div>`
         : '';
 
       // RSVP pill and buttons only for members/admins with RSVP field
@@ -1854,8 +1823,8 @@
           <div class="qe-top">
             ${speakerImg}
             <div class="qe-info" style="flex:1;min-width:0">
-              <div class="qe-name">${ev.name}</div>
-              ${ev.date ? `<div class="qe-date">${ev.date}</div>` : ''}
+              <div class="qe-name">${Harumphers.escapeHtml(ev.name)}</div>
+              ${ev.date ? `<div class="qe-date">${Harumphers.escapeHtml(ev.date)}</div>` : ''}
               ${detailLine}
             </div>
           </div>
@@ -1865,21 +1834,18 @@
       let pillClass = 'none';
       let pillText = 'NEEDS RSVP';
       let needsRsvp = true;
-      if (ev.rsvp) {
+      const rsvpState = Harumphers.classifyRsvp(ev.rsvp);
+      if (rsvpState === 'yes' || rsvpState === 'no' || rsvpState === 'maybe') {
         needsRsvp = false;
-        const upper = ev.rsvp.toUpperCase();
-        if (upper.includes('YES') || upper.includes('GOING')) { pillClass = 'yes'; pillText = 'GOING'; }
-        else if (upper.includes('NO')) { pillClass = 'no'; pillText = 'NOT GOING'; }
+        if (rsvpState === 'yes') { pillClass = 'yes'; pillText = 'GOING'; }
+        else if (rsvpState === 'no') { pillClass = 'no'; pillText = 'NOT GOING'; }
         else { pillClass = 'maybe'; pillText = 'MAYBE'; }
       }
 
       let activeYes = '', activeMaybe = '', activeNo = '';
-      if (ev.rsvp) {
-        const upper = ev.rsvp.toUpperCase();
-        if (upper.includes('YES') || upper.includes('GOING')) activeYes = ' active';
-        else if (upper.includes('NO')) activeNo = ' active';
-        else activeMaybe = ' active';
-      }
+      if (rsvpState === 'yes') activeYes = ' active';
+      else if (rsvpState === 'no') activeNo = ' active';
+      else if (rsvpState === 'maybe') activeMaybe = ' active';
 
       let guestRow = '';
       if (ev.guestFieldName) {
@@ -1896,8 +1862,8 @@
         <div class="qe-top">
           ${speakerImg}
           <div class="qe-info" style="flex:1;min-width:0">
-            <div class="qe-name">${ev.name}</div>
-            ${ev.date ? `<div class="qe-date">${ev.date}</div>` : ''}
+            <div class="qe-name">${Harumphers.escapeHtml(ev.name)}</div>
+            ${ev.date ? `<div class="qe-date">${Harumphers.escapeHtml(ev.date)}</div>` : ''}
             ${detailLine}
           </div>
           <span class="rsvp-pill ${pillClass}">${pillText}</span>
@@ -1913,19 +1879,20 @@
     }
 
     function buildUpcomingCard(ev, i) {
-      const speakerImg = ev.speakerPhoto
-        ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+      const safeSpeakerPhoto = Harumphers.safeImageUrl(ev.speakerPhoto);
+      const speakerImg = safeSpeakerPhoto
+        ? `<img src="${Harumphers.escapeHtml(safeSpeakerPhoto)}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
         : '';
       const detailParts = [ev.speaker, ev.time, ev.room].filter(Boolean);
       const detailLine = detailParts.length > 0
-        ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.join(' &bull; ')}</div>`
+        ? `<div style="font-size:11px;color:#888;margin-top:2px">${detailParts.map(Harumphers.escapeHtml).join(' &bull; ')}</div>`
         : '';
 
       return `<div class="qe-card">
         <div class="qe-top">
           ${speakerImg}
           <div class="qe-info" style="flex:1;min-width:0">
-            <div class="qe-name">${ev.name}</div>
+            <div class="qe-name">${Harumphers.escapeHtml(ev.name)}</div>
             ${detailLine}
           </div>
           <span class="rsvp-pill tbd">TBD</span>
@@ -1934,16 +1901,20 @@
     }
 
     function buildSuggestedCard(ev, i, isGuest, isMemberOrAdmin) {
-      const speakerImg = ev.speakerPhoto
-        ? `<img src="${ev.speakerPhoto}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+      const safeSpeakerPhoto = Harumphers.safeImageUrl(ev.speakerPhoto);
+      const speakerImg = safeSpeakerPhoto
+        ? `<img src="${Harumphers.escapeHtml(safeSpeakerPhoto)}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0">`
         : '';
 
       // Vote tally
       const evVotes = ev._recordId ? (votesData[ev._recordId] || {}) : {};
-      let upCount = 0, downCount = 0;
-      for (const memberId in evVotes) {
-        if (evVotes[memberId].vote === 'UP') upCount++;
-        else if (evVotes[memberId].vote === 'DOWN') downCount++;
+      let upCount = voteTalliesData[ev._recordId]?.up || 0;
+      let downCount = voteTalliesData[ev._recordId]?.down || 0;
+      if (!voteTalliesData[ev._recordId]) {
+        for (const memberId in evVotes) {
+          if (evVotes[memberId].vote === 'UP') upCount++;
+          else if (evVotes[memberId].vote === 'DOWN') downCount++;
+        }
       }
       const tallyHtml = (upCount > 0 || downCount > 0)
         ? `<div class="qe-vote-tally">${upCount} up / ${downCount} down</div>`
@@ -1980,8 +1951,8 @@
         <div class="qe-top">
           ${speakerImg}
           <div class="qe-info" style="flex:1;min-width:0">
-            <div class="qe-name">${ev.name}</div>
-            ${ev.speaker ? `<div style="font-size:11px;color:#888;margin-top:2px">${ev.speaker}</div>` : ''}
+            <div class="qe-name">${Harumphers.escapeHtml(ev.name)}</div>
+            ${ev.speaker ? `<div style="font-size:11px;color:#888;margin-top:2px">${Harumphers.escapeHtml(ev.speaker)}</div>` : ''}
           </div>
           ${votePill}
         </div>
@@ -2016,63 +1987,19 @@
         // If clicking the same vote, toggle it off (clear)
         const currentVote = existing ? existing.vote : null;
         const newValue = (currentVote === value) ? null : value;
-
-        if (newValue === null) {
-          // DELETE existing vote
-          if (existing && existing.recordId) {
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-              method: 'DELETE',
-              headers: { 'X-Harumphers-Key': API_KEY },
-            });
-            if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
-          }
-          if (votesData[ev._recordId]) {
-            delete votesData[ev._recordId][info.recordId];
-          }
-        } else if (existing && existing.recordId) {
-          // PATCH existing vote record
-          const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existing.recordId}`, {
-            method: 'PATCH',
-            headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'VOTE': newValue } })
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
-          votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: existing.recordId };
-        } else {
-          // No local record — query Airtable for deduplication
-          const formula = encodeURIComponent(`AND({MEMBER RECORD ID}="${info.recordId}",{EVENT RECORD ID}="${ev._recordId}")`);
-          const checkRes = await apiFetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}?filterByFormula=${formula}`);
-          if (checkRes.records && checkRes.records.length > 0) {
-            const existingId = checkRes.records[0].id;
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}/${existingId}`, {
-              method: 'PATCH',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fields: { 'VOTE': newValue } })
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
-            votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: existingId };
-          } else {
-            // POST new vote
-            const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${VOTES_TABLE}`, {
-              method: 'POST',
-              headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fields: {
-                  'MEMBER RECORD ID': info.recordId,
-                  'MEMBER NAME': info.name || '',
-                  'EVENT RECORD ID': ev._recordId,
-                  'VOTE': newValue,
-                }
-              })
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
-            votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: data.id };
-          }
-        }
+        const result = await Harumphers.api(`/api/events/${ev._recordId}/vote`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote: newValue })
+        });
+        const tally = voteTalliesData[ev._recordId] ??= { up: 0, down: 0 };
+        if (currentVote === 'UP') tally.up = Math.max(0, tally.up - 1);
+        if (currentVote === 'DOWN') tally.down = Math.max(0, tally.down - 1);
+        if (newValue === 'UP') tally.up += 1;
+        if (newValue === 'DOWN') tally.down += 1;
+        if (!votesData[ev._recordId]) votesData[ev._recordId] = {};
+        if (newValue === null) delete votesData[ev._recordId][info.recordId];
+        else votesData[ev._recordId][info.recordId] = { vote: newValue, recordId: result.id };
 
         // Re-render
         renderQuickEvents();
@@ -2107,7 +2034,11 @@
       msgEl.textContent = 'Saving...';
 
       try {
-        await apiPatch(info.recordId, { [ev.fieldName]: value });
+        await Harumphers.api(`/api/events/${ev._recordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: value, guests: ev.guestCount || 0 })
+        });
         ev.rsvp = value;
         if (myMemberRecord) myMemberRecord.fields[ev.fieldName] = value;
         renderQuickEvents();
@@ -2136,7 +2067,11 @@
       const msgEl = document.getElementById(`qe-msg-${idx}`);
 
       try {
-        await apiPatch(info.recordId, { [ev.guestFieldName]: count });
+        await Harumphers.api(`/api/events/${ev._recordId}/rsvp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: ev.rsvp || 'YES', guests: count })
+        });
         ev.guestCount = count;
         if (myMemberRecord) myMemberRecord.fields[ev.guestFieldName] = count;
 
@@ -2163,12 +2098,12 @@
           <h3>Member # Not Found</h3>
           <p>The number you entered isn't linked to a member yet. If this is your Duquesne member number, submit it for approval.</p>
           <div class="field">
-            <label>Your Full Name</label>
+            <label for="req-name">Your Full Name</label>
             <input type="text" id="req-name" placeholder="First Last" autocomplete="name">
           </div>
           <div class="field">
-            <label>Member #</label>
-            <input type="text" id="req-num" value="${memberNum}" inputmode="numeric">
+            <label for="req-num">Member #</label>
+            <input type="text" id="req-num" value="${Harumphers.escapeHtml(memberNum)}" inputmode="numeric">
           </div>
           <button class="submit-request-btn" id="req-submit-btn" onclick="submitMemberRequest()">Submit for Approval</button>
           <div class="submit-request-msg" id="req-msg"></div>
@@ -2184,7 +2119,7 @@
         <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
         <h1>HARUMPHERS</h1>
         <p class="subtitle" style="margin-bottom:30px">Member Directory & Events</p>
-        <input type="text" id="pw" placeholder="Password or Member #" autocomplete="off">
+        <input type="text" id="pw" aria-label="Password or Member number" placeholder="Password or Member #" autocomplete="off">
         <div class="gate-error" id="gate-error"></div>
         <button class="btn" onclick="checkPassword()">Enter</button>
       `;
@@ -2216,39 +2151,7 @@
       msgEl.textContent = 'Submitting...';
 
       try {
-        // Check for duplicate pending request with same number
-        const formula = encodeURIComponent(`AND({SUBMITTED MEMBER #}=${num},{STATUS}="Pending")`);
-        const checkUrl = `${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=${formula}`;
-        const existing = await apiFetch(checkUrl);
-        if (existing.records && existing.records.length > 0) {
-          msgEl.className = 'submit-request-msg error';
-          msgEl.textContent = 'This number has already been submitted and is pending review.';
-          btn.disabled = false;
-          return;
-        }
-
-        // Create the request
-        const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' });
-        const res = await fetch(`${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}`, {
-          method: 'POST',
-          headers: {
-            'X-Harumphers-Key': API_KEY,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            fields: {
-              'SUBMITTED NAME': name,
-              'SUBMITTED MEMBER #': parseInt(num),
-              'STATUS': 'Pending',
-              'SUBMITTED DATE': today
-            }
-          })
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error ? errData.error.message : `HTTP ${res.status}`);
-        }
+        await Harumphers.submitMemberRequest(name, Number(num));
 
         // Show success
         const gate = document.getElementById('gate');
@@ -2257,14 +2160,16 @@
           <h1>HARUMPHERS</h1>
           <div class="submit-request">
             <h3 style="color:#4CAF50">Request Submitted!</h3>
-            <p>Your request to link member # <strong>${num}</strong> to <strong>${name}</strong> has been submitted for review.</p>
+            <p>Your request to link member # <strong>${Harumphers.escapeHtml(num)}</strong> to <strong>${Harumphers.escapeHtml(name)}</strong> has been submitted for review.</p>
             <p>Once approved, you'll be able to log in with your member number.</p>
             <button class="submit-request-back" onclick="backToLogin()">Back to Login</button>
           </div>
         `;
       } catch (err) {
         msgEl.className = 'submit-request-msg error';
-        msgEl.textContent = 'Failed to submit: ' + err.message;
+        msgEl.textContent = err.code === 'ALREADY_PENDING'
+          ? 'This number has already been submitted and is pending review.'
+          : 'Failed to submit. Please try again.';
         btn.disabled = false;
       }
     }
@@ -2279,25 +2184,9 @@
       const container = document.getElementById('admin-requests');
 
       try {
-        // Load pending requests
-        const reqFormula = encodeURIComponent('{STATUS}="Pending"');
-        const reqSort = encodeURIComponent('SUBMITTED DATE');
-        const reqData = await apiFetch(
-          `${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}?filterByFormula=${reqFormula}&sort[0][field]=${reqSort}&sort[0][direction]=desc`
-        );
-        pendingRequests = reqData.records || [];
-
-        // Load all members for the search dropdown
-        const memberParams = new URLSearchParams();
-        memberParams.append('fields[]', 'FULL NAME');
-        memberParams.append('fields[]', 'MEMBER #');
-        memberParams.append('fields[]', 'IN DIRECTORY');
-        memberParams.append('sort[0][field]', 'LAST NAME');
-        memberParams.append('sort[0][direction]', 'asc');
-        const memberData = await apiFetchAll(
-          `${API_BASE}/v0/${BASE_ID}/${MEMBERS_TABLE}?${memberParams}`
-        );
-        allMembersForSearch = memberData.records.filter(r => r.fields['IN DIRECTORY']);
+        const data = await Harumphers.api('/api/admin/member-requests');
+        pendingRequests = data.requests || [];
+        allMembersForSearch = data.members || [];
 
         renderAdminRequests();
       } catch (err) {
@@ -2329,7 +2218,7 @@
           // Show selected member with option to clear
           linkSection = `
             <div class="request-selected">
-              <span class="request-selected-name">${selected.name}</span>
+              <span class="request-selected-name">${Harumphers.escapeHtml(selected.name)}</span>
               <button class="request-selected-clear" onclick="clearSelectedMember('${req.id}')" title="Clear">&times;</button>
             </div>`;
         } else {
@@ -2346,10 +2235,10 @@
 
         return `<div class="request-card">
           <div class="request-info">
-            <span class="request-name">${f['SUBMITTED NAME'] || 'Unknown'}</span>
-            <span class="request-num"># ${f['SUBMITTED MEMBER #'] || '?'}</span>
+            <span class="request-name">${Harumphers.escapeHtml(f['SUBMITTED NAME'] || 'Unknown')}</span>
+            <span class="request-num"># ${Harumphers.escapeHtml(f['SUBMITTED MEMBER #'] || '?')}</span>
           </div>
-          <div class="request-date">Submitted ${f['SUBMITTED DATE'] || 'unknown date'}</div>
+          <div class="request-date">Submitted ${Harumphers.escapeHtml(f['SUBMITTED DATE'] || 'unknown date')}</div>
           ${linkSection}
           <div class="request-actions">
             <button class="request-approve-btn" id="approve-${req.id}"
@@ -2396,9 +2285,9 @@
       const items = filtered.slice(0, 50).map(m => {
         const name = m.fields['FULL NAME'] || 'Unknown';
         const hasNum = m.fields['MEMBER #'];
-        const linkedNote = hasNum ? `<span class="already-linked">(# ${hasNum})</span>` : '';
-        return `<div class="member-search-item" onclick="selectMember('${requestId}', '${m.id}', '${name.replace(/'/g, "\\'")}')">
-          ${name} ${linkedNote}
+        const linkedNote = hasNum ? `<span class="already-linked">(# ${Harumphers.escapeHtml(hasNum)})</span>` : '';
+        return `<div class="member-search-item" onclick="selectMember('${requestId}', '${m.id}')">
+          ${Harumphers.escapeHtml(name)} ${linkedNote}
         </div>`;
       }).join('');
 
@@ -2423,8 +2312,10 @@
       wrap.insertAdjacentHTML('beforeend', buildMemberDropdown(requestId));
     }
 
-    function selectMember(requestId, memberId, memberName) {
-      selectedMembers[requestId] = { recordId: memberId, name: memberName };
+    function selectMember(requestId, memberId) {
+      const member = allMembersForSearch.find(value => value.id === memberId);
+      if (!member) return;
+      selectedMembers[requestId] = { recordId: memberId, name: member.fields['FULL NAME'] || 'Unknown' };
       openDropdowns[requestId] = false;
       renderAdminRequests();
     }
@@ -2450,8 +2341,6 @@
       const selected = selectedMembers[requestId];
       if (!selected) return;
 
-      const req = pendingRequests[idx];
-      const memberNum = req.fields['SUBMITTED MEMBER #'];
       const msgEl = document.getElementById(`req-msg-${requestId}`);
       const btn = document.getElementById(`approve-${requestId}`);
 
@@ -2459,14 +2348,10 @@
       if (msgEl) { msgEl.className = 'request-msg'; msgEl.textContent = 'Linking member...'; }
 
       try {
-        // Step 1: Update the member's MEMBER # field (text field, needs string)
-        await apiPatch(selected.recordId, { 'MEMBER #': String(memberNum) });
-
-        // Step 2: Mark request as approved with linked member ID
-        await fetch(`${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}/${requestId}`, {
-          method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'STATUS': 'Approved', 'LINKED MEMBER ID': selected.recordId } })
+        await Harumphers.api(`/api/admin/member-requests/${requestId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ memberId: selected.recordId })
         });
 
         // Remove from pending list
@@ -2488,10 +2373,10 @@
       if (msgEl) { msgEl.className = 'request-msg'; msgEl.textContent = 'Rejecting...'; }
 
       try {
-        await fetch(`${API_BASE}/v0/${BASE_ID}/${REQUESTS_TABLE}/${requestId}`, {
-          method: 'PATCH',
-          headers: { 'X-Harumphers-Key': API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'STATUS': 'Rejected' } })
+        await Harumphers.api(`/api/admin/member-requests/${requestId}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
         });
 
         pendingRequests = pendingRequests.filter(r => r.id !== requestId);
@@ -2507,12 +2392,26 @@
     }
 
     // --- Init ---
-    const authMode = getAuthMode();
-    if (authMode === 'member' || authMode === 'admin') {
-      showMemberHome();
-    } else if (authMode === 'guest') {
-      showGuestHome();
+    async function restoreSession() {
+      try {
+        const session = await Harumphers.getSession();
+        currentAuthMode = session.role;
+        if (session.role === 'member') {
+          memberRecord = await loadMemberIdentity();
+          showMemberHome();
+        } else if (session.role === 'admin') {
+          showMemberHome();
+        } else if (session.role === 'guest') {
+          showGuestHome();
+        }
+      } catch {
+        Harumphers.logout();
+        currentAuthMode = null;
+        currentMemberInfo = null;
+      }
     }
+
+    restoreSession();
   </script>
 
   <!-- Fixed bottom tab bar (shown when logged in) -->
