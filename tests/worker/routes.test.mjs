@@ -20,7 +20,7 @@ function makeAirtable() {
     async findMemberByNumber(memberNumber) {
       calls.push(['findMemberByNumber', memberNumber]);
       if (memberNumber !== 42) return null;
-      return { id: 'rec_member', fields: { 'FULL NAME': 'Fixture Member', 'IS ADMIN': true } };
+      return { id: 'recFixtureMember1', fields: { 'FULL NAME': 'Fixture Member', 'IS ADMIN': false } };
     },
     async getDirectory(role) {
       calls.push(['getDirectory', role]);
@@ -137,14 +137,38 @@ test('a guest session can read only the explicit directory and events resources'
 });
 
 test('the me route derives the member record from the signed subject', async () => {
-  const token = await issueSession({ sub: 'rec_member', role: 'member' }, ENV.SESSION_SECRET, 1000);
+  const token = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
   const airtable = makeAirtable();
 
   const { body, response } = await call(request('/api/me?recordId=rec_other', { token }), airtable);
 
   assert.equal(response.status, 200);
-  assert.equal(body.id, 'rec_member');
-  assert.deepEqual(airtable.calls, [['getMember', 'rec_member']]);
+  assert.equal(body.id, 'recFixtureMember1');
+  assert.deepEqual(airtable.calls, [['getMember', 'recFixtureMember1']]);
+});
+
+test('only a record-backed admin session retains member identity', async () => {
+  const airtable = makeAirtable();
+  const memberAdminToken = await issueSession({
+    sub: 'recFixtureAdmin01',
+    role: 'admin'
+  }, ENV.SESSION_SECRET, 1000);
+  const passwordAdminToken = await issueSession({ sub: 'admin', role: 'admin' }, ENV.SESSION_SECRET, 1000);
+
+  const memberAdminSession = await call(request('/api/session', { token: memberAdminToken }), airtable);
+  assert.deepEqual(memberAdminSession.body, { role: 'admin', hasMemberIdentity: true });
+
+  const memberAdminProfile = await call(request('/api/me', { token: memberAdminToken }), airtable);
+  assert.equal(memberAdminProfile.response.status, 200);
+  assert.equal(memberAdminProfile.body.id, 'recFixtureAdmin01');
+
+  const passwordAdminSession = await call(request('/api/session', { token: passwordAdminToken }), airtable);
+  assert.deepEqual(passwordAdminSession.body, { role: 'admin', hasMemberIdentity: false });
+
+  const passwordAdminProfile = await call(request('/api/me', { token: passwordAdminToken }), airtable);
+  assert.equal(passwordAdminProfile.response.status, 403);
+  assert.equal(passwordAdminProfile.body.error.code, 'FORBIDDEN');
+  assert.deepEqual(airtable.calls, [['getMember', 'recFixtureAdmin01']]);
 });
 
 test('member vote history exposes only the signed member own event choices', async () => {
@@ -264,7 +288,7 @@ test('event creation is administrator-only and rejects unknown input before Airt
   assert.deepEqual(airtable.calls, [['createEvent', event]]);
 });
 
-test('member-number login always issues a member session for the matched record', async () => {
+test('member-number login issues a member session when the Airtable admin flag is false', async () => {
   const airtable = makeAirtable();
   const { body, response } = await call(request('/api/login/member', {
     method: 'POST',
@@ -273,8 +297,30 @@ test('member-number login always issues a member session for the matched record'
 
   assert.equal(response.status, 200);
   assert.deepEqual(await verifySession(body.token, ENV.SESSION_SECRET, 1000), {
-    sub: 'rec_member',
+    sub: 'recFixtureMember1',
     role: 'member',
+    iat: 1000,
+    exp: 44200
+  });
+  assert.deepEqual(airtable.calls, [['findMemberByNumber', 42]]);
+});
+
+test('member-number login issues an admin session when the Airtable admin flag is true', async () => {
+  const airtable = makeAirtable();
+  airtable.findMemberByNumber = async memberNumber => {
+    airtable.calls.push(['findMemberByNumber', memberNumber]);
+    return { id: 'recFixtureAdmin01', fields: { 'FULL NAME': 'Fixture Admin', 'IS ADMIN': true } };
+  };
+
+  const { body, response } = await call(request('/api/login/member', {
+    method: 'POST',
+    body: { memberNumber: 42 }
+  }), airtable);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await verifySession(body.token, ENV.SESSION_SECRET, 1000), {
+    sub: 'recFixtureAdmin01',
+    role: 'admin',
     iat: 1000,
     exp: 44200
   });
@@ -360,11 +406,11 @@ test('public login and member-request routes are rate limited before Airtable wr
 });
 
 test('the session route returns the verified role without exposing its subject', async () => {
-  const token = await issueSession({ sub: 'rec_member', role: 'member' }, ENV.SESSION_SECRET, 1000);
+  const token = await issueSession({ sub: 'recFixtureMember1', role: 'member' }, ENV.SESSION_SECRET, 1000);
   const { body, response } = await call(request('/api/session', { token }));
 
   assert.equal(response.status, 200);
-  assert.deepEqual(body, { role: 'member' });
+  assert.deepEqual(body, { role: 'member', hasMemberIdentity: true });
 });
 
 test('an unapproved browser origin is rejected without reflecting CORS or reaching Airtable', async () => {

@@ -245,6 +245,7 @@ export function createAirtable(env, fetchImpl = fetch) {
       });
       params.append('fields[]', 'MEMBER #');
       params.append('fields[]', 'FULL NAME');
+      params.append('fields[]', 'IS ADMIN');
       const data = await fetchJson(`${tableUrl(env.AIRTABLE_MEMBERS_TABLE_ID)}?${params}`);
       if (!Array.isArray(data.records)) throw upstreamError();
       return data.records.length === 1 ? data.records[0] : null;
@@ -540,7 +541,7 @@ export function createAirtable(env, fetchImpl = fetch) {
       requireRecordId(eventId);
       let memberName = 'ADMIN';
       let memberId = '';
-      if (session.role === 'member') {
+      if (/^rec[A-Za-z0-9]{14}$/.test(session.sub)) {
         const member = await getRecord(env.AIRTABLE_MEMBERS_TABLE_ID, session.sub);
         memberName = String(member.fields?.['FULL NAME'] ?? '').slice(0, 160);
         memberId = session.sub;
