@@ -62,6 +62,59 @@ test('duplicate member numbers fail closed instead of selecting the first record
   assert.equal(await airtable.findMemberByNumber(42), null);
 });
 
+test('member request approval accepts Airtable text values for member numbers', async () => {
+  const requests = [];
+  const airtable = createAirtable(ENV, async (url, init = {}) => {
+    const request = { url: new URL(url), init };
+    requests.push(request);
+    if (request.url.pathname.endsWith('/recFixtureRequest')) {
+      return jsonResponse({
+        id: 'recFixtureRequest',
+        fields: { STATUS: 'Pending', 'SUBMITTED MEMBER #': 900003 }
+      });
+    }
+    if (request.url.pathname.endsWith('/recFixtureMember1')) {
+      const fields = JSON.parse(init.body).fields;
+      if (typeof fields['MEMBER #'] !== 'string') {
+        return jsonResponse({ error: { type: 'INVALID_VALUE_FOR_COLUMN' } }, 422);
+      }
+      return jsonResponse({
+        id: 'recFixtureMember1',
+        fields
+      });
+    }
+    return jsonResponse({
+      id: 'recFixtureRequest',
+      fields: { STATUS: 'Approved', 'LINKED MEMBER ID': 'recFixtureMember1' }
+    });
+  });
+
+  assert.deepEqual(
+    await airtable.approveMemberRequest('recFixtureRequest', 'recFixtureMember1'),
+    { id: 'recFixtureRequest', status: 'Approved', memberId: 'recFixtureMember1' }
+  );
+  assert.equal(requests.length, 3);
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    fields: { 'MEMBER #': '900003' }
+  });
+});
+
+test('member number diagnostics count numeric text from the live Airtable schema', async () => {
+  const airtable = createAirtable(ENV, async () => jsonResponse({
+    records: [
+      { id: 'recFixtureMember1', fields: { 'MEMBER #': '900001', 'IN DIRECTORY': true } },
+      { id: 'recFixtureMember2', fields: { 'MEMBER #': 900002, 'IN DIRECTORY': true } },
+      { id: 'recFixtureMember3', fields: { 'IN DIRECTORY': true } }
+    ]
+  }));
+
+  assert.deepEqual(await airtable.getMemberNumberDiagnostics(), {
+    totalInDirectory: 3,
+    withNumber: 2,
+    missingNumber: 1
+  });
+});
+
 test('self-service member reads request only member-visible fields', async () => {
   let capturedUrl;
   const airtable = createAirtable(ENV, async url => {
@@ -131,6 +184,32 @@ test('profile writes map only allowlisted client fields to Airtable fields', asy
       'CELL #': '412-555-0100',
       'E-MAIL ADDRESS': 'updated@example.test'
     }
+  });
+});
+
+test('administrator member updates serialize member numbers for the Airtable text field', async () => {
+  let capturedBody;
+  const airtable = createAirtable(ENV, async (_url, init) => {
+    capturedBody = JSON.parse(init.body);
+    if (typeof capturedBody.fields['MEMBER #'] !== 'string') {
+      return jsonResponse({ error: { type: 'INVALID_VALUE_FOR_COLUMN' } }, 422);
+    }
+    return jsonResponse({ id: 'rec12345678901234', fields: capturedBody.fields });
+  });
+
+  const result = await airtable.updateMember('rec12345678901234', {
+    name: 'Updated Fixture',
+    phone: '412-555-0100',
+    email: 'updated@example.test',
+    memberNumber: 900004
+  });
+
+  assert.equal(result.fields['MEMBER #'], '900004');
+  assert.deepEqual(capturedBody.fields, {
+    'FULL NAME': 'Updated Fixture',
+    'CELL #': '412-555-0100',
+    'E-MAIL ADDRESS': 'updated@example.test',
+    'MEMBER #': '900004'
   });
 });
 

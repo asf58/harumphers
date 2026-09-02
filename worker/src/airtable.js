@@ -277,7 +277,7 @@ export function createAirtable(env, fetchImpl = fetch) {
         'FULL NAME': value.name,
         'CELL #': value.phone,
         'E-MAIL ADDRESS': value.email,
-        'MEMBER #': value.memberNumber
+        'MEMBER #': String(value.memberNumber)
       });
     },
 
@@ -389,9 +389,9 @@ export function createAirtable(env, fetchImpl = fetch) {
       }
       const memberNumber = request.fields['SUBMITTED MEMBER #'];
       const updatedMember = await patchRecord(env.AIRTABLE_MEMBERS_TABLE_ID, memberId, {
-        'MEMBER #': memberNumber
+        'MEMBER #': String(memberNumber)
       });
-      if (updatedMember.fields?.['MEMBER #'] !== memberNumber) throw upstreamError();
+      if (Number(updatedMember.fields?.['MEMBER #']) !== memberNumber) throw upstreamError();
       await patchRecord(env.AIRTABLE_MEMBER_REQUESTS_TABLE_ID, requestId, {
         STATUS: 'Approved',
         'LINKED MEMBER ID': memberId
@@ -413,7 +413,7 @@ export function createAirtable(env, fetchImpl = fetch) {
         filterByFormula: '{IN DIRECTORY}=TRUE()'
       });
       const records = await listAll(env.AIRTABLE_MEMBERS_TABLE_ID, params);
-      const withNumber = records.filter(record => Number.isSafeInteger(record.fields?.['MEMBER #'])).length;
+      const withNumber = records.filter(record => Number.isSafeInteger(Number(record.fields?.['MEMBER #']))).length;
       return {
         totalInDirectory: records.length,
         withNumber,
