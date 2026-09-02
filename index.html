@@ -1318,7 +1318,8 @@
 
         try {
           await Harumphers.loginMember(Number(raw));
-          currentAuthMode = 'member';
+          const session = await Harumphers.getSession();
+          currentAuthMode = session.role;
           memberRecord = await loadMemberIdentity();
           showMemberHome();
           return;
@@ -2396,7 +2397,7 @@
       try {
         const session = await Harumphers.getSession();
         currentAuthMode = session.role;
-        if (session.role === 'member') {
+        if (session.hasMemberIdentity) {
           memberRecord = await loadMemberIdentity();
           showMemberHome();
         } else if (session.role === 'admin') {

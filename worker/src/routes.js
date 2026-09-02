@@ -337,6 +337,18 @@ function loginFailed() {
   return new ApiError(401, 'LOGIN_FAILED', 'The login was not recognized.');
 }
 
+function hasMemberIdentity(session) {
+  return /^rec[A-Za-z0-9]{14}$/.test(session?.sub ?? '');
+}
+
+function requireMemberIdentity(session) {
+  requireRole(session, ['member', 'admin']);
+  if (!hasMemberIdentity(session)) {
+    throw new ApiError(403, 'FORBIDDEN', 'That action is not allowed.');
+  }
+  return session;
+}
+
 async function enforceRateLimit(binding, key) {
   if (!binding || typeof binding.limit !== 'function') {
     throw new ApiError(500, 'CONFIGURATION_ERROR', 'The app abuse protection is not configured.');
@@ -387,7 +399,8 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     }
     const member = await airtable.findMemberByNumber(body.memberNumber);
     if (!member || typeof member.id !== 'string' || member.id === '') throw loginFailed();
-    return json({ token: await issueSession({ sub: member.id, role: 'member' }, env.SESSION_SECRET, nowSeconds) });
+    const role = member.fields?.['IS ADMIN'] === true ? 'admin' : 'member';
+    return json({ token: await issueSession({ sub: member.id, role }, env.SESSION_SECRET, nowSeconds) });
   }
 
   if (pathname === '/api/login/admin') {
@@ -408,7 +421,7 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   const session = await requireSession(request, env, nowSeconds);
 
   if (pathname === '/api/session') {
-    return json({ role: session.role });
+    return json({ role: session.role, hasMemberIdentity: hasMemberIdentity(session) });
   }
 
   if (pathname === '/api/directory') {
@@ -420,18 +433,18 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   }
 
   if (pathname === '/api/me') {
-    requireRole(session, ['member']);
+    requireMemberIdentity(session);
     if (request.method === 'GET') return json(await airtable.getMember(session.sub));
     return json(await airtable.updateMemberProfile(session.sub, validateProfile(await readJsonBody(request), false)));
   }
 
   if (pathname === '/api/me/votes') {
-    requireRole(session, ['member']);
+    requireMemberIdentity(session);
     return json(await airtable.getMemberVotes(session.sub));
   }
 
   if (pathname === '/api/me/photo') {
-    requireRole(session, ['member']);
+    requireMemberIdentity(session);
     return json(await airtable.uploadMemberPhoto(session.sub, validatePhoto(await readJsonBody(request, 1_500_000))));
   }
 
@@ -449,7 +462,7 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   }
 
   if (matchedRoute.name === 'member-rsvp') {
-    requireRole(session, ['member']);
+    requireMemberIdentity(session);
     return json(await airtable.setRsvp(session.sub, matchedRoute.params[0], validateRsvp(await readJsonBody(request))));
   }
 
@@ -459,7 +472,7 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   }
 
   if (matchedRoute.name === 'member-vote') {
-    requireRole(session, ['member']);
+    requireMemberIdentity(session);
     return json(await airtable.setVote(session.sub, matchedRoute.params[0], validateVote(await readJsonBody(request))));
   }
 

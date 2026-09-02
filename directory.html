@@ -1239,7 +1239,7 @@
       try {
         const session = await Harumphers.getSession();
         authMode = session.role;
-        if (session.role === 'member') {
+        if (session.hasMemberIdentity) {
           const member = await Harumphers.api('/api/me');
           myInfo = {
             recordId: member.id,

@@ -50,7 +50,7 @@ test('member lookup uses the configured table and a fixed numeric formula', asyn
   assert.equal(requests[0].url.pathname, '/v0/appFixtureBase/tblFixtureMembers');
   assert.equal(requests[0].url.searchParams.get('filterByFormula'), '{MEMBER #}=42');
   assert.equal(requests[0].url.searchParams.get('maxRecords'), '2');
-  assert.deepEqual(requests[0].url.searchParams.getAll('fields[]'), ['MEMBER #', 'FULL NAME']);
+  assert.deepEqual(requests[0].url.searchParams.getAll('fields[]'), ['MEMBER #', 'FULL NAME', 'IS ADMIN']);
   assert.equal(requests[0].headers.get('Authorization'), 'Bearer fixture-airtable-token');
 });
 

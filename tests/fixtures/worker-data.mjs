@@ -350,8 +350,8 @@ export function createFixtureAirtable() {
         id: `recFixturePhoto${String(photos.length + 1).padStart(2, '0')}`,
         fields: {
           'EVENT RECORD ID': eventId,
-          'MEMBER RECORD ID': session.role === 'member' ? session.sub : '',
-          'MEMBER NAME': session.role === 'member' ? member?.fields['FULL NAME'] || '' : 'ADMIN',
+          'MEMBER RECORD ID': member ? session.sub : '',
+          'MEMBER NAME': member?.fields['FULL NAME'] || 'ADMIN',
           PHOTO: attachment(value.filename),
           CAPTION: value.caption
         }

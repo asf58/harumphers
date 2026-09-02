@@ -48,6 +48,18 @@ test('member profile, RSVP, and suggested-event vote persist in the working mode
   await expect(page.locator('.qe-card').filter({ hasText: 'Suggested Fixture Speaker' })).toContainText('1 up / 0 down');
 });
 
+test('a member marked as administrator keeps his identity and sees administrator event controls', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.getByLabel('Password or Member number').fill('42002');
+  await page.getByRole('button', { name: 'Enter' }).click();
+
+  await expect(page.locator('.ws-name')).toContainText(/Christopher-Jonathan/i);
+  await expect(page.getByText('You have admin access.')).toBeVisible();
+
+  await page.goto('/events.html');
+  await expect(page.getByRole('button', { name: '+ Add New Event' })).toBeVisible();
+});
+
 test('administrator can create, promote, complete, record attendance, and add a photo', async ({ page }) => {
   await login(page, 'admin');
   await page.goto('/events.html');
