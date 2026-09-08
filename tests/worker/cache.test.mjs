@@ -111,3 +111,22 @@ test('the explicit refresh operation clears named caches without reaching Airtab
   assert.equal(cache.values.size, 0);
   assert.deepEqual(airtable.calls, [['getDirectory', 'guest']]);
 });
+
+test('staging and production reads and invalidation stay isolated in a shared cache', async () => {
+  const cache = memoryCache();
+  const source = label => ({
+    async getEventsBootstrap() { return { events: [label] }; },
+    async getDirectory() { return { records: [label] }; }
+  });
+  const production = createCachedAirtable(source('production'), cache, () => 1000, 'appProduction');
+  const staging = createCachedAirtable(source('staging'), cache, () => 1000, 'appStaging');
+  await staging.getEventsBootstrap('admin');
+  await staging.getDirectory('admin');
+  assert.deepEqual(await production.getEventsBootstrap('admin'), { events: ['production'] });
+  assert.deepEqual(await production.getDirectory('admin'), { records: ['production'] });
+  assert.equal(cache.values.size, 4);
+  await staging.refreshCaches();
+  assert.equal(cache.values.size, 2);
+  assert.deepEqual(await production.getEventsBootstrap('admin'), { events: ['production'] });
+  assert.deepEqual(await staging.getEventsBootstrap('admin'), { events: ['staging'] });
+});
