@@ -1,0 +1,57 @@
+/* Shared phone and enlarged-text behavior. Keep browser zoom enabled. */
+html { font-size: 100%; }
+body { line-height: 1.5; padding-bottom: env(safe-area-inset-bottom); }
+button, input, select, textarea { font-family: inherit; }
+button, select, input:not([type="checkbox"]):not([type="file"]), textarea {
+  font-size: max(1rem, 16px);
+  min-height: 44px;
+  max-width: 100%;
+}
+button { white-space: normal; overflow-wrap: anywhere; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid #FFD700;
+  outline-offset: 3px;
+}
+header, .top-bar { flex-wrap: wrap; }
+header h1 { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.header-links, .top-bar-links { flex-wrap: wrap; min-width: 0; flex-shrink: 1; }
+.content, .member-home, .main, .event-header-info, .quick-event-info, .profile-info { min-width: 0; }
+.event-name, .event-details, .quick-event-name, .quick-event-details, .profile-name,
+.profile-email, .profile-phone, .rsvp-chip, .inline-edit-name { overflow-wrap: anywhere; white-space: normal; }
+.rsvp-buttons, .export-actions, .event-counts, .guest-count-row, .quick-rsvp-buttons,
+.quick-event-header, .new-event-actions, .event-edit-actions { flex-wrap: wrap; }
+.rsvp-buttons > button { flex: 1 1 5rem; }
+.rsvp-chip.clickable { border: 0; font: inherit; text-align: left; min-height: 44px; }
+.inline-edit { width: 100%; min-width: 0; max-width: 100%; }
+.new-event-row, .event-edit-row { min-width: 0; flex-wrap: wrap; }
+.new-event-input, .event-edit-input, .event-edit-textarea { min-width: 0; width: 100%; }
+.gallery-upload-btn, .gallery-delete-btn, .gallery-edit-btn { min-width: 44px; min-height: 44px; }
+@media (max-width: 600px) {
+  header, .top-bar {
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    position: relative;
+  }
+  .header-links, .top-bar-links { width: 100%; justify-content: space-between; gap: 4px; }
+  .content, .member-home { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .event-edit-row { display: flex; flex-direction: column; align-items: stretch; }
+  .event-edit-label { width: auto; }
+}
+.nav-tiles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr)); }
+.nav-tile { min-width: 0; overflow-wrap: anywhere; }
+.card .info { min-width: 0; }
+.card .name, .card .info a { overflow-wrap: anywhere; white-space: normal; }
+/* Class and inline form styles must not shrink iPhone inputs below 16px. */
+input:not([type="checkbox"]):not([type="file"]), select, textarea {
+  font-size: max(1rem, 16px) !important;
+}
+.gallery-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+
+.event-header { flex-wrap: wrap; }
+.event-summary { flex: 1 1 100%; min-width: 0; }
+.rsvp-buttons > .rsvp-btn { flex: 1 1 5rem; }
+
+button[class], .rsvp-chip { transition-property: background-color, color, border-color, opacity; }
+input[type="number"] { width: 5em; min-width: min(5em, 100%); }
+.qe-guest-row { flex-wrap: wrap; }

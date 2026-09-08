@@ -46,8 +46,8 @@ function makeAirtable() {
       calls.push(['updateMember', recordId, fields]);
       return { id: recordId, fields };
     },
-    async setRsvp(recordId, eventId, value) {
-      calls.push(['setRsvp', recordId, eventId, value]);
+    async setRsvp(recordId, eventId, value, options) {
+      calls.push(['setRsvp', recordId, eventId, value, options]);
       return { ok: true };
     },
     async createEvent(value) {
@@ -249,7 +249,7 @@ test('RSVP writes derive the member target from the signed session', async () =>
 
   assert.equal(response.status, 200);
   assert.deepEqual(airtable.calls, [[
-    'setRsvp', 'recFixtureMember1', eventId, { response: 'YES', guests: 2 }
+    'setRsvp', 'recFixtureMember1', eventId, { response: 'YES', guests: 2 }, { admin: false }
   ]]);
 });
 
@@ -465,3 +465,19 @@ test('a short session-signing secret fails closed before routing', async () => {
   assert.equal(body.error.code, 'CONFIGURATION_ERROR');
   assert.deepEqual(airtable.calls, []);
 });
+
+for (const role of ['member', 'admin']) {
+  test(`RSVP override is derived only from signed ${role} identity`, async () => {
+    const token = await issueSession({ sub: 'recFixtureMember1', role }, ENV.SESSION_SECRET, 1000);
+    const airtable = makeAirtable();
+    const value = { response: null, guests: 0 };
+    const own = await call(request('/api/events/recFixtureEvent01/rsvp', { method: 'PUT', token, body: value }), airtable);
+    assert.equal(own.response.status, 200);
+    assert.deepEqual(airtable.calls[0].at(-1), { admin: role === 'admin' });
+    const other = await call(request('/api/admin/events/recFixtureEvent01/rsvps/recFixtureMember2', { method: 'PUT', token, body: value }), airtable);
+    assert.equal(other.response.status, role === 'admin' ? 200 : 403);
+    if (role === 'admin') assert.deepEqual(airtable.calls[1].at(-1), { admin: true });
+    const forged = await call(request('/api/events/recFixtureEvent01/rsvp', { method: 'PUT', token, body: { ...value, admin: true } }), airtable);
+    assert.equal(forged.response.status, 400);
+  });
+}

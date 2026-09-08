@@ -169,7 +169,7 @@ function validateRsvp(body) {
 
 function validateEvent(body) {
   requireExactKeys(body, [
-    'idempotencyKey', 'name', 'date', 'speaker', 'time', 'room', 'notes', 'status', 'enableGuests'
+    'idempotencyKey', 'name', 'date', 'speaker', 'time', 'room', ...(body && Object.hasOwn(body, 'location') ? ['location'] : []), 'notes', 'status', 'enableGuests'
   ]);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.idempotencyKey)) {
     throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted event is not valid.');
@@ -181,6 +181,7 @@ function validateEvent(body) {
     speaker: requireText(body.speaker, { maxLength: 160 }),
     time: requireText(body.time, { maxLength: 40 }),
     room: requireText(body.room, { maxLength: 120 }),
+    ...(body.location !== undefined ? { location: requireText(body.location, { maxLength: 300 }) } : {}),
     notes: requireText(body.notes, { maxLength: 2000 }),
     status: requireText(body.status, { allowEmpty: false, maxLength: 20 }),
     enableGuests: body.enableGuests
@@ -225,13 +226,14 @@ function validateMemberLink(body) {
 }
 
 function validateEventUpdate(body) {
-  requireExactKeys(body, ['name', 'date', 'speaker', 'time', 'room', 'notes', 'status']);
+  requireExactKeys(body, ['name', 'date', 'speaker', 'time', 'room', ...(body && Object.hasOwn(body, 'location') ? ['location'] : []), 'notes', 'status']);
   const value = {
     name: requireText(body.name, { allowEmpty: false, maxLength: 160 }),
     date: requireText(body.date, { maxLength: 10 }),
     speaker: requireText(body.speaker, { maxLength: 160 }),
     time: requireText(body.time, { maxLength: 40 }),
     room: requireText(body.room, { maxLength: 120 }),
+    ...(body.location !== undefined ? { location: requireText(body.location, { maxLength: 300 }) } : {}),
     notes: requireText(body.notes, { maxLength: 2000 }),
     status: requireText(body.status, { allowEmpty: false, maxLength: 20 })
   };
@@ -463,12 +465,12 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
 
   if (matchedRoute.name === 'member-rsvp') {
     requireMemberIdentity(session);
-    return json(await airtable.setRsvp(session.sub, matchedRoute.params[0], validateRsvp(await readJsonBody(request))));
+    return json(await airtable.setRsvp(session.sub, matchedRoute.params[0], validateRsvp(await readJsonBody(request)), { admin: session.role === 'admin' }));
   }
 
   if (matchedRoute.name === 'admin-rsvp') {
     requireRole(session, ['admin']);
-    return json(await airtable.setRsvp(matchedRoute.params[1], matchedRoute.params[0], validateRsvp(await readJsonBody(request))));
+    return json(await airtable.setRsvp(matchedRoute.params[1], matchedRoute.params[0], validateRsvp(await readJsonBody(request)), { admin: true }));
   }
 
   if (matchedRoute.name === 'member-vote') {

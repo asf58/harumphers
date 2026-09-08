@@ -614,3 +614,42 @@ test('promoting a suggested event creates exact RSVP mappings before marking it 
   assert.equal(finalPatch.Status, 'Scheduled');
   assert.equal(finalPatch['SETUP STATE'], 'ready');
 });
+
+for (const status of ['Upcoming', 'Completed', 'Cancelled']) {
+  test(`admins can clear RSVPs for ${status} events while members cannot`, async () => {
+    const writes = [];
+    const airtable = createAirtable(ENV, async (url, init) => {
+      if (init?.method === 'PATCH') {
+        writes.push(JSON.parse(init.body).fields);
+        return jsonResponse({ id: 'rec12345678901234', fields: writes.at(-1) });
+      }
+      return jsonResponse({ id: 'recFixtureEvent01', fields: {
+        Status: status, 'SETUP STATE': 'ready', 'RSVP FIELD': 'EXISTING RSVP', 'GUEST FIELD': 'GUESTS-EXISTING'
+      } });
+    });
+    await assert.rejects(airtable.setRsvp('rec12345678901234', 'recFixtureEvent01', { response: null, guests: 0 }), { code: 'EVENT_NOT_OPEN' });
+    await airtable.setRsvp('rec12345678901234', 'recFixtureEvent01', { response: null, guests: 0 }, { admin: true });
+    assert.deepEqual(writes, [{ 'EXISTING RSVP': null, 'GUESTS-EXISTING': 0 }]);
+  });
+}
+
+test('admin override never bypasses missing event mappings', async () => {
+  const airtable = createAirtable(ENV, async () => jsonResponse({ id: 'recFixtureEvent01', fields: { Status: 'Scheduled' } }));
+  await assert.rejects(airtable.setRsvp('rec12345678901234', 'recFixtureEvent01', { response: 'YES', guests: 0 }, { admin: true }), { code: 'EVENT_MAPPING_MISSING' });
+});
+
+test('reopening a mapped event preserves its existing RSVPs and guest counts', async () => {
+  const requests = [];
+  const airtable = createAirtable(ENV, async (url, init) => {
+    requests.push({ url, init });
+    return jsonResponse({ id: 'recFixtureEvent01', fields: {
+      Status: 'Completed', 'SETUP STATE': 'ready', 'RSVP FIELD': 'LEGACY RSVP', 'GUEST FIELD': 'GUESTS-LEGACY'
+    } });
+  });
+  await airtable.updateEvent('recFixtureEvent01', { name: 'Existing event', date: '2026-09-29', speaker: '', time: '', room: '', notes: '', status: 'Scheduled' });
+  assert.equal(requests.length, 2);
+  const fields = JSON.parse(requests[1].init.body).fields;
+  assert.equal(fields.Status, 'Scheduled');
+  assert.equal(Object.hasOwn(fields, 'RSVP FIELD'), false);
+  assert.equal(Object.hasOwn(fields, 'GUEST FIELD'), false);
+});
