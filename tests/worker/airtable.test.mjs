@@ -266,6 +266,12 @@ test('directory reads combine bounded Airtable pages without losing the filter',
   assert.equal(requests[1].searchParams.get('filterByFormula'), '{IN DIRECTORY}=TRUE()');
   assert.equal(requests[1].searchParams.get('offset'), 'next-page');
   assert.equal(requests[1].searchParams.get('pageSize'), '100');
+  for (const request of requests) {
+    assert.equal(request.searchParams.get('sort[0][field]'), 'LAST NAME');
+    assert.equal(request.searchParams.get('sort[0][direction]'), 'asc');
+    assert.equal(request.searchParams.get('sort[1][field]'), 'FULL NAME');
+    assert.equal(request.searchParams.get('sort[1][direction]'), 'asc');
+  }
   assert.deepEqual(requests[0].searchParams.getAll('fields[]').sort(), [
     'CELL #',
     'E-MAIL ADDRESS',
@@ -316,6 +322,10 @@ test('events bootstrap uses only the configured named resources', async () => {
   ]);
 
   const memberRequest = requests.find(value => value.pathname.endsWith('/tblFixtureMembers'));
+  assert.equal(memberRequest.searchParams.get('sort[0][field]'), 'LAST NAME');
+  assert.equal(memberRequest.searchParams.get('sort[0][direction]'), 'asc');
+  assert.equal(memberRequest.searchParams.get('sort[1][field]'), 'FULL NAME');
+  assert.equal(memberRequest.searchParams.get('sort[1][direction]'), 'asc');
   assert.equal(memberRequest.searchParams.getAll('fields[]').includes('DINNER RSVP'), true);
   assert.equal(memberRequest.searchParams.getAll('fields[]').includes('GUESTS-DINNER'), true);
   assert.equal(memberRequest.searchParams.getAll('fields[]').includes('REQUESTED CHANGES'), false);

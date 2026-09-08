@@ -7,6 +7,13 @@ const MAX_PAGES = 10;
 const MAX_FETCH_ATTEMPTS = 3;
 
 const DIRECTORY_FIELDS = ['FULL NAME', 'CELL #', 'E-MAIL ADDRESS', 'PHOTO'];
+// Sort at the source so pagination and every RSVP group share directory order.
+const MEMBER_SORT = {
+  'sort[0][field]': 'LAST NAME',
+  'sort[0][direction]': 'asc',
+  'sort[1][field]': 'FULL NAME',
+  'sort[1][direction]': 'asc'
+};
 const SELF_FIELDS = [...DIRECTORY_FIELDS, 'IN DIRECTORY', 'MEMBER #'];
 const EVENT_FIELDS = [
   'EVENT NAME', 'DATE', 'SPEAKER', 'TIME', 'ROOM', 'LOCATION', 'SPEAKER PHOTO', 'NOTES', 'Status',
@@ -584,7 +591,7 @@ export function createAirtable(env, fetchImpl = fetch) {
       const fields = role === 'admin'
         ? [...DIRECTORY_FIELDS, 'MEMBER #']
         : DIRECTORY_FIELDS;
-      const params = paramsWithFields(fields, { filterByFormula: '{IN DIRECTORY}=TRUE()' });
+      const params = paramsWithFields(fields, { filterByFormula: '{IN DIRECTORY}=TRUE()', ...MEMBER_SORT });
       return { records: await listAll(env.AIRTABLE_MEMBERS_TABLE_ID, params) };
     },
 
@@ -603,6 +610,7 @@ export function createAirtable(env, fetchImpl = fetch) {
       const [events, members, photos, attendance, votes] = await Promise.all([
         listAll(env.AIRTABLE_EVENTS_TABLE_ID, paramsWithFields(EVENT_FIELDS)),
         listAll(env.AIRTABLE_MEMBERS_TABLE_ID, paramsWithFields(memberFieldNames, {
+          ...MEMBER_SORT,
           filterByFormula: '{IN DIRECTORY}=TRUE()'
         })),
         listAll(env.AIRTABLE_PHOTOS_TABLE_ID, paramsWithFields(PHOTO_FIELDS)),
