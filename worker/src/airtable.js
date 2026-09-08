@@ -9,7 +9,7 @@ const MAX_FETCH_ATTEMPTS = 3;
 const DIRECTORY_FIELDS = ['FULL NAME', 'CELL #', 'E-MAIL ADDRESS', 'PHOTO'];
 const SELF_FIELDS = [...DIRECTORY_FIELDS, 'IN DIRECTORY', 'MEMBER #'];
 const EVENT_FIELDS = [
-  'EVENT NAME', 'DATE', 'SPEAKER', 'TIME', 'ROOM', 'SPEAKER PHOTO', 'NOTES', 'Status',
+  'EVENT NAME', 'DATE', 'SPEAKER', 'TIME', 'ROOM', 'LOCATION', 'SPEAKER PHOTO', 'NOTES', 'Status',
   'RSVP FIELD', 'GUEST FIELD', 'CREATION KEY', 'SETUP STATE'
 ];
 const PHOTO_FIELDS = ['EVENT RECORD ID', 'MEMBER RECORD ID', 'MEMBER NAME', 'PHOTO', 'CAPTION'];
@@ -282,22 +282,24 @@ export function createAirtable(env, fetchImpl = fetch) {
       });
     },
 
-    async setRsvp(recordId, eventId, value) {
+    async setRsvp(recordId, eventId, value, { admin = false } = {}) {
       requireRecordId(recordId);
       requireRecordId(eventId);
       const event = await fetchJson(`${tableUrl(env.AIRTABLE_EVENTS_TABLE_ID)}/${eventId}`);
       const fields = event?.fields;
       const rsvpField = fields?.['RSVP FIELD'];
       const guestField = fields?.['GUEST FIELD'];
+      if (!admin && fields?.Status !== 'Scheduled') {
+        throw new ApiError(409, 'EVENT_NOT_OPEN', 'This event is not open for RSVP changes.');
+      }
       if (
-        fields?.Status !== 'Scheduled'
-        || fields?.['SETUP STATE'] !== 'ready'
+        fields?.['SETUP STATE'] !== 'ready'
         || typeof rsvpField !== 'string'
         || !rsvpField.toUpperCase().endsWith(' RSVP')
         || rsvpField.length > 64
         || (guestField !== undefined && (typeof guestField !== 'string' || !guestField.startsWith('GUESTS-') || guestField.length > 64))
       ) {
-        throw new ApiError(409, 'EVENT_NOT_OPEN', 'This event is not open for RSVP changes.');
+        throw new ApiError(409, 'EVENT_MAPPING_MISSING', 'RSVP setup is incomplete. Ask an administrator to check this event.');
       }
       if (!guestField && value.guests !== 0) {
         throw new ApiError(400, 'VALIDATION_FAILED', 'This event does not accept guest counts.');
@@ -430,12 +432,12 @@ export function createAirtable(env, fetchImpl = fetch) {
         SPEAKER: value.speaker,
         TIME: value.time,
         ROOM: value.room,
+        ...(value.location !== undefined ? { LOCATION: value.location } : {}),
         NOTES: value.notes,
         Status: value.status
       };
       const needsScheduledSetup = value.status === 'Scheduled' && (
-        existing.fields?.Status !== 'Scheduled'
-        || existing.fields?.['SETUP STATE'] !== 'ready'
+        existing.fields?.['SETUP STATE'] !== 'ready'
         || typeof existing.fields?.['RSVP FIELD'] !== 'string'
       );
       if (!needsScheduledSetup) {

@@ -6,7 +6,7 @@ import { readSource } from '../helpers/read-source.mjs';
 test('the service worker caches only scope-relative app-shell resources', async () => {
   const source = await readSource('sw.js');
 
-  assert.match(source, /const CACHE_NAME = 'harumphers-v34'/);
+  assert.match(source, /const CACHE_NAME = 'harumphers-v35'/);
   assert.doesNotMatch(source, /['"]\/index\.html['"]/);
   assert.doesNotMatch(source, /['"]\/directory\.html['"]/);
   assert.match(source, /\.\/index\.html/);

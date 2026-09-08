@@ -1,4 +1,4 @@
-const CACHE_NAME = 'harumphers-v34';
+const CACHE_NAME = 'harumphers-v35';
 const APP_SHELL = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const APP_SHELL = [
   './events.html',
   './manifest.json',
   './assets/harumphers-client.js',
+  './assets/phone.css',
   './apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png'

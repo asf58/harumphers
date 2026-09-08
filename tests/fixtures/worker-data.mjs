@@ -302,6 +302,7 @@ export function createFixtureAirtable() {
       event.fields.SPEAKER = value.speaker;
       event.fields.TIME = value.time;
       event.fields.ROOM = value.room;
+      if (value.location !== undefined) event.fields.LOCATION = value.location;
       event.fields.NOTES = value.notes;
       if (value.status === 'Scheduled' && typeof event.fields['RSVP FIELD'] !== 'string') {
         const mapping = await buildEventFieldMapping({
@@ -403,6 +404,7 @@ export function createFixtureAirtable() {
         SPEAKER: value.speaker,
         TIME: value.time,
         ROOM: value.room,
+        LOCATION: value.location,
         NOTES: value.notes,
         Status: value.status,
         'CREATION KEY': value.idempotencyKey,

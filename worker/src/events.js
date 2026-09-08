@@ -88,6 +88,7 @@ export async function createEventWithAdapter(adapter, input) {
     SPEAKER: input.speaker || undefined,
     TIME: input.time || undefined,
     ROOM: input.room || undefined,
+    LOCATION: input.location || undefined,
     NOTES: input.notes || undefined,
     Status: input.status,
     'CREATION KEY': input.idempotencyKey,
