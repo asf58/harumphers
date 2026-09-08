@@ -23,14 +23,14 @@ const WRITE_METHODS = new Set([
   'uploadMemberPhoto'
 ]);
 
-function cacheRequest(resource, role) {
-  return new Request(`${CACHE_ORIGIN}/v1/${resource}/${role}`);
+function cacheRequest(resource, role, namespace) {
+  return new Request(`${CACHE_ORIGIN}/v2/${encodeURIComponent(namespace)}/${resource}/${role}`);
 }
 
-async function clearNamedCaches(cache) {
+async function clearNamedCaches(cache, namespace) {
   if (!cache) return;
   await Promise.all(RESOURCES.flatMap(resource => (
-    ROLES.map(role => cache.delete(cacheRequest(resource, role)))
+    ROLES.map(role => cache.delete(cacheRequest(resource, role, namespace)))
   )));
 }
 
@@ -56,10 +56,10 @@ async function store(cache, request, value, now) {
   }));
 }
 
-export function createCachedAirtable(airtable, cache, nowMs = () => Date.now()) {
+export function createCachedAirtable(airtable, cache, nowMs = () => Date.now(), namespace = 'default') {
   async function read(resource, role, loader) {
     if (!cache) return loader();
-    const request = cacheRequest(resource, role);
+    const request = cacheRequest(resource, role, namespace);
     const cached = await decodeCached(await cache.match(request));
     const now = nowMs();
     const age = cached ? now - cached.cachedAt : Number.POSITIVE_INFINITY;
@@ -86,7 +86,7 @@ export function createCachedAirtable(airtable, cache, nowMs = () => Date.now()) 
       }
       if (property === 'refreshCaches') {
         return async () => {
-          await clearNamedCaches(cache);
+          await clearNamedCaches(cache, namespace);
           return { refreshed: true };
         };
       }
@@ -94,7 +94,7 @@ export function createCachedAirtable(airtable, cache, nowMs = () => Date.now()) 
       if (typeof property === 'string' && WRITE_METHODS.has(property) && typeof value === 'function') {
         return async (...args) => {
           const result = await value.apply(target, args);
-          await clearNamedCaches(cache);
+          await clearNamedCaches(cache, namespace);
           return result;
         };
       }

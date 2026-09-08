@@ -85,7 +85,7 @@ export async function handleRequest(request, env, ctx, deps = {}) {
     requireAuthBindings(env);
     const rawAirtable = deps.airtable ?? createAirtable(env);
     const cache = deps.cache === undefined ? globalThis.caches?.default : deps.cache;
-    const airtable = createCachedAirtable(rawAirtable, cache);
+    const airtable = createCachedAirtable(rawAirtable, cache, Date.now, env.AIRTABLE_BASE_ID);
     const nowSeconds = (deps.nowSeconds ?? (() => Math.floor(Date.now() / 1000)))();
     const response = await routeRequest(request, env, airtable, nowSeconds);
     return withHeaders(response, corsHeaders(approvedOrigin));

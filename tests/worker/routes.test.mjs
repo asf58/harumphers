@@ -481,3 +481,19 @@ for (const role of ['member', 'admin']) {
     assert.equal(forged.response.status, 400);
   });
 }
+
+test('Worker cache namespace comes from the configured Airtable base', async () => {
+  const token = await issueSession({ sub: 'admin', role: 'admin' }, ENV.SESSION_SECRET, 1000);
+  const values = new Map();
+  const cache = {
+    async match(key) { return values.get(key.url)?.clone(); },
+    async put(key, response) { values.set(key.url, response.clone()); },
+    async delete(key) { return values.delete(key.url); }
+  };
+  for (const base of ['appStaging', 'appProduction', 'appStaging']) {
+    const airtable = { async getEventsBootstrap() { return { events: [base] }; } };
+    const response = await handleRequest(request('/api/events', { token }), { ...ENV, AIRTABLE_BASE_ID: base }, {}, { airtable, cache, nowSeconds: () => 1000 });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { events: [base] });
+  }
+});
