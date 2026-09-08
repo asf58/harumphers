@@ -1585,8 +1585,9 @@
           });
         } catch (e) { /* votes load failure is non-fatal */ }
 
-        // Get member's full record (no fields filter)
-        const memberData = await Harumphers.api('/api/me');
+        // RSVP and guest fields come from events; /api/me contains profile fields only.
+        const memberData = bootstrap.members.find(member => member.id === info.recordId)
+          || { id: info.recordId, fields: {} };
         myMemberRecord = memberData;
         const myFields = memberData.fields || {};
         const memberVotes = await Harumphers.api('/api/me/votes');

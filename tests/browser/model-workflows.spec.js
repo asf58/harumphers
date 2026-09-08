@@ -34,12 +34,17 @@ test('member profile, RSVP, and suggested-event vote persist in the working mode
   const scheduled = page.locator('.qe-card').filter({ hasText: 'Community Leadership' });
   await scheduled.getByRole('button', { name: 'MAYBE' }).click();
   await expect(scheduled.locator('.rsvp-pill')).toHaveText('MAYBE');
+  await scheduled.locator('.qe-guest-input').fill('3');
+  await scheduled.locator('.qe-guest-input').blur();
+  await expect(scheduled.locator('.qe-msg')).toContainText('Bringing 3 guests');
 
   const suggested = page.locator('.qe-card').filter({ hasText: 'Suggested Fixture Speaker' });
   await suggested.getByRole('button', { name: 'Interested', exact: true }).click();
   await expect(suggested.locator('.rsvp-pill')).toHaveText('INTERESTED');
 
   await page.reload();
+  await expect(page.locator('.qe-card').filter({ hasText: 'Community Leadership' }).locator('.rsvp-pill')).toHaveText('MAYBE');
+  await expect(page.locator('.qe-card').filter({ hasText: 'Community Leadership' }).locator('.qe-guest-input')).toHaveValue('3');
   const persistedSuggested = page.locator('.qe-card').filter({ hasText: 'Suggested Fixture Speaker' });
   await expect(persistedSuggested.locator('.rsvp-pill')).toHaveText('INTERESTED');
 
