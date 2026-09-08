@@ -156,16 +156,16 @@
     /* Grid view overrides .members layout */
     .members.grid-view {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
       gap: 12px;
       max-width: 720px;
     }
-    /* Phone portrait: force 3 columns and shrink avatars/spacing to fit.
+    /* Phone portrait: two columns leave room for single-line names.
        Selectors scoped under .members.grid-view to win specificity vs the
        base .grid-avatar / .grid-card rules that appear later in the file. */
     @media (max-width: 480px) {
       .members.grid-view {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
         padding-left: 10px;
         padding-right: 10px;
@@ -177,7 +177,7 @@
       }
       .members.grid-view .grid-initials { font-size: 1.375rem; }
       .members.grid-view .grid-card { padding: 10px 4px 8px; gap: 6px; }
-      .members.grid-view .grid-name { font-size: 0.875rem; }
+      .members.grid-view .grid-name { font-size: 0.8125rem; }
     }
     .grid-card {
       background: #2a2a2a;
@@ -214,12 +214,14 @@
       font-size: 1.625rem;
     }
     .grid-name {
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
       font-weight: 500;
       color: #ddd;
       line-height: 1.25;
       width: 100%;
-      word-break: break-word;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .grid-card .grid-badges {
       display: flex;
