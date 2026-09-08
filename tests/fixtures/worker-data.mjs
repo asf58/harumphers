@@ -184,7 +184,12 @@ export function createFixtureAirtable() {
 
     async getMember(recordId) {
       const record = records.find(item => item.id === recordId);
-      return record ? clone(record) : null;
+      if (!record) return null;
+      // Match the production profile allowlist: event responses live in /api/events.
+      const fields = Object.fromEntries(Object.entries(record.fields).filter(([name]) => (
+        ['FULL NAME', 'CELL #', 'E-MAIL ADDRESS', 'PHOTO', 'IN DIRECTORY', 'MEMBER #'].includes(name)
+      )));
+      return { id: record.id, fields: clone(fields) };
     },
 
     async updateMemberProfile(recordId, value) {
