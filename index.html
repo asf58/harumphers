@@ -1140,8 +1140,10 @@
     <div class="profile-card" id="profile-card" style="display:none"></div>
 
     <div id="admin-note" class="admin-note hidden">
-      You have admin access. You can edit any member's info in the directory and manage RSVPs in events.
+      You have admin access. Use the Admin Console for member lists, exports, and private notes. Create and edit events on the Events page.
     </div>
+
+    <a href="admin.html" id="admin-console-link" class="btn hidden" style="display:block;text-align:center;margin-bottom:16px">Admin Console</a>
 
     <div id="admin-requests" class="admin-requests hidden">
       <div class="spinner-small"></div>
@@ -1284,6 +1286,7 @@
       if (getAuthMode() === 'admin') {
         document.getElementById('admin-badge').classList.remove('hidden');
         document.getElementById('admin-note').classList.remove('hidden');
+        document.getElementById('admin-console-link').classList.remove('hidden');
         document.getElementById('admin-requests').classList.remove('hidden');
         loadPendingRequests();
       }
@@ -1327,6 +1330,10 @@
         } catch (err) {
           if (err.code === 'LOGIN_FAILED') {
             showSubmissionForm(raw);
+            return;
+          }
+          if (err.code === 'PIN_REQUIRED') {
+            showPinPrompt(Number(raw));
             return;
           }
           errorEl.style.color = '#ff6b6b';
@@ -2117,6 +2124,53 @@
         </div>
       `;
       document.getElementById('req-name').focus();
+    }
+
+    // Admins sign in with their member number, then their personal PIN.
+    let pendingPinNumber = null;
+
+    function showPinPrompt(memberNumber) {
+      pendingPinNumber = memberNumber;
+      const gate = document.getElementById('gate');
+      gate.innerHTML = `
+        <img src="apple-touch-icon.png" alt="HARUMPHERS" class="logo">
+        <h1>HARUMPHERS</h1>
+        <p class="subtitle" style="margin-bottom:30px">Admin sign-in: enter your PIN</p>
+        <input type="password" id="pin" aria-label="Admin PIN" placeholder="Admin PIN" inputmode="numeric" autocomplete="current-password" maxlength="8">
+        <div class="gate-error" id="gate-error"></div>
+        <button class="btn" onclick="submitPin()">Sign In</button>
+        <button class="submit-request-back" onclick="backToLogin()">Back to Login</button>
+      `;
+      document.getElementById('pin').addEventListener('keydown', e => {
+        if (e.key === 'Enter') submitPin();
+      });
+      document.getElementById('pin').focus();
+    }
+
+    async function submitPin() {
+      const pin = document.getElementById('pin').value.trim();
+      const errorEl = document.getElementById('gate-error');
+      errorEl.style.color = '#ff6b6b';
+      if (!/^\d{4,8}$/.test(pin)) {
+        errorEl.textContent = 'Your PIN is 4 to 8 digits.';
+        return;
+      }
+      errorEl.style.color = '#FFD700';
+      errorEl.textContent = 'Signing in...';
+      try {
+        await Harumphers.loginMember(pendingPinNumber, pin);
+        const session = await Harumphers.getSession();
+        currentAuthMode = session.role;
+        memberRecord = await loadMemberIdentity();
+        showMemberHome();
+      } catch (err) {
+        errorEl.style.color = '#ff6b6b';
+        errorEl.textContent = err.code === 'PIN_INCORRECT' || err.code === 'PIN_LOCKED' || err.code === 'RATE_LIMITED'
+          ? err.message
+          : 'Network error. Try again.';
+        document.getElementById('pin').value = '';
+        document.getElementById('pin').focus();
+      }
     }
 
     function backToLogin() {

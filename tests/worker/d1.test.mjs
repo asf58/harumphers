@@ -19,10 +19,10 @@ async function seededStore() {
   const DB = await createTestD1();
   const PHOTOS = createTestKv();
   DB.sqlite.exec(`
-    INSERT INTO members (id, full_name, last_name, cell, email, member_number, in_directory, is_admin) VALUES
-      ('${BOB}', 'AARON ZED', 'ZED', '412-555-0102', 'bob@example.test', '1002', 1, 1),
-      ('${ALICE}', 'ALICE ADAMS', 'ADAMS', '412-555-0101', 'alice@example.test', ' 1001 ', 1, 0),
-      ('${HIDDEN}', 'HIDDEN HOLT', 'HOLT', '', '', '1003', 0, 0);
+    INSERT INTO members (id, full_name, last_name, cell, email, member_number, in_directory, role) VALUES
+      ('${BOB}', 'AARON ZED', 'ZED', '412-555-0102', 'bob@example.test', '1002', 1, 'admin'),
+      ('${ALICE}', 'ALICE ADAMS', 'ADAMS', '412-555-0101', 'alice@example.test', ' 1001 ', 1, 'member'),
+      ('${HIDDEN}', 'HIDDEN HOLT', 'HOLT', '', '', '1003', 0, 'member');
     INSERT INTO member_event_fields (name, type, choices_json) VALUES
       ('SEP29 SPEAKER RSVP', 'singleSelect', '["YES","NO","MAYBE"]'),
       ('GUESTS-SEP29', 'number', '[]');

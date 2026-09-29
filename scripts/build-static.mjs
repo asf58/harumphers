@@ -8,6 +8,7 @@ const STATIC_ENTRIES = [
   'index.html',
   'directory.html',
   'events.html',
+  'admin.html',
   'manifest.json',
   'sw.js',
   'apple-touch-icon.png',
@@ -41,7 +42,7 @@ export async function buildStatic({ apiOrigin, outputDirectory }) {
     await cp(path.join(APP_ROOT, entry), path.join(output, entry), { recursive: true });
   }
 
-  for (const page of ['index.html', 'directory.html', 'events.html']) {
+  for (const page of ['index.html', 'directory.html', 'events.html', 'admin.html']) {
     const destination = path.join(output, page);
     const source = await readFile(destination, 'utf8');
     if (!source.includes(`data-api-origin="${PRODUCTION_API_ORIGIN}"`)) {

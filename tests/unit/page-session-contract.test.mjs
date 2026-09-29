@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { readSource } from '../helpers/read-source.mjs';
 
-const pages = ['index.html', 'directory.html', 'events.html'];
+const pages = ['index.html', 'directory.html', 'events.html', 'admin.html'];
 
 test('every page loads the signed-session client before its inline application script', async () => {
   for (const page of pages) {
