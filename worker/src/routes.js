@@ -25,6 +25,11 @@ const ROUTE_METHODS = new Map([
 
 const DYNAMIC_ROUTES = [
   {
+    name: 'file',
+    pattern: /^\/api\/files\/(att[A-Za-z0-9]{14})$/,
+    methods: new Set(['GET'])
+  },
+  {
     name: 'admin-member',
     pattern: /^\/api\/admin\/members\/(rec[A-Za-z0-9]{14})$/,
     methods: new Set(['PATCH'])
@@ -411,6 +416,21 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     requireExactKeys(body, ['password'], 'The submitted login is not valid.');
     if (!await credentialsMatch(body.password, env.ADMIN_LOGIN, env.SESSION_SECRET)) throw loginFailed();
     return json({ token: await issueSession({ sub: 'admin', role: 'admin' }, env.SESSION_SECRET, nowSeconds) });
+  }
+
+  // Image URLs are unguessable ids, like Airtable's attachment URLs, so <img> tags can load them.
+  if (matchedRoute.name === 'file') {
+    if (typeof airtable.getFile !== 'function') {
+      throw new ApiError(404, 'NOT_FOUND', 'The requested resource was not found.');
+    }
+    const file = await airtable.getFile(matchedRoute.params[0]);
+    return new Response(file.body, {
+      headers: {
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Content-Type': file.contentType,
+        'X-Content-Type-Options': 'nosniff'
+      }
+    });
   }
 
   if (pathname === '/api/member-requests') {

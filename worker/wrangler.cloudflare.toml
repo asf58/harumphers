@@ -1,0 +1,80 @@
+# Harumphers Cloudflare account: one Worker serves the static site and the API from the same
+# origin, with D1 for data and KV for images. Deploy with:
+#   npx wrangler deploy -c worker/wrangler.cloudflare.toml [--env staging]
+# Secrets (wrangler secret put): SESSION_SECRET, GUEST_LOGIN, ADMIN_LOGIN
+name = "app"
+main = "src/index.js"
+compatibility_date = "2026-08-25"
+account_id = "e8830d50ec4d7c207e680bd4dd55aa1b"
+workers_dev = true
+
+[assets]
+directory = "../dist-cloudflare"
+
+[observability]
+enabled = true
+
+[vars]
+ALLOWED_ORIGINS = "https://app.harumphers.workers.dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "harumphers-prod"
+database_id = "fd97719a-6b14-49ac-ab14-d576e001338a"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "PHOTOS"
+id = "2d64c8562b9c4c03a6e8d29e261337b9"
+
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "MEMBER_REQUEST_RATE_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 3
+  period = 60
+
+[env.staging]
+name = "app-staging"
+assets = { directory = "../dist-cloudflare-staging" }
+
+[env.staging.observability]
+enabled = true
+
+[env.staging.vars]
+ALLOWED_ORIGINS = "https://app-staging.harumphers.workers.dev"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "harumphers-staging"
+database_id = "4b3f0e61-cf5f-439d-af7e-802a0fb06518"
+migrations_dir = "migrations"
+
+[[env.staging.kv_namespaces]]
+binding = "PHOTOS"
+id = "70492ba42c294584b44e32302d474052"
+
+[[env.staging.ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "1011"
+
+  [env.staging.ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[env.staging.ratelimits]]
+name = "MEMBER_REQUEST_RATE_LIMITER"
+namespace_id = "1012"
+
+  [env.staging.ratelimits.simple]
+  limit = 3
+  period = 60

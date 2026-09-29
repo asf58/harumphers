@@ -1,5 +1,6 @@
 import { createAirtable } from './airtable.js';
 import { createCachedAirtable } from './cache.js';
+import { createD1Store } from './d1.js';
 import { ApiError } from './errors.js';
 import { routeRequest } from './routes.js';
 
@@ -83,9 +84,15 @@ export async function handleRequest(request, env, ctx, deps = {}) {
 
   try {
     requireAuthBindings(env);
-    const rawAirtable = deps.airtable ?? createAirtable(env);
-    const cache = deps.cache === undefined ? globalThis.caches?.default : deps.cache;
-    const airtable = createCachedAirtable(rawAirtable, cache, Date.now, env.AIRTABLE_BASE_ID);
+    // D1 answers every read directly; the edge cache only protects Airtable's request quota.
+    const airtable = !deps.airtable && env.DB
+      ? createD1Store(env, { origin: new URL(request.url).origin })
+      : createCachedAirtable(
+        deps.airtable ?? createAirtable(env),
+        deps.cache === undefined ? globalThis.caches?.default : deps.cache,
+        Date.now,
+        env.AIRTABLE_BASE_ID
+      );
     const nowSeconds = (deps.nowSeconds ?? (() => Math.floor(Date.now() / 1000)))();
     const response = await routeRequest(request, env, airtable, nowSeconds);
     return withHeaders(response, corsHeaders(approvedOrigin));
