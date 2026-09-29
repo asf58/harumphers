@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>HARUMPHERS Admin</title>
+  <meta name="theme-color" content="#8B0000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%) fixed;
+      color: #fff;
+      min-height: 100vh;
+    }
+    header {
+      background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
+      padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+      display: flex; align-items: center; gap: 10px;
+      position: sticky; top: 0; z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    header img { width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0; }
+    header h1 { font-size: 1.125rem; flex: 1; min-width: 0; }
+    .header-links { display: flex; gap: 10px; align-items: center; }
+    .header-links a {
+      color: #FFD700; text-decoration: none; font-size: 0.875rem;
+      min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+    }
+    main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .tab {
+      background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 22px; padding: 8px 18px; cursor: pointer; font-weight: 600;
+    }
+    .tab.active { background: #FFD700; color: #8B0000; border-color: #FFD700; }
+    .tab.right { margin-left: auto; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px; padding: 16px; margin-bottom: 16px;
+    }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .toolbar > * { flex: 1 1 12rem; }
+    input, select, textarea {
+      background: rgba(0,0,0,0.25); color: #fff; border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 10px; padding: 10px 12px; width: 100%;
+    }
+    select option { color: #000; }
+    textarea { min-height: 7rem; resize: vertical; }
+    label { display: block; font-size: 0.875rem; color: rgba(255,255,255,0.75); margin: 10px 0 4px; }
+    .check { display: flex; gap: 8px; align-items: center; margin-top: 12px; color: #fff; }
+    .check input { width: auto; min-height: 0; }
+    .btn {
+      background: #FFD700; color: #8B0000; border: none; border-radius: 22px;
+      padding: 10px 18px; font-weight: 700; cursor: pointer; flex: 0 0 auto;
+    }
+    .btn.secondary { background: rgba(255,215,0,0.15); color: #FFD700; border: 1px solid #FFD700; }
+    .btn.danger { background: rgba(255,107,107,0.2); color: #ff9b9b; border: 1px solid #ff6b6b; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .muted { color: rgba(255,255,255,0.6); font-size: 0.875rem; }
+    .msg { min-height: 1.5em; font-size: 0.875rem; color: #FFD700; margin: 6px 0; }
+    .msg.error { color: #ff8a8a; }
+    .count { font-size: 0.875rem; color: rgba(255,255,255,0.7); margin-bottom: 8px; }
+    .pill {
+      display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+      background: rgba(255,255,255,0.15); margin-left: 4px; white-space: nowrap;
+    }
+    .pill.gold { background: #FFD700; color: #8B0000; }
+    .pill.warn { background: rgba(255,107,107,0.3); color: #ffc0c0; }
+
+    /* Data tables: a real table on wide screens, stacked cards on phones. */
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+    table.data th {
+      text-align: left; font-size: 0.8125rem; color: #FFD700; font-weight: 700;
+      padding: 8px; border-bottom: 1px solid rgba(255,215,0,0.4);
+    }
+    table.data td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); vertical-align: top; overflow-wrap: anywhere; }
+    table.data tr.clickable { cursor: pointer; }
+    table.data tr.clickable:hover td { background: rgba(255,255,255,0.06); }
+    @media (max-width: 760px) {
+      table.data thead { display: none; }
+      table.data, table.data tbody, table.data tr, table.data td { display: block; width: 100%; }
+      table.data tr {
+        background: rgba(255,255,255,0.08); border-radius: 12px; margin-bottom: 10px; padding: 8px 12px;
+      }
+      table.data td { border: none; padding: 3px 0; }
+      table.data td[data-label]:not(:first-child)::before {
+        content: attr(data-label) ': '; color: rgba(255,255,255,0.6); font-size: 0.8125rem;
+      }
+      table.data td:first-child { font-weight: 700; font-size: 1rem; }
+      .tab.right { margin-left: 0; }
+    }
+
+    dialog {
+      background: #5a0000; color: #fff; border: 1px solid rgba(255,215,0,0.5); border-radius: 16px;
+      padding: 20px; width: min(640px, 94vw); max-height: 92vh; margin: auto;
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.6); }
+    dialog h2 { font-size: 1.25rem; margin-bottom: 4px; }
+    .dialog-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 16px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+    @media (max-width: 600px) {
+      dialog { width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0;
+        padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
+      .two-col { grid-template-columns: 1fr; }
+    }
+    .private-box { border: 1px dashed rgba(255,215,0,0.5); border-radius: 12px; padding: 4px 12px 12px; margin-top: 14px; }
+    .private-box legend { color: #FFD700; font-size: 0.8125rem; padding: 0 6px; }
+    .audit-row { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .audit-row time { color: rgba(255,255,255,0.6); font-size: 0.8125rem; display: block; }
+    #denied { display: none; text-align: center; padding: 60px 20px; }
+
+    @media print {
+      body { background: #fff; color: #000; }
+      header, .tabs, .toolbar, .no-print, #panel-members, #panel-admins, #panel-activity { display: none !important; }
+      .card { border: none; background: none; }
+      table.data th { color: #000; border-bottom: 1px solid #000; }
+      table.data td { border-bottom: 1px solid #ccc; }
+    }
+  </style>
+  <link rel="stylesheet" href="assets/phone.css">
+</head>
+<body>
+  <header>
+    <img src="apple-touch-icon.png" alt="">
+    <h1>ADMIN CONSOLE</h1>
+    <div class="header-links">
+      <a href="index.html">Home</a>
+      <a href="events.html">Events</a>
+      <a href="#" onclick="logout()">Logout</a>
+    </div>
+  </header>
+
+  <div id="denied">
+    <h2>Admins only</h2>
+    <p class="muted" style="margin:12px 0 20px">Sign in with your member number and admin PIN to use the admin console.</p>
+    <a class="btn" href="index.html" style="text-decoration:none">Go to sign-in</a>
+  </div>
+
+  <main id="app" hidden>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-panel="members" onclick="showPanel('members')">Members</button>
+      <button class="tab" data-panel="lists" onclick="showPanel('lists')">Lists &amp; Export</button>
+      <button class="tab" data-panel="admins" id="admins-tab" hidden onclick="showPanel('admins')">Admins</button>
+      <button class="tab" data-panel="activity" onclick="showPanel('activity')">Activity</button>
+      <button class="tab right" id="my-pin-btn" hidden onclick="openMyPin()">Change my PIN</button>
+    </nav>
+
+    <!-- Members -->
+    <section class="panel active" id="panel-members">
+      <div class="toolbar">
+        <input type="search" id="member-search" placeholder="Search name, email, phone, member #" aria-label="Search members" oninput="renderMembers()">
+        <select id="member-filter" aria-label="Show" onchange="renderMembers()">
+          <option value="directory">In the directory</option>
+          <option value="all">Everyone (including hidden)</option>
+          <option value="hidden">Hidden from directory</option>
+          <option value="admins">Admins</option>
+          <option value="no_number">No member # (can't sign in)</option>
+          <option value="notes">Has private notes</option>
+        </select>
+        <button class="btn" onclick="openEditor(null)">+ Add member</button>
+      </div>
+      <div class="count" id="member-count"></div>
+      <table class="data" id="member-table">
+        <thead><tr><th>Name</th><th>Member #</th><th>Phone</th><th>Email</th><th>Status</th><th>Last sign-in</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Lists & Export -->
+    <section class="panel" id="panel-lists">
+      <div class="card no-print">
+        <div class="toolbar">
+          <div>
+            <label for="list-source">List from</label>
+            <select id="list-source" onchange="sourceChanged()"></select>
+          </div>
+          <div>
+            <label for="list-filter">Who</label>
+            <select id="list-filter" onchange="renderList()"></select>
+          </div>
+        </div>
+        <div class="toolbar" style="margin:0">
+          <button class="btn" onclick="exportCsv()">Download CSV</button>
+          <button class="btn secondary" onclick="listEmail()">Email (BCC)</button>
+          <button class="btn secondary" onclick="listText()">Text</button>
+          <button class="btn secondary" onclick="listCopyEmails()">Copy emails</button>
+          <button class="btn secondary" onclick="window.print()">Print</button>
+        </div>
+        <div class="msg" id="list-msg"></div>
+      </div>
+      <div class="card">
+        <h2 id="list-title" style="font-size:1.125rem;margin-bottom:4px"></h2>
+        <div class="count" id="list-count"></div>
+        <table class="data" id="list-table"><thead></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- Admins (super admins only) -->
+    <section class="panel" id="panel-admins">
+      <div class="card">
+        <p class="muted" style="margin-bottom:12px">
+          <strong>Super admins</strong> manage who is an admin and set PINs. <strong>Admins</strong> create and run events,
+          pull lists, send email, and keep member notes. Admins sign in with their member number and PIN.
+        </p>
+        <table class="data" id="admin-table">
+          <thead><tr><th>Name</th><th>Member #</th><th>Level</th><th>PIN</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="msg" id="admin-msg"></div>
+      </div>
+      <div class="card">
+        <label for="promote-select">Make a member an admin</label>
+        <div class="toolbar">
+          <select id="promote-select" aria-label="Member to make admin"></select>
+          <button class="btn" onclick="promoteSelected()">Make admin</button>
+        </div>
+        <p class="muted">After making someone an admin, set their PIN and give it to them in person or by text.</p>
+      </div>
+    </section>
+
+    <!-- Activity -->
+    <section class="panel" id="panel-activity">
+      <div class="card">
+        <p class="muted" style="margin-bottom:8px">The latest admin changes, newest first (US Eastern time).</p>
+        <div id="audit-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Member editor -->
+  <dialog id="editor">
+    <form method="dialog" onsubmit="event.preventDefault(); saveMember();">
+      <h2 id="editor-title">Edit member</h2>
+      <div class="two-col">
+        <div><label for="ed-name">Full name</label><input id="ed-name" required maxlength="160"></div>
+        <div><label for="ed-number">Member #</label><input id="ed-number" inputmode="numeric" maxlength="9"></div>
+        <div><label for="ed-phone">Cell</label><input id="ed-phone" type="tel" maxlength="40"></div>
+        <div><label for="ed-email">Email</label><input id="ed-email" type="email" maxlength="254"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="ed-directory"> Show in the member directory</label>
+      <fieldset class="private-box">
+        <legend>Private: admins only, never in the directory</legend>
+        <label for="ed-address">Home address</label>
+        <textarea id="ed-address" maxlength="500" style="min-height:4rem"></textarea>
+        <label for="ed-notes">Notes</label>
+        <textarea id="ed-notes" maxlength="5000"></textarea>
+      </fieldset>
+      <p class="muted" id="ed-meta" style="margin-top:10px"></p>
+      <div class="msg" id="editor-msg"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn secondary" onclick="document.getElementById('editor').close()">Cancel</button>
+        <button type="submit" class="btn" id="editor-save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- PIN dialog (set someone's PIN, or change my own) -->
+  <dialog id="pin-dialog">
+    <form method="dialog" onsubmit="event.preventDefault(); savePin();">
+      <h2 id="pin-title">Set PIN</h2>
+      <p class="muted" id="pin-help">4 to 8 digits.</p>
+      <div id="pin-current-wrap">
+        <label for="pin-current">Current PIN</label>
+        <input id="pin-current" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password">
+      </div>
+      <label for="pin-new">New PIN</label>
+      <input id="pin-new" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password">
+      <label for="pin-confirm">Confirm new PIN</label>
+      <input id="pin-confirm" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password">
+      <div class="msg" id="pin-msg"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn secondary" onclick="document.getElementById('pin-dialog').close()">Cancel</button>
+        <button type="submit" class="btn">Save PIN</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="assets/harumphers-client.js" data-api-origin="https://app.harumphers.workers.dev"></script>
+  <script>
+    const esc = value => Harumphers.escapeHtml(value);
+    const ROLE_LABELS = { super_admin: 'Super admin', admin: 'Admin', member: 'Member' };
+    const RESPONSE_LABELS = { YES: 'Going', MAYBE: 'Maybe', NO: 'Not going' };
+    const MEMBER_FILTERS = [
+      ['directory', 'Everyone in the directory'],
+      ['all', 'Everyone (including hidden)'],
+      ['hidden', 'Hidden from directory'],
+      ['admins', 'Admins'],
+      ['no_number', "No member # (can't sign in)"],
+      ['never', 'Not signed in since tracking began'],
+      ['notes', 'Has private notes']
+    ];
+    const EVENT_FILTERS = [
+      ['going', 'Going'],
+      ['going_maybe', 'Going or maybe'],
+      ['maybe', 'Maybe'],
+      ['not_going', 'Not going'],
+      ['no_response', "Haven't responded"],
+      ['responded', 'Responded (any answer)'],
+      ['attended', 'Attended'],
+      ['not_attended', 'Marked absent'],
+      ['everyone', 'Everyone in the directory']
+    ];
+
+    let session = null;
+    let roster = [];
+    let events = [];
+    let listRows = [];
+    let listColumns = [];
+    let editingId = null;
+    let pinTarget = null;
+
+    function logout() {
+      Harumphers.logout();
+      window.location.href = 'index.html';
+    }
+
+    function easternTime(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleString('en-US', {
+        timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+      });
+    }
+
+    function setMsg(id, text, isError = false) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.classList.toggle('error', isError);
+    }
+
+    function showPanel(name) {
+      for (const tab of document.querySelectorAll('.tab[data-panel]')) tab.classList.toggle('active', tab.dataset.panel === name);
+      for (const panel of document.querySelectorAll('.panel')) panel.classList.toggle('active', panel.id === `panel-${name}`);
+      if (name === 'lists') renderList();
+      if (name === 'admins') renderAdmins();
+      if (name === 'activity') loadAudit();
+    }
+
+    // --- Members ---
+
+    function memberMatches(member, filter, query) {
+      if (filter === 'directory' && !member.inDirectory) return false;
+      if (filter === 'hidden' && member.inDirectory) return false;
+      if (filter === 'admins' && member.role === 'member') return false;
+      if (filter === 'no_number' && member.memberNumber) return false;
+      if (filter === 'never' && member.lastLoginAt) return false;
+      if (filter === 'notes' && !member.notes && !member.homeAddress) return false;
+      if (!query) return true;
+      const haystack = [member.name, member.email, member.phone, member.memberNumber].join(' ').toLowerCase();
+      return query.split(/\s+/).every(word => haystack.includes(word));
+    }
+
+    function statusPills(member) {
+      let html = '';
+      if (member.role !== 'member') html += `<span class="pill gold">${esc(ROLE_LABELS[member.role])}</span>`;
+      if (!member.inDirectory) html += '<span class="pill">Hidden</span>';
+      if (member.notes || member.homeAddress) html += '<span class="pill">Notes</span>';
+      if (member.role !== 'member' && !member.hasPin) html += '<span class="pill warn">No PIN</span>';
+      return html || '<span class="muted">Member</span>';
+    }
+
+    function renderMembers() {
+      const filter = document.getElementById('member-filter').value;
+      const query = document.getElementById('member-search').value.trim().toLowerCase();
+      const rows = roster.filter(member => memberMatches(member, filter, query));
+      document.getElementById('member-count').textContent = `${rows.length} of ${roster.length} members`;
+      document.querySelector('#member-table tbody').innerHTML = rows.map(member => `
+        <tr class="clickable" tabindex="0" data-id="${esc(member.id)}">
+          <td data-label="Name">${esc(member.name)}</td>
+          <td data-label="Member #">${esc(member.memberNumber ?? '')}</td>
+          <td data-label="Phone">${esc(member.phone)}</td>
+          <td data-label="Email">${esc(member.email)}</td>
+          <td data-label="Status">${statusPills(member)}</td>
+          <td data-label="Last sign-in">${esc(easternTime(member.lastLoginAt)) || '<span class="muted">-</span>'}</td>
+        </tr>`).join('');
+    }
+
+    function rowActivated(event) {
+      const row = event.target.closest('tr[data-id]');
+      if (!row) return;
+      if (event.type === 'keydown' && event.key !== 'Enter') return;
+      openEditor(row.dataset.id);
+    }
+
+    function openEditor(memberId) {
+      editingId = memberId;
+      const member = roster.find(row => row.id === memberId) ?? {
+        name: '', phone: '', email: '', memberNumber: null, inDirectory: true, homeAddress: '', notes: ''
+      };
+      document.getElementById('editor-title').textContent = memberId ? 'Edit member' : 'Add member';
+      document.getElementById('ed-name').value = member.name;
+      document.getElementById('ed-number').value = member.memberNumber ?? '';
+      document.getElementById('ed-phone').value = member.phone;
+      document.getElementById('ed-email').value = member.email;
+      document.getElementById('ed-directory').checked = member.inDirectory;
+      document.getElementById('ed-address').value = member.homeAddress;
+      document.getElementById('ed-notes').value = member.notes;
+      document.getElementById('ed-meta').textContent = memberId
+        ? `${ROLE_LABELS[member.role]}. Last sign-in: ${easternTime(member.lastLoginAt) || 'not recorded'}.`
+        : '';
+      setMsg('editor-msg', '');
+      document.getElementById('editor').showModal();
+    }
+
+    async function saveMember() {
+      const numberText = document.getElementById('ed-number').value.trim();
+      if (numberText && !/^\d{1,9}$/.test(numberText)) {
+        setMsg('editor-msg', 'Member # must be digits only.', true);
+        return;
+      }
+      const body = {
+        name: document.getElementById('ed-name').value.trim(),
+        phone: document.getElementById('ed-phone').value.trim(),
+        email: document.getElementById('ed-email').value.trim(),
+        memberNumber: numberText ? Number(numberText) : null,
+        inDirectory: document.getElementById('ed-directory').checked,
+        homeAddress: document.getElementById('ed-address').value.trim(),
+        notes: document.getElementById('ed-notes').value.trim()
+      };
+      if (!body.name) {
+        setMsg('editor-msg', 'A name is required.', true);
+        return;
+      }
+      const button = document.getElementById('editor-save');
+      button.disabled = true;
+      setMsg('editor-msg', 'Saving...');
+      try {
+        const saved = await Harumphers.api(editingId ? `/api/admin/roster/${editingId}` : '/api/admin/roster', {
+          method: editingId ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const index = roster.findIndex(row => row.id === saved.id);
+        if (index >= 0) roster[index] = saved; else roster.push(saved);
+        roster.sort((a, b) => a.name.localeCompare(b.name));
+        renderMembers();
+        document.getElementById('editor').close();
+      } catch (error) {
+        setMsg('editor-msg', error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    // --- Lists & export ---
+
+    function populateSources() {
+      const eventOptions = events
+        .slice()
+        .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
+        .map(ev => `<option value="event:${esc(ev.id)}">Event: ${esc(ev.name)}${ev.date ? ` (${esc(ev.date)})` : ''} - ${esc(ev.status ?? '')}</option>`)
+        .join('');
+      document.getElementById('list-source').innerHTML = `<option value="members">Members</option>${eventOptions}`;
+      const upcoming = events.find(ev => ev.status === 'Scheduled');
+      if (upcoming) document.getElementById('list-source').value = `event:${upcoming.id}`;
+      sourceChanged(false);
+    }
+
+    function sourceChanged(render = true) {
+      const isEvent = document.getElementById('list-source').value.startsWith('event:');
+      const options = isEvent ? EVENT_FILTERS : MEMBER_FILTERS;
+      document.getElementById('list-filter').innerHTML = options
+        .map(([value, label]) => `<option value="${value}">${esc(label)}</option>`).join('');
+      if (render) renderList();
+    }
+
+    const eventRosterCache = new Map();
+
+    async function renderList() {
+      const source = document.getElementById('list-source').value;
+      const filter = document.getElementById('list-filter').value;
+      const filterLabel = document.getElementById('list-filter').selectedOptions[0]?.textContent ?? '';
+      setMsg('list-msg', '');
+      if (source === 'members') {
+        listRows = roster.filter(member => memberMatches(member, filter, ''));
+        listColumns = [
+          ['Name', row => row.name], ['Member #', row => row.memberNumber ?? ''], ['Phone', row => row.phone],
+          ['Email', row => row.email], ['Home address', row => row.homeAddress]
+        ];
+        document.getElementById('list-title').textContent = `Members: ${filterLabel}`;
+        document.getElementById('list-count').textContent = `${listRows.length} people`;
+      } else {
+        const eventId = source.slice('event:'.length);
+        if (!eventRosterCache.has(eventId)) {
+          document.getElementById('list-count').textContent = 'Loading...';
+          try {
+            eventRosterCache.set(eventId, await Harumphers.api(`/api/admin/events/${eventId}/roster`));
+          } catch (error) {
+            setMsg('list-msg', error.message, true);
+            return;
+          }
+        }
+        const data = eventRosterCache.get(eventId);
+        const tests = {
+          going: row => row.response === 'YES',
+          going_maybe: row => row.response === 'YES' || row.response === 'MAYBE',
+          maybe: row => row.response === 'MAYBE',
+          not_going: row => row.response === 'NO',
+          no_response: row => row.response === null,
+          responded: row => row.response !== null,
+          attended: row => row.attended === true,
+          not_attended: row => row.attended === false,
+          everyone: () => true
+        };
+        listRows = data.rows.filter(tests[filter]);
+        listColumns = [
+          ['Name', row => row.name], ['Member #', row => row.memberNumber ?? ''], ['Phone', row => row.phone],
+          ['Email', row => row.email], ['Response', row => RESPONSE_LABELS[row.response] ?? 'No response'],
+          ['Guests', row => row.guests || ''],
+          ['Attended', row => row.attended === null ? '' : (row.attended ? 'Yes' : 'No')]
+        ];
+        const guests = listRows.reduce((sum, row) => sum + (row.response === 'YES' ? row.guests : 0), 0);
+        document.getElementById('list-title').textContent = `${data.event.name}: ${filterLabel}`;
+        document.getElementById('list-count').textContent = `${listRows.length} people`
+          + (guests ? `, plus ${guests} guest${guests === 1 ? '' : 's'} with those going` : '')
+          + (data.event.hasRsvp ? '' : '. This event has no RSVP setup, so responses are blank.');
+      }
+      document.querySelector('#list-table thead').innerHTML = `<tr>${listColumns.map(([name]) => `<th>${esc(name)}</th>`).join('')}</tr>`;
+      document.querySelector('#list-table tbody').innerHTML = listRows.map(row => `<tr>${
+        listColumns.map(([name, get]) => `<td data-label="${esc(name)}">${esc(get(row))}</td>`).join('')
+      }</tr>`).join('');
+    }
+
+    function csvCell(value) {
+      let text = String(value ?? '');
+      // Stop spreadsheet apps from treating a value as a formula.
+      if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+      return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+    }
+
+    function exportCsv() {
+      if (listRows.length === 0) { setMsg('list-msg', 'The list is empty.', true); return; }
+      const lines = [listColumns.map(([name]) => csvCell(name)).join(',')]
+        .concat(listRows.map(row => listColumns.map(([, get]) => csvCell(get(row))).join(',')));
+      const blob = new Blob([`﻿${lines.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' });
+      const link = document.createElement('a');
+      const title = document.getElementById('list-title').textContent.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      link.href = URL.createObjectURL(blob);
+      link.download = `harumphers-${title || 'list'}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      setMsg('list-msg', `Downloaded ${listRows.length} rows.`);
+    }
+
+    function listEmails() {
+      return [...new Set(listRows.map(row => row.email).filter(Boolean))];
+    }
+
+    function listEmail() {
+      const emails = listEmails();
+      if (emails.length === 0) { setMsg('list-msg', 'No email addresses in this list.', true); return; }
+      window.location.href = 'mailto:?bcc=' + emails.join(',');
+      setMsg('list-msg', `Opening your email app with ${emails.length} people in BCC.`);
+    }
+
+    function listText() {
+      const phones = [...new Set(listRows.map(row => row.phone).filter(Boolean))];
+      if (phones.length === 0) { setMsg('list-msg', 'No phone numbers in this list.', true); return; }
+      window.location.href = 'sms:' + phones.join(',');
+      setMsg('list-msg', `Opening messages for ${phones.length} people.`);
+    }
+
+    async function listCopyEmails() {
+      const emails = listEmails();
+      if (emails.length === 0) { setMsg('list-msg', 'No email addresses in this list.', true); return; }
+      try {
+        await navigator.clipboard.writeText(emails.join(', '));
+        setMsg('list-msg', `Copied ${emails.length} email addresses.`);
+      } catch {
+        setMsg('list-msg', 'Copy was blocked by the browser. Use Download CSV instead.', true);
+      }
+    }
+
+    // --- Admins (super admins) ---
+
+    function renderAdmins() {
+      const admins = roster.filter(member => member.role !== 'member');
+      document.querySelector('#admin-table tbody').innerHTML = admins.map(member => `
+        <tr>
+          <td data-label="Name">${esc(member.name)}${member.id === session.memberId ? ' <span class="pill">You</span>' : ''}</td>
+          <td data-label="Member #">${esc(member.memberNumber ?? '')}${member.memberNumber ? '' : ' <span class="pill warn">Needs #</span>'}</td>
+          <td data-label="Level">
+            <select aria-label="Admin level for ${esc(member.name)}" onchange="changeRole('${esc(member.id)}', this.value)">
+              <option value="super_admin"${member.role === 'super_admin' ? ' selected' : ''}>Super admin</option>
+              <option value="admin"${member.role === 'admin' ? ' selected' : ''}>Admin</option>
+              <option value="member">Remove admin</option>
+            </select>
+          </td>
+          <td data-label="PIN">${member.hasPin ? 'Set' : '<span class="pill warn">Not set</span>'}</td>
+          <td data-label="Actions">
+            <button class="btn secondary" onclick="openSetPin('${esc(member.id)}')">${member.hasPin ? 'Reset PIN' : 'Set PIN'}</button>
+          </td>
+        </tr>`).join('');
+      document.getElementById('promote-select').innerHTML = roster
+        .filter(member => member.role === 'member')
+        .map(member => `<option value="${esc(member.id)}">${esc(member.name)}${member.memberNumber ? ` (#${esc(member.memberNumber)})` : ' (no member #)'}</option>`)
+        .join('');
+    }
+
+    async function changeRole(memberId, role) {
+      const member = roster.find(row => row.id === memberId);
+      if (role === 'member' && !confirmInline(`Remove admin access from ${member.name}?`)) { renderAdmins(); return; }
+      try {
+        await Harumphers.api(`/api/admin/roster/${memberId}/role`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role })
+        });
+        member.role = role;
+        setMsg('admin-msg', `${member.name} is now ${ROLE_LABELS[role].toLowerCase()}.`);
+      } catch (error) {
+        setMsg('admin-msg', error.message, true);
+      }
+      renderAdmins();
+      renderMembers();
+    }
+
+    // Admin-level removal is reversible, so a simple in-page confirmation is enough.
+    function confirmInline(text) {
+      return window.confirm(text);
+    }
+
+    async function promoteSelected() {
+      const memberId = document.getElementById('promote-select').value;
+      if (!memberId) return;
+      await changeRole(memberId, 'admin');
+      openSetPin(memberId);
+    }
+
+    // --- PINs ---
+
+    function openSetPin(memberId) {
+      pinTarget = memberId;
+      const member = roster.find(row => row.id === memberId);
+      document.getElementById('pin-title').textContent = `Set PIN for ${member.name}`;
+      document.getElementById('pin-help').textContent = '4 to 8 digits. Give it to them in person or by text; they can change it later.';
+      document.getElementById('pin-current-wrap').hidden = true;
+      openPinDialog();
+    }
+
+    function openMyPin() {
+      pinTarget = 'me';
+      document.getElementById('pin-title').textContent = 'Change my PIN';
+      document.getElementById('pin-help').textContent = '4 to 8 digits.';
+      document.getElementById('pin-current-wrap').hidden = false;
+      openPinDialog();
+    }
+
+    function openPinDialog() {
+      for (const id of ['pin-current', 'pin-new', 'pin-confirm']) document.getElementById(id).value = '';
+      setMsg('pin-msg', '');
+      document.getElementById('pin-dialog').showModal();
+    }
+
+    async function savePin() {
+      const newPin = document.getElementById('pin-new').value.trim();
+      if (!/^\d{4,8}$/.test(newPin)) { setMsg('pin-msg', 'The PIN must be 4 to 8 digits.', true); return; }
+      if (newPin !== document.getElementById('pin-confirm').value.trim()) { setMsg('pin-msg', 'The two PINs do not match.', true); return; }
+      try {
+        if (pinTarget === 'me') {
+          await Harumphers.api('/api/me/pin', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPin: document.getElementById('pin-current').value.trim(), newPin })
+          });
+        } else {
+          await Harumphers.api(`/api/admin/roster/${pinTarget}/pin`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: newPin })
+          });
+          roster.find(row => row.id === pinTarget).hasPin = true;
+          renderAdmins();
+          renderMembers();
+        }
+        document.getElementById('pin-dialog').close();
+        setMsg('admin-msg', 'PIN saved.');
+      } catch (error) {
+        setMsg('pin-msg', error.message, true);
+      }
+    }
+
+    // --- Activity ---
+
+    const ACTION_LABELS = {
+      'admin-roster POST': 'Added a member',
+      'admin-roster-member PATCH': 'Edited a member',
+      'admin-roster-role PUT': 'Changed admin level',
+      'admin-roster-pin PUT': 'Set a PIN',
+      'admin-member PATCH': 'Edited a member (directory)',
+      'admin-member-photo POST': 'Changed a member photo',
+      'admin-rsvp PUT': 'Changed an RSVP',
+      'admin-vote PUT': 'Changed a vote',
+      'admin-events POST': 'Created an event',
+      'admin-event PATCH': 'Edited an event',
+      'admin-event-photo POST': 'Changed a speaker photo',
+      'admin-event-photo DELETE': 'Removed a speaker photo',
+      'admin-attendance PUT': 'Recorded attendance',
+      'admin-photo PATCH': 'Edited a photo caption',
+      'admin-photo DELETE': 'Deleted a gallery photo',
+      'admin-member-request-approve POST': 'Approved a member request',
+      'admin-member-request-reject POST': 'Rejected a member request'
+    };
+
+    function targetName(id) {
+      return roster.find(member => member.id === id)?.name ?? events.find(ev => ev.id === id)?.name ?? '';
+    }
+
+    async function loadAudit() {
+      const list = document.getElementById('audit-list');
+      list.innerHTML = '<p class="muted">Loading...</p>';
+      try {
+        const { entries } = await Harumphers.api('/api/admin/audit');
+        list.innerHTML = entries.length === 0 ? '<p class="muted">No admin changes recorded yet.</p>' : entries.map(entry => {
+          const target = [targetName(entry.targetId), ...entry.detail.params?.slice(1).map(targetName) ?? []].filter(Boolean).join(', ');
+          const extra = entry.detail.to ? ` (${ROLE_LABELS[entry.detail.from] ?? ''} to ${ROLE_LABELS[entry.detail.to] ?? ''})`
+            : entry.detail.pin ? ` (${entry.detail.pin})` : '';
+          return `<div class="audit-row"><time>${esc(easternTime(entry.at))}</time>
+            <strong>${esc(entry.actorName || 'Unknown')}</strong>: ${esc(ACTION_LABELS[entry.action] ?? entry.action)}${esc(extra)}${target ? `: ${esc(target)}` : ''}</div>`;
+        }).join('');
+      } catch (error) {
+        list.innerHTML = `<p class="msg error">${esc(error.message)}</p>`;
+      }
+    }
+
+    // --- Start ---
+
+    async function init() {
+      try {
+        const current = await Harumphers.getSession();
+        if (current.role !== 'admin') throw new Error('not an admin');
+        session = current;
+      } catch {
+        document.getElementById('denied').style.display = 'block';
+        return;
+      }
+      document.getElementById('app').hidden = false;
+      document.getElementById('admins-tab').hidden = session.adminLevel !== 'super_admin';
+      document.getElementById('my-pin-btn').hidden = !session.hasMemberIdentity;
+      document.getElementById('member-table').addEventListener('click', rowActivated);
+      document.getElementById('member-table').addEventListener('keydown', rowActivated);
+      try {
+        const [rosterData, eventData, me] = await Promise.all([
+          Harumphers.api('/api/admin/roster'),
+          Harumphers.api('/api/events'),
+          session.hasMemberIdentity ? Harumphers.api('/api/me') : Promise.resolve(null)
+        ]);
+        roster = rosterData.members;
+        session.memberId = me?.id ?? null;
+        events = eventData.events.map(record => ({
+          id: record.id,
+          name: record.fields['EVENT NAME'] ?? '(untitled)',
+          date: record.fields.DATE ?? '',
+          status: record.fields.Status ?? ''
+        }));
+      } catch (error) {
+        document.getElementById('member-count').textContent = `Could not load members: ${error.message}`;
+        return;
+      }
+      renderMembers();
+      populateSources();
+    }
+
+    init();
+  </script>
+</body>
+</html>

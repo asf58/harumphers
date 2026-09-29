@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { readSource } from '../helpers/read-source.mjs';
 
-const publicPages = ['index.html', 'directory.html', 'events.html'];
+const publicPages = ['index.html', 'directory.html', 'events.html', 'admin.html'];
 
 test('a shared Worker authorization gate cannot ship in a public page', async () => {
   const sharedGatePattern = /X-Harumphers-Key|const\s+API_KEY\s*=/;

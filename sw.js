@@ -1,9 +1,10 @@
-const CACHE_NAME = 'harumphers-v39';
+const CACHE_NAME = 'harumphers-v40';
 const APP_SHELL = [
   './',
   './index.html',
   './directory.html',
   './events.html',
+  './admin.html',
   './manifest.json',
   './assets/harumphers-client.js',
   './assets/phone.css',

@@ -159,8 +159,8 @@
     loginGuest(phrase) {
       return login('/api/login/guest', { phrase });
     },
-    loginMember(memberNumber) {
-      return login('/api/login/member', { memberNumber });
+    loginMember(memberNumber, pin) {
+      return login('/api/login/member', pin === undefined ? { memberNumber } : { memberNumber, pin });
     },
     submitMemberRequest(name, memberNumber) {
       return requestJson('/api/member-requests', {
