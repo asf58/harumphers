@@ -8,7 +8,7 @@ import { handleRequest } from '../../worker/src/index.js';
 import { createFixtureAirtable, FIXTURE_LOGIN } from './worker-data.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const API_ORIGIN_PATTERN = /data-api-origin="https:\/\/harumphers-api\.adamsfeuer\.workers\.dev"/g;
+const API_ORIGIN_PATTERN = /data-api-origin="https:\/\/app\.harumphers\.workers\.dev"/g;
 const CONTENT_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],

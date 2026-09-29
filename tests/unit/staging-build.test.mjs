@@ -16,7 +16,7 @@ test('staging build replaces every production API origin without changing source
     for (const page of ['index.html', 'directory.html', 'events.html']) {
       const built = await readFile(path.join(outputDirectory, page), 'utf8');
       assert.equal(built.includes(`data-api-origin="${stagingOrigin}"`), true, page);
-      assert.equal(built.includes('harumphers-api.adamsfeuer.workers.dev'), false, page);
+      assert.equal(built.includes('app.harumphers.workers.dev'), false, page);
     }
     assert.equal((await stat(path.join(outputDirectory, 'assets', 'harumphers-client.js'))).isFile(), true);
     await assert.rejects(

@@ -15,7 +15,7 @@ directory = "../dist-cloudflare"
 enabled = true
 
 [vars]
-ALLOWED_ORIGINS = "https://app.harumphers.workers.dev"
+ALLOWED_ORIGINS = "https://app.harumphers.workers.dev,https://asf58.github.io"
 
 [[d1_databases]]
 binding = "DB"
