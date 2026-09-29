@@ -11,7 +11,7 @@
     "test:worker": "node --test tests/worker/*.test.mjs",
     "test:browser": "playwright test",
     "test": "npm run test:unit && npm run test:browser",
-    "build:cloudflare": "node scripts/build-static.mjs --api-origin=https://app.harumphers.workers.dev --out-dir=dist-cloudflare",
+    "build:cloudflare": "node scripts/build-static.mjs --api-origin=https://harumphers.org --out-dir=dist-cloudflare",
     "build:cloudflare-staging": "node scripts/build-static.mjs --api-origin=https://app-staging.harumphers.workers.dev --out-dir=dist-cloudflare-staging"
   },
   "devDependencies": {
