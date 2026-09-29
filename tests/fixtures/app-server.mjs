@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { handleRequest } from '../../worker/src/index.js';
+import { createSeededD1 } from './d1-seed.mjs';
 import { createFixtureAirtable, FIXTURE_LOGIN } from './worker-data.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -85,14 +86,17 @@ async function serveStatic(request, response, origin) {
   createReadStream(file).pipe(response);
 }
 
-export async function createFixtureServer({ host = '127.0.0.1', port = 4173 } = {}) {
+// store: 'airtable' runs the in-memory Airtable-shaped fixture; 'd1' runs the real D1 store on SQLite.
+export async function createFixtureServer({ host = '127.0.0.1', port = 4173, store = 'airtable' } = {}) {
   let fixtureAirtable = createFixtureAirtable();
+  let d1Bindings = store === 'd1' ? await createSeededD1() : null;
   let origin;
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, origin);
       if (url.pathname === '/__fixtures/reset' && request.method === 'POST') {
         fixtureAirtable = createFixtureAirtable();
+        if (d1Bindings) d1Bindings = await createSeededD1();
         response.writeHead(204).end();
         return;
       }
@@ -105,9 +109,9 @@ export async function createFixtureServer({ host = '127.0.0.1', port = 4173 } = 
           headers: request.headers,
           body
         });
-        const workerResponse = await handleRequest(workerRequest, fixtureEnv(origin), {}, {
-          airtable: fixtureAirtable
-        });
+        const workerResponse = d1Bindings
+          ? await handleRequest(workerRequest, { ...fixtureEnv(origin), ...d1Bindings }, {})
+          : await handleRequest(workerRequest, fixtureEnv(origin), {}, { airtable: fixtureAirtable });
         await sendWorkerResponse(response, workerResponse);
         return;
       }
@@ -136,6 +140,7 @@ export async function createFixtureServer({ host = '127.0.0.1', port = 4173 } = 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const portArgument = process.argv.find(value => value.startsWith('--port='));
   const port = portArgument ? Number(portArgument.split('=')[1]) : 4173;
-  const model = await createFixtureServer({ port });
+  const store = process.argv.includes('--store=d1') ? 'd1' : 'airtable';
+  const model = await createFixtureServer({ port, store });
   process.stdout.write(`Harumphers fixture model: ${model.origin}\n`);
 }

@@ -440,7 +440,9 @@
         });
         const index = roster.findIndex(row => row.id === saved.id);
         if (index >= 0) roster[index] = saved; else roster.push(saved);
-        roster.sort((a, b) => a.name.localeCompare(b.name));
+        // Match the server's directory order: last name, then full name.
+        const lastName = member => member.name.trim().split(/\s+/).at(-1) ?? '';
+        roster.sort((a, b) => lastName(a).localeCompare(lastName(b)) || a.name.localeCompare(b.name));
         renderMembers();
         document.getElementById('editor').close();
       } catch (error) {
