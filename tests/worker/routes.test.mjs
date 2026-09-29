@@ -156,14 +156,14 @@ test('only a record-backed admin session retains member identity', async () => {
   const passwordAdminToken = await issueSession({ sub: 'admin', role: 'admin' }, ENV.SESSION_SECRET, 1000);
 
   const memberAdminSession = await call(request('/api/session', { token: memberAdminToken }), airtable);
-  assert.deepEqual(memberAdminSession.body, { role: 'admin', hasMemberIdentity: true });
+  assert.deepEqual(memberAdminSession.body, { role: 'admin', hasMemberIdentity: true, adminLevel: 'admin' });
 
   const memberAdminProfile = await call(request('/api/me', { token: memberAdminToken }), airtable);
   assert.equal(memberAdminProfile.response.status, 200);
   assert.equal(memberAdminProfile.body.id, 'recFixtureAdmin01');
 
   const passwordAdminSession = await call(request('/api/session', { token: passwordAdminToken }), airtable);
-  assert.deepEqual(passwordAdminSession.body, { role: 'admin', hasMemberIdentity: false });
+  assert.deepEqual(passwordAdminSession.body, { role: 'admin', hasMemberIdentity: false, adminLevel: 'admin' });
 
   const passwordAdminProfile = await call(request('/api/me', { token: passwordAdminToken }), airtable);
   assert.equal(passwordAdminProfile.response.status, 403);
@@ -410,7 +410,7 @@ test('the session route returns the verified role without exposing its subject',
   const { body, response } = await call(request('/api/session', { token }));
 
   assert.equal(response.status, 200);
-  assert.deepEqual(body, { role: 'member', hasMemberIdentity: true });
+  assert.deepEqual(body, { role: 'member', hasMemberIdentity: true, adminLevel: null });
 });
 
 test('an unapproved browser origin is rejected without reflecting CORS or reaching Airtable', async () => {

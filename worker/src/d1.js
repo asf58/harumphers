@@ -8,6 +8,10 @@ const RECORD_ID = /^rec[A-Za-z0-9]{14}$/;
 const ATTACHMENT_ID = /^att[A-Za-z0-9]{14}$/;
 const ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const DIRECTORY_ORDER = 'last_name COLLATE NOCASE, full_name COLLATE NOCASE';
+const ADMIN_ROLES = new Set(['admin', 'super_admin']);
+const PIN_LOCK_FAILURES = 5;
+const PIN_LOCK_MINUTES = 15;
+const NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
 const EVENT_COLUMNS = {
   'EVENT NAME': 'name',
@@ -50,6 +54,16 @@ function compact(fields) {
     value !== null && value !== undefined && value !== '' && value !== false
     && !(Array.isArray(value) && value.length === 0)
   )));
+}
+
+function lastNameOf(fullName) {
+  const words = String(fullName ?? '').trim().split(/\s+/).filter(Boolean);
+  return words.length ? words[words.length - 1] : '';
+}
+
+function normalizeResponse(value) {
+  const text = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return ['YES', 'NO', 'MAYBE'].includes(text) ? text : null;
 }
 
 function decodeBase64(value) {
@@ -123,7 +137,7 @@ export function createD1Store(env, { origin = '' } = {}) {
     'E-MAIL ADDRESS': row => row.email,
     'MEMBER #': row => row.member_number,
     'IN DIRECTORY': row => row.in_directory === 1,
-    'IS ADMIN': row => row.is_admin === 1
+    'IS ADMIN': row => ADMIN_ROLES.has(row.role)
   };
 
   // names: which Airtable field names to include; photos/eventValues: optional per-member maps.
@@ -279,6 +293,35 @@ export function createD1Store(env, { origin = '' } = {}) {
         'SUBMITTED DATE': row.submitted_date,
         'LINKED MEMBER ID': row.linked_member_id
       })
+    };
+  }
+
+  async function rosterFor(memberId = null) {
+    const [rows, privateRows, photos] = await Promise.all([
+      memberId
+        ? all('SELECT * FROM members WHERE id = ?', memberId)
+        : all(`SELECT * FROM members ORDER BY ${DIRECTORY_ORDER}`),
+      all('SELECT * FROM member_private'),
+      all("SELECT owner_id, id FROM attachments WHERE owner_kind = 'member' ORDER BY position")
+    ]);
+    const privateById = new Map(privateRows.map(row => [row.member_id, row]));
+    const photoById = new Map();
+    for (const row of photos) if (!photoById.has(row.owner_id)) photoById.set(row.owner_id, fileUrl(row.id));
+    return {
+      members: rows.map(row => ({
+        id: row.id,
+        name: row.full_name,
+        phone: row.cell,
+        email: row.email,
+        memberNumber: row.member_number?.trim() || null,
+        inDirectory: row.in_directory === 1,
+        role: row.role,
+        hasPin: typeof row.pin_hash === 'string',
+        lastLoginAt: row.last_login_at ?? null,
+        photoUrl: photoById.get(row.id) ?? null,
+        homeAddress: privateById.get(row.id)?.home_address ?? '',
+        notes: privateById.get(row.id)?.notes ?? ''
+      }))
     };
   }
 
@@ -682,6 +725,170 @@ export function createD1Store(env, { origin = '' } = {}) {
         attendanceSummary,
         votes: isAdmin ? voteRows.map(voteRecord) : [],
         voteTallies
+      };
+    },
+
+    // --- Admin levels, PINs, roster, private notes, audit ---
+
+    async getMemberAccess(memberId) {
+      if (typeof memberId !== 'string' || !RECORD_ID.test(memberId)) return null;
+      const row = await first(
+        'SELECT id, full_name, role, pin_hash, pin_failures, pin_locked_until FROM members WHERE id = ?',
+        memberId
+      );
+      if (!row) return null;
+      return {
+        id: row.id,
+        name: row.full_name,
+        role: row.role,
+        pinHash: row.pin_hash ?? null,
+        locked: typeof row.pin_locked_until === 'string' && row.pin_locked_until > new Date().toISOString()
+      };
+    },
+
+    async recordLogin(memberId) {
+      await statement(
+        `UPDATE members SET last_login_at = ${NOW_SQL}, pin_failures = 0, pin_locked_until = NULL WHERE id = ?`,
+        memberId
+      ).run();
+    },
+
+    async recordPinFailure(memberId) {
+      const lockUntil = new Date(Date.now() + PIN_LOCK_MINUTES * 60_000).toISOString();
+      await statement(
+        `UPDATE members SET pin_failures = pin_failures + 1,
+           pin_locked_until = CASE WHEN pin_failures + 1 >= ? THEN ? ELSE pin_locked_until END
+         WHERE id = ?`,
+        PIN_LOCK_FAILURES, lockUntil, memberId
+      ).run();
+    },
+
+    getRoster() {
+      return rosterFor();
+    },
+
+    async saveRosterMember(memberId, value) {
+      if (memberId !== null) requireRecordId(memberId);
+      if (value.memberNumber !== null) {
+        const clash = await first(
+          `SELECT id FROM members WHERE trim(member_number) != '' AND trim(member_number) NOT GLOB '*[^0-9]*'
+             AND CAST(trim(member_number) AS INTEGER) = ? AND id != ?`,
+          value.memberNumber, memberId ?? ''
+        );
+        if (clash) throw new ApiError(409, 'MEMBER_NUMBER_TAKEN', 'Another member already has that member number.');
+      }
+      const id = memberId ?? newId('rec');
+      const number = value.memberNumber === null ? null : String(value.memberNumber);
+      const memberWrite = memberId === null
+        ? statement(
+          `INSERT INTO members (id, full_name, last_name, cell, email, member_number, in_directory)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          id, value.name, lastNameOf(value.name), value.phone, value.email, number, value.inDirectory ? 1 : 0
+        )
+        : statement(
+          `UPDATE members SET full_name = ?, last_name = ?, cell = ?, email = ?, member_number = ?, in_directory = ?,
+             updated_at = ${NOW_SQL} WHERE id = ?`,
+          value.name, lastNameOf(value.name), value.phone, value.email, number, value.inDirectory ? 1 : 0, id
+        );
+      if (memberId !== null && !await first('SELECT id FROM members WHERE id = ?', id)) {
+        throw notFound('The member record was not found.');
+      }
+      await db.batch([
+        memberWrite,
+        statement(
+          `INSERT INTO member_private (member_id, home_address, notes, updated_by) VALUES (?, ?, ?, ?)
+           ON CONFLICT (member_id) DO UPDATE SET home_address = excluded.home_address, notes = excluded.notes,
+             updated_by = excluded.updated_by, updated_at = ${NOW_SQL}`,
+          id, value.homeAddress, value.notes, value.actorId ?? null
+        )
+      ]);
+      return (await rosterFor(id)).members[0];
+    },
+
+    async setMemberRole(memberId, role) {
+      requireRecordId(memberId);
+      const result = await statement(
+        `UPDATE members SET role = ?, updated_at = ${NOW_SQL} WHERE id = ?`, role, memberId
+      ).run();
+      if (result.meta?.changes === 0) throw notFound('The member record was not found.');
+      return { id: memberId, role };
+    },
+
+    async setMemberPin(memberId, pinHash) {
+      requireRecordId(memberId);
+      const result = await statement(
+        `UPDATE members SET pin_hash = ?, pin_failures = 0, pin_locked_until = NULL, updated_at = ${NOW_SQL}
+         WHERE id = ?`,
+        pinHash, memberId
+      ).run();
+      if (result.meta?.changes === 0) throw notFound('The member record was not found.');
+      return { id: memberId, hasPin: pinHash !== null };
+    },
+
+    async getEventRoster(eventId) {
+      const event = await getEventRow(eventId);
+      const [members, values, attendance] = await Promise.all([
+        all(`SELECT * FROM members WHERE in_directory = 1 ORDER BY ${DIRECTORY_ORDER}`),
+        event.rsvp_field
+          ? all('SELECT member_id, field_name, value FROM member_event_values WHERE field_name IN (?, ?)',
+            event.rsvp_field, event.guest_field ?? event.rsvp_field)
+          : [],
+        all('SELECT member_id, attended, actual_guests FROM attendance WHERE event_id = ?', eventId)
+      ]);
+      const responses = new Map();
+      const guests = new Map();
+      for (const row of values) {
+        const value = JSON.parse(row.value);
+        if (row.field_name === event.rsvp_field) responses.set(row.member_id, normalizeResponse(value));
+        if (row.field_name === event.guest_field && Number.isFinite(value)) guests.set(row.member_id, value);
+      }
+      const attended = new Map(attendance.map(row => [row.member_id, row]));
+      return {
+        event: {
+          id: event.id,
+          name: event.name,
+          date: event.date,
+          status: event.status,
+          hasRsvp: typeof event.rsvp_field === 'string'
+        },
+        rows: members.map(row => ({
+          id: row.id,
+          name: row.full_name,
+          email: row.email,
+          phone: row.cell,
+          memberNumber: row.member_number?.trim() || null,
+          response: responses.get(row.id) ?? null,
+          guests: guests.get(row.id) ?? 0,
+          attended: attended.has(row.id) ? attended.get(row.id).attended === 1 : null,
+          actualGuests: attended.get(row.id)?.actual_guests ?? 0
+        }))
+      };
+    },
+
+    async audit(session, action, targetId, detail = {}) {
+      let actorId = typeof session?.sub === 'string' ? session.sub : null;
+      let actorName = 'Shared admin login';
+      if (actorId && RECORD_ID.test(actorId)) {
+        actorName = (await first('SELECT full_name FROM members WHERE id = ?', actorId))?.full_name ?? '';
+      } else {
+        actorId = null;
+      }
+      await statement(
+        'INSERT INTO audit_log (actor_id, actor_name, action, target_id, detail) VALUES (?, ?, ?, ?, ?)',
+        actorId, actorName, action, targetId ?? null, JSON.stringify(detail)
+      ).run();
+    },
+
+    async getAuditLog(limit = 200) {
+      const rows = await all('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?', limit);
+      return {
+        entries: rows.map(row => ({
+          at: row.at,
+          actorName: row.actor_name,
+          action: row.action,
+          targetId: row.target_id,
+          detail: JSON.parse(row.detail)
+        }))
       };
     },
 

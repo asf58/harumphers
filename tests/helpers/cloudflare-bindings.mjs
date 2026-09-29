@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,9 @@ const MIGRATIONS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 export async function createTestD1() {
   const database = new DatabaseSync(':memory:');
   database.exec('PRAGMA foreign_keys = ON');
-  database.exec(await readFile(path.join(MIGRATIONS_DIR, '0001_initial.sql'), 'utf8'));
+  for (const name of (await readdir(MIGRATIONS_DIR)).filter(file => file.endsWith('.sql')).sort()) {
+    database.exec(await readFile(path.join(MIGRATIONS_DIR, name), 'utf8'));
+  }
 
   const toPlain = row => (row ? { ...row } : null);
   const run = (sql, params) => ({ meta: { changes: Number(database.prepare(sql).run(...params).changes) } });

@@ -1,9 +1,12 @@
 import { issueSession, requireRole, verifySession } from './auth.js';
 import { ApiError } from './errors.js';
 import { validatePhotoPayload } from './photos.js';
+import { hashPin, PIN_PATTERN, verifyPin } from './pin.js';
 
 const MAX_LOGIN_BODY_LENGTH = 4096;
 const encoder = new TextEncoder();
+const ADMIN_ROLES = new Set(['admin', 'super_admin']);
+const MEMBER_ROLES = new Set(['member', 'admin', 'super_admin']);
 
 const ROUTE_METHODS = new Map([
   ['/api/health', new Set(['GET'])],
@@ -17,6 +20,9 @@ const ROUTE_METHODS = new Map([
   ['/api/me', new Set(['GET', 'PATCH'])],
   ['/api/me/votes', new Set(['GET'])],
   ['/api/me/photo', new Set(['POST'])],
+  ['/api/me/pin', new Set(['PUT'])],
+  ['/api/admin/roster', new Set(['GET', 'POST'])],
+  ['/api/admin/audit', new Set(['GET'])],
   ['/api/admin/events', new Set(['POST'])],
   ['/api/admin/member-requests', new Set(['GET'])],
   ['/api/admin/diagnostics/member-numbers', new Set(['GET'])],
@@ -27,6 +33,26 @@ const DYNAMIC_ROUTES = [
   {
     name: 'file',
     pattern: /^\/api\/files\/(att[A-Za-z0-9]{14})$/,
+    methods: new Set(['GET'])
+  },
+  {
+    name: 'admin-roster-member',
+    pattern: /^\/api\/admin\/roster\/(rec[A-Za-z0-9]{14})$/,
+    methods: new Set(['PATCH'])
+  },
+  {
+    name: 'admin-roster-role',
+    pattern: /^\/api\/admin\/roster\/(rec[A-Za-z0-9]{14})\/role$/,
+    methods: new Set(['PUT'])
+  },
+  {
+    name: 'admin-roster-pin',
+    pattern: /^\/api\/admin\/roster\/(rec[A-Za-z0-9]{14})\/pin$/,
+    methods: new Set(['PUT'])
+  },
+  {
+    name: 'admin-event-roster',
+    pattern: /^\/api\/admin\/events\/(rec[A-Za-z0-9]{14})\/roster$/,
     methods: new Set(['GET'])
   },
   {
@@ -214,6 +240,39 @@ function validateMemberRequest(body) {
   };
 }
 
+function validateRosterMember(body) {
+  requireExactKeys(body, ['name', 'phone', 'email', 'memberNumber', 'inDirectory', 'homeAddress', 'notes']);
+  if (
+    (body.memberNumber !== null && (!Number.isSafeInteger(body.memberNumber) || body.memberNumber <= 0 || body.memberNumber > 999999999))
+    || typeof body.inDirectory !== 'boolean'
+  ) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted member is not valid.');
+  }
+  return {
+    name: requireText(body.name, { allowEmpty: false, maxLength: 160 }),
+    phone: requireText(body.phone, { maxLength: 40 }),
+    email: requireText(body.email, { maxLength: 254 }),
+    memberNumber: body.memberNumber,
+    inDirectory: body.inDirectory,
+    homeAddress: requireText(body.homeAddress, { maxLength: 500 }),
+    notes: requireText(body.notes, { maxLength: 5000 })
+  };
+}
+
+function validateRole(body) {
+  requireExactKeys(body, ['role']);
+  if (!MEMBER_ROLES.has(body.role)) throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted role is not valid.');
+  return body.role;
+}
+
+function validatePinValue(value, { allowNull = false } = {}) {
+  if (allowNull && value === null) return null;
+  if (typeof value !== 'string' || !PIN_PATTERN.test(value)) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'A PIN must be 4 to 8 digits.');
+  }
+  return value;
+}
+
 function validateVote(body) {
   requireExactKeys(body, ['vote']);
   if (body.vote !== null && body.vote !== 'UP' && body.vote !== 'DOWN') {
@@ -348,6 +407,32 @@ function hasMemberIdentity(session) {
   return /^rec[A-Za-z0-9]{14}$/.test(session?.sub ?? '');
 }
 
+function requireSuperAdmin(session) {
+  requireRole(session, ['admin']);
+  if (session.adminLevel !== 'super_admin') {
+    throw new ApiError(403, 'FORBIDDEN', 'Only a super admin can do that.');
+  }
+  return session;
+}
+
+// A member's admin level lives in the database, so a demotion takes effect on the next request
+// instead of waiting for the 12-hour session to expire.
+async function withAdminLevel(session, store) {
+  if (session.role !== 'admin') return { ...session, adminLevel: null };
+  if (!hasMemberIdentity(session) || typeof store.getMemberAccess !== 'function') {
+    return { ...session, adminLevel: 'admin' };
+  }
+  const access = await store.getMemberAccess(session.sub);
+  if (!access) throw new ApiError(401, 'SESSION_INVALID', 'Please sign in again.');
+  if (!ADMIN_ROLES.has(access.role)) return { ...session, role: 'member', adminLevel: null };
+  return { ...session, adminLevel: access.role };
+}
+
+function auditAction(matchedRoute, method, pathname) {
+  const name = matchedRoute.name.startsWith('/api/') ? pathname.replace('/api/admin/', 'admin-') : matchedRoute.name;
+  return `${name} ${method}`;
+}
+
 function requireMemberIdentity(session) {
   requireRole(session, ['member', 'admin']);
   if (!hasMemberIdentity(session)) {
@@ -400,13 +485,32 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
   if (pathname === '/api/login/member') {
     await enforceRateLimit(env.AUTH_RATE_LIMITER, requesterKey(request, pathname));
     const body = await readJsonBody(request);
-    requireExactKeys(body, ['memberNumber'], 'The submitted login is not valid.');
+    const withPin = Boolean(body) && typeof body === 'object' && Object.hasOwn(body, 'pin');
+    requireExactKeys(body, withPin ? ['memberNumber', 'pin'] : ['memberNumber'], 'The submitted login is not valid.');
     if (!Number.isSafeInteger(body.memberNumber) || body.memberNumber <= 0 || body.memberNumber > 999999999) {
       throw new ApiError(400, 'VALIDATION_FAILED', 'The submitted login is not valid.');
     }
+    if (withPin) validatePinValue(body.pin);
     const member = await airtable.findMemberByNumber(body.memberNumber);
     if (!member || typeof member.id !== 'string' || member.id === '') throw loginFailed();
-    const role = member.fields?.['IS ADMIN'] === true ? 'admin' : 'member';
+    let role = member.fields?.['IS ADMIN'] === true ? 'admin' : 'member';
+    if (typeof airtable.getMemberAccess === 'function') {
+      // Admin power needs the member's PIN; without one (or before one is set) the login is a member login.
+      const access = await airtable.getMemberAccess(member.id);
+      role = 'member';
+      if (access && ADMIN_ROLES.has(access.role) && access.pinHash) {
+        if (!withPin) throw new ApiError(401, 'PIN_REQUIRED', 'Enter your admin PIN.');
+        if (access.locked) {
+          throw new ApiError(429, 'PIN_LOCKED', 'Too many incorrect PINs. Please wait 15 minutes and try again.');
+        }
+        if (!await verifyPin(body.pin, access.pinHash)) {
+          await airtable.recordPinFailure(member.id);
+          throw new ApiError(401, 'PIN_INCORRECT', 'That PIN is not correct.');
+        }
+        role = 'admin';
+      }
+      await airtable.recordLogin(member.id);
+    }
     return json({ token: await issueSession({ sub: member.id, role }, env.SESSION_SECRET, nowSeconds) });
   }
 
@@ -440,10 +544,88 @@ export async function routeRequest(request, env, airtable, nowSeconds) {
     return json(await airtable.submitMemberRequest(value), 201);
   }
 
-  const session = await requireSession(request, env, nowSeconds);
+  const session = await withAdminLevel(await requireSession(request, env, nowSeconds), airtable);
+  const audit = { detail: {} };
+  const response = await routeSessionRequest(request, airtable, session, matchedRoute, pathname, audit);
+  if (request.method !== 'GET' && pathname.startsWith('/api/admin/') && typeof airtable.audit === 'function') {
+    try {
+      await airtable.audit(session, auditAction(matchedRoute, request.method, pathname), audit.targetId ?? matchedRoute.params[0] ?? null, {
+        params: matchedRoute.params,
+        ...audit.detail
+      });
+    } catch (error) {
+      // The change itself succeeded; record the gap in Workers Logs rather than failing the request.
+      console.error('audit log write failed', matchedRoute.name, error?.message);
+    }
+  }
+  return response;
+}
 
+async function routeSessionRequest(request, airtable, session, matchedRoute, pathname, audit) {
   if (pathname === '/api/session') {
-    return json({ role: session.role, hasMemberIdentity: hasMemberIdentity(session) });
+    return json({ role: session.role, hasMemberIdentity: hasMemberIdentity(session), adminLevel: session.adminLevel });
+  }
+
+  if (pathname === '/api/me/pin') {
+    requireMemberIdentity(session);
+    requireRole(session, ['admin']);
+    const body = await readJsonBody(request);
+    requireExactKeys(body, ['currentPin', 'newPin']);
+    const access = await airtable.getMemberAccess(session.sub);
+    if (!await verifyPin(validatePinValue(body.currentPin), access?.pinHash)) {
+      throw new ApiError(403, 'PIN_INCORRECT', 'Your current PIN is not correct.');
+    }
+    await airtable.setMemberPin(session.sub, await hashPin(validatePinValue(body.newPin)));
+    return json({ changed: true });
+  }
+
+  if (pathname === '/api/admin/roster') {
+    requireRole(session, ['admin']);
+    if (request.method === 'GET') return json(await airtable.getRoster());
+    const created = await airtable.saveRosterMember(null, { ...validateRosterMember(await readJsonBody(request, 20_000)), actorId: session.sub });
+    audit.targetId = created.id;
+    return json(created, 201);
+  }
+
+  if (matchedRoute.name === 'admin-roster-member') {
+    requireRole(session, ['admin']);
+    return json(await airtable.saveRosterMember(
+      matchedRoute.params[0],
+      { ...validateRosterMember(await readJsonBody(request, 20_000)), actorId: session.sub }
+    ));
+  }
+
+  if (matchedRoute.name === 'admin-roster-role') {
+    requireSuperAdmin(session);
+    const role = validateRole(await readJsonBody(request));
+    const { members } = await airtable.getRoster();
+    const target = members.find(member => member.id === matchedRoute.params[0]);
+    if (!target) throw new ApiError(404, 'NOT_FOUND', 'The member record was not found.');
+    if (target.role === 'super_admin' && role !== 'super_admin'
+      && members.filter(member => member.role === 'super_admin').length <= 1) {
+      throw new ApiError(409, 'LAST_SUPER_ADMIN', 'There must always be at least one super admin.');
+    }
+    audit.detail = { from: target.role, to: role };
+    return json(await airtable.setMemberRole(matchedRoute.params[0], role));
+  }
+
+  if (matchedRoute.name === 'admin-roster-pin') {
+    requireSuperAdmin(session);
+    const body = await readJsonBody(request);
+    requireExactKeys(body, ['pin']);
+    const pin = validatePinValue(body.pin, { allowNull: true });
+    audit.detail = { pin: pin === null ? 'cleared' : 'set' };
+    return json(await airtable.setMemberPin(matchedRoute.params[0], pin === null ? null : await hashPin(pin)));
+  }
+
+  if (matchedRoute.name === 'admin-event-roster') {
+    requireRole(session, ['admin']);
+    return json(await airtable.getEventRoster(matchedRoute.params[0]));
+  }
+
+  if (pathname === '/api/admin/audit') {
+    requireRole(session, ['admin']);
+    return json(await airtable.getAuditLog());
   }
 
   if (pathname === '/api/directory') {
