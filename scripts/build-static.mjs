@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PRODUCTION_API_ORIGIN = 'https://harumphers-api.adamsfeuer.workers.dev';
+const PRODUCTION_API_ORIGIN = 'https://app.harumphers.workers.dev';
 const STATIC_ENTRIES = [
   'index.html',
   'directory.html',
