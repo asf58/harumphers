@@ -15,7 +15,8 @@ directory = "../dist-cloudflare"
 enabled = true
 
 [vars]
-ALLOWED_ORIGINS = "https://app.harumphers.workers.dev,https://asf58.github.io"
+# harumphers.org is attached to this Worker as a custom domain in the Cloudflare dashboard.
+ALLOWED_ORIGINS = "https://harumphers.org,https://app.harumphers.workers.dev,https://asf58.github.io"
 
 [[d1_databases]]
 binding = "DB"
