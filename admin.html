@@ -124,6 +124,41 @@
     .audit-row time { color: rgba(255,255,255,0.6); font-size: 0.8125rem; display: block; }
     #denied { display: none; text-align: center; padding: 60px 20px; }
 
+    /* Upcoming events summary, above the tabs. */
+    .upcoming { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); gap: 12px; margin-bottom: 16px; }
+    .upcoming .card { margin: 0; padding: 12px 14px; }
+    .upcoming h2 { font-size: 1rem; }
+    .upcoming .when { color: rgba(255,255,255,0.7); font-size: 0.8125rem; margin-bottom: 8px; }
+    .rsvp-counts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .rsvp-count {
+      flex: 1 1 4.5rem; background: rgba(0,0,0,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 6px 8px; cursor: pointer; text-align: left; font: inherit; min-height: 44px;
+    }
+    .rsvp-count:hover { border-color: #FFD700; }
+    .rsvp-count b { display: block; font-size: 1.25rem; color: #FFD700; line-height: 1.2; }
+    .rsvp-count span { font-size: 0.75rem; color: rgba(255,255,255,0.75); overflow-wrap: normal; }
+
+    /* Sortable member columns. */
+    th .sort { background: none; border: none; color: inherit; font: inherit; cursor: pointer; padding: 0; min-height: 0; text-align: left; }
+    th .sort::after { content: ' \2195'; opacity: 0.4; }
+    th[aria-sort="ascending"] .sort::after { content: ' \2191'; opacity: 1; }
+    th[aria-sort="descending"] .sort::after { content: ' \2193'; opacity: 1; }
+    table.data tr.selected td { background: rgba(255,215,0,0.14); }
+
+    /* Wide screens: the member editor docks beside the list instead of covering it. */
+    .detail-empty { display: none; }
+    @media (min-width: 1100px) {
+      main { max-width: 1500px; }
+      .members-layout { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 20px; align-items: start; }
+      .detail-empty { display: block; position: sticky; top: 84px; text-align: center; padding: 40px 20px; }
+      .members-layout:has(#editor[open]) .detail-empty { display: none; }
+      #editor[open].docked {
+        position: sticky; top: 84px; inset: auto; margin: 0; width: auto; max-width: none;
+        max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1;
+      }
+      #editor.docked .two-col { grid-template-columns: 1fr; }
+    }
+
     @media print {
       body { background: #fff; color: #000; }
       header, .tabs, .toolbar, .no-print, #panel-members, #panel-admins, #panel-activity { display: none !important; }
@@ -152,6 +187,7 @@
   </div>
 
   <main id="app" hidden>
+    <section class="upcoming" id="upcoming" aria-label="Upcoming events"></section>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-panel="members" onclick="showPanel('members')">Members</button>
       <button class="tab" data-panel="lists" onclick="showPanel('lists')">Lists &amp; Export</button>
@@ -174,11 +210,49 @@
         </select>
         <button class="btn" onclick="openEditor(null)">+ Add member</button>
       </div>
-      <div class="count" id="member-count"></div>
-      <table class="data" id="member-table">
-        <thead><tr><th>Name</th><th>Member #</th><th>Phone</th><th>Email</th><th>Status</th><th>Last sign-in</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="members-layout">
+        <div>
+          <div class="count" id="member-count"></div>
+          <table class="data" id="member-table">
+            <thead><tr>
+              <th data-sort="name"><button class="sort" onclick="sortMembers('name')">Name</button></th>
+              <th data-sort="number"><button class="sort" onclick="sortMembers('number')">Member #</button></th>
+              <th data-sort="phone"><button class="sort" onclick="sortMembers('phone')">Phone</button></th>
+              <th data-sort="email"><button class="sort" onclick="sortMembers('email')">Email</button></th>
+              <th data-sort="status"><button class="sort" onclick="sortMembers('status')">Status</button></th>
+              <th data-sort="login"><button class="sort" onclick="sortMembers('login')">Last sign-in</button></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card detail-empty muted">Select a member to see and edit their details here.</div>
+        <!-- Member editor: docked beside the list on wide screens, a full dialog on phones. -->
+        <dialog id="editor">
+          <form method="dialog" onsubmit="event.preventDefault(); saveMember();">
+            <h2 id="editor-title">Edit member</h2>
+            <div class="two-col">
+              <div><label for="ed-name">Full name</label><input id="ed-name" required maxlength="160"></div>
+              <div><label for="ed-number">Member #</label><input id="ed-number" inputmode="numeric" maxlength="9"></div>
+              <div><label for="ed-phone">Cell</label><input id="ed-phone" type="tel" maxlength="40"></div>
+              <div><label for="ed-email">Email</label><input id="ed-email" type="email" maxlength="254"></div>
+            </div>
+            <label class="check"><input type="checkbox" id="ed-directory"> Show in the member directory</label>
+            <fieldset class="private-box">
+              <legend>Private: admins only, never in the directory</legend>
+              <label for="ed-address">Home address</label>
+              <textarea id="ed-address" maxlength="500" style="min-height:4rem"></textarea>
+              <label for="ed-notes">Notes</label>
+              <textarea id="ed-notes" maxlength="5000"></textarea>
+            </fieldset>
+            <p class="muted" id="ed-meta" style="margin-top:10px"></p>
+            <div class="msg" id="editor-msg"></div>
+            <div class="dialog-actions">
+              <button type="button" class="btn secondary" onclick="closeEditor()">Close</button>
+              <button type="submit" class="btn" id="editor-save">Save</button>
+            </div>
+          </form>
+        </dialog>
+      </div>
     </section>
 
     <!-- Lists & Export -->
@@ -242,33 +316,6 @@
     </section>
   </main>
 
-  <!-- Member editor -->
-  <dialog id="editor">
-    <form method="dialog" onsubmit="event.preventDefault(); saveMember();">
-      <h2 id="editor-title">Edit member</h2>
-      <div class="two-col">
-        <div><label for="ed-name">Full name</label><input id="ed-name" required maxlength="160"></div>
-        <div><label for="ed-number">Member #</label><input id="ed-number" inputmode="numeric" maxlength="9"></div>
-        <div><label for="ed-phone">Cell</label><input id="ed-phone" type="tel" maxlength="40"></div>
-        <div><label for="ed-email">Email</label><input id="ed-email" type="email" maxlength="254"></div>
-      </div>
-      <label class="check"><input type="checkbox" id="ed-directory"> Show in the member directory</label>
-      <fieldset class="private-box">
-        <legend>Private: admins only, never in the directory</legend>
-        <label for="ed-address">Home address</label>
-        <textarea id="ed-address" maxlength="500" style="min-height:4rem"></textarea>
-        <label for="ed-notes">Notes</label>
-        <textarea id="ed-notes" maxlength="5000"></textarea>
-      </fieldset>
-      <p class="muted" id="ed-meta" style="margin-top:10px"></p>
-      <div class="msg" id="editor-msg"></div>
-      <div class="dialog-actions">
-        <button type="button" class="btn secondary" onclick="document.getElementById('editor').close()">Cancel</button>
-        <button type="submit" class="btn" id="editor-save">Save</button>
-      </div>
-    </form>
-  </dialog>
-
   <!-- PIN dialog (set someone's PIN, or change my own) -->
   <dialog id="pin-dialog">
     <form method="dialog" onsubmit="event.preventDefault(); savePin();">
@@ -323,6 +370,8 @@
     let listColumns = [];
     let editingId = null;
     let pinTarget = null;
+    let memberSort = { key: 'name', dir: 1 };
+    const wideScreen = window.matchMedia('(min-width: 1100px)');
 
     function logout() {
       Harumphers.logout();
@@ -373,13 +422,36 @@
       return html || '<span class="muted">Member</span>';
     }
 
+    const lastName = member => member.name.trim().split(/\s+/).at(-1) ?? '';
+    const ROLE_RANK = { super_admin: 0, admin: 1, member: 2 };
+    const SORTS = {
+      // Directory order: last name, then full name.
+      name: (a, b) => lastName(a).localeCompare(lastName(b)) || a.name.localeCompare(b.name),
+      number: (a, b) => (a.memberNumber ?? Infinity) - (b.memberNumber ?? Infinity),
+      phone: (a, b) => String(a.phone ?? '').localeCompare(String(b.phone ?? '')),
+      email: (a, b) => String(a.email ?? '').localeCompare(String(b.email ?? '')),
+      status: (a, b) => ROLE_RANK[a.role] - ROLE_RANK[b.role] || Number(b.inDirectory) - Number(a.inDirectory),
+      login: (a, b) => String(b.lastLoginAt ?? '').localeCompare(String(a.lastLoginAt ?? ''))
+    };
+
+    function sortMembers(key) {
+      memberSort = { key, dir: memberSort.key === key ? -memberSort.dir : 1 };
+      renderMembers();
+    }
+
     function renderMembers() {
       const filter = document.getElementById('member-filter').value;
       const query = document.getElementById('member-search').value.trim().toLowerCase();
-      const rows = roster.filter(member => memberMatches(member, filter, query));
+      const compare = SORTS[memberSort.key];
+      const rows = roster.filter(member => memberMatches(member, filter, query))
+        .sort((a, b) => memberSort.dir * compare(a, b) || SORTS.name(a, b));
+      for (const th of document.querySelectorAll('#member-table th[data-sort]')) {
+        if (th.dataset.sort === memberSort.key) th.setAttribute('aria-sort', memberSort.dir === 1 ? 'ascending' : 'descending');
+        else th.removeAttribute('aria-sort');
+      }
       document.getElementById('member-count').textContent = `${rows.length} of ${roster.length} members`;
       document.querySelector('#member-table tbody').innerHTML = rows.map(member => `
-        <tr class="clickable" tabindex="0" data-id="${esc(member.id)}">
+        <tr class="clickable${member.id === editingId ? ' selected' : ''}" tabindex="0" data-id="${esc(member.id)}">
           <td data-label="Name">${esc(member.name)}</td>
           <td data-label="Member #">${esc(member.memberNumber ?? '')}</td>
           <td data-label="Phone">${esc(member.phone)}</td>
@@ -413,7 +485,18 @@
         ? `${ROLE_LABELS[member.role]}. Last sign-in: ${easternTime(member.lastLoginAt) || 'not recorded'}.`
         : '';
       setMsg('editor-msg', '');
-      document.getElementById('editor').showModal();
+      // A docked editor stays open while the admin moves between members.
+      const editor = document.getElementById('editor');
+      if (!editor.open) {
+        editor.classList.toggle('docked', wideScreen.matches);
+        if (wideScreen.matches) editor.show(); else editor.showModal();
+      }
+      document.getElementById('ed-name').focus();
+      renderMembers();
+    }
+
+    function closeEditor() {
+      document.getElementById('editor').close();
     }
 
     async function saveMember() {
@@ -446,16 +529,67 @@
         });
         const index = roster.findIndex(row => row.id === saved.id);
         if (index >= 0) roster[index] = saved; else roster.push(saved);
-        // Match the server's directory order: last name, then full name.
-        const lastName = member => member.name.trim().split(/\s+/).at(-1) ?? '';
-        roster.sort((a, b) => lastName(a).localeCompare(lastName(b)) || a.name.localeCompare(b.name));
+        // Docked beside the list, the editor stays open on the saved member.
+        if (document.getElementById('editor').classList.contains('docked')) {
+          editingId = saved.id;
+          document.getElementById('editor-title').textContent = 'Edit member';
+          setMsg('editor-msg', 'Saved.');
+        } else {
+          closeEditor();
+        }
         renderMembers();
-        document.getElementById('editor').close();
       } catch (error) {
         setMsg('editor-msg', error.message, true);
       } finally {
         button.disabled = false;
       }
+    }
+
+    // --- Upcoming events summary ---
+
+    async function renderUpcoming() {
+      const upcoming = events.filter(ev => ev.status === 'Scheduled')
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const box = document.getElementById('upcoming');
+      const cards = await Promise.all(upcoming.map(async ev => {
+        let rows;
+        try {
+          rows = await eventRoster(ev.id);
+        } catch (error) {
+          return `<div class="card"><h2>${esc(ev.name)}</h2><p class="msg error">${esc(error.message)}</p></div>`;
+        }
+        const count = test => rows.rows.filter(test).length;
+        const guests = rows.rows.reduce((sum, row) => sum + (row.response === 'YES' ? row.guests : 0), 0);
+        const tiles = [
+          ['going', count(row => row.response === 'YES'), 'Going'],
+          ['maybe', count(row => row.response === 'MAYBE'), 'Maybe'],
+          ['not_going', count(row => row.response === 'NO'), 'Not going'],
+          ['no_response', count(row => row.response === null), 'No reply']
+        ];
+        const when = [eventDate(ev.date), guests ? `${guests} guest${guests === 1 ? '' : 's'} coming with members` : '']
+          .filter(Boolean).join(' · ');
+        return `<div class="card"><h2>${esc(ev.name)}</h2><div class="when">${esc(when)}</div>
+          <div class="rsvp-counts">${tiles.map(([filter, n, label]) =>
+            `<button class="rsvp-count" onclick="openEventList('${esc(ev.id)}', '${filter}')"><b>${n}</b><span>${esc(label)}</span></button>`
+          ).join('')}</div></div>`;
+      }));
+      box.innerHTML = cards.join('');
+      box.hidden = cards.length === 0;
+    }
+
+    // Event dates are plain calendar dates (YYYY-MM-DD), so format them without a time zone shift.
+    function eventDate(value) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return value ?? '';
+      return new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
+        timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+      });
+    }
+
+    function openEventList(eventId, filter) {
+      document.getElementById('list-source').value = `event:${eventId}`;
+      sourceChanged(false);
+      document.getElementById('list-filter').value = filter;
+      showPanel('lists');
     }
 
     // --- Lists & export ---
@@ -482,6 +616,13 @@
 
     const eventRosterCache = new Map();
 
+    async function eventRoster(eventId) {
+      if (!eventRosterCache.has(eventId)) {
+        eventRosterCache.set(eventId, await Harumphers.api(`/api/admin/events/${eventId}/roster`));
+      }
+      return eventRosterCache.get(eventId);
+    }
+
     async function renderList() {
       const source = document.getElementById('list-source').value;
       const filter = document.getElementById('list-filter').value;
@@ -497,16 +638,14 @@
         document.getElementById('list-count').textContent = `${listRows.length} people`;
       } else {
         const eventId = source.slice('event:'.length);
-        if (!eventRosterCache.has(eventId)) {
-          document.getElementById('list-count').textContent = 'Loading...';
-          try {
-            eventRosterCache.set(eventId, await Harumphers.api(`/api/admin/events/${eventId}/roster`));
-          } catch (error) {
-            setMsg('list-msg', error.message, true);
-            return;
-          }
+        let data;
+        if (!eventRosterCache.has(eventId)) document.getElementById('list-count').textContent = 'Loading...';
+        try {
+          data = await eventRoster(eventId);
+        } catch (error) {
+          setMsg('list-msg', error.message, true);
+          return;
         }
-        const data = eventRosterCache.get(eventId);
         const tests = {
           going: row => row.response === 'YES',
           going_maybe: row => row.response === 'YES' || row.response === 'MAYBE',
@@ -753,6 +892,9 @@
       document.getElementById('my-pin-btn').hidden = !session.hasMemberIdentity;
       document.getElementById('member-table').addEventListener('click', rowActivated);
       document.getElementById('member-table').addEventListener('keydown', rowActivated);
+      document.getElementById('editor').addEventListener('close', () => { editingId = null; renderMembers(); });
+      // Crossing the wide-screen breakpoint would leave the editor in the wrong mode, so close it.
+      wideScreen.addEventListener('change', closeEditor);
       try {
         const [rosterData, eventData, me] = await Promise.all([
           Harumphers.api('/api/admin/roster'),
@@ -773,6 +915,7 @@
       }
       renderMembers();
       populateSources();
+      renderUpcoming();
     }
 
     init();

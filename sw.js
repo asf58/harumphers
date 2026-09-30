@@ -1,4 +1,4 @@
-const CACHE_NAME = 'harumphers-v40';
+const CACHE_NAME = 'harumphers-v41';
 const APP_SHELL = [
   './',
   './index.html',
